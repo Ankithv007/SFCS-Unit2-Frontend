@@ -1,0 +1,178 @@
+.container {
+    display: flex;
+    height: 100vh;
+    background-color: #fff;
+    overflow: hidden;
+}
+
+.leftPanel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: var(--spacing-xl);
+    max-width: 100%;
+    margin: 0;
+    position: relative;
+    overflow-y: auto;
+    height: 100%;
+}
+
+.rightPanel {
+    flex: 0 0 55%;
+    background-color: #f8f9fa;
+    position: relative;
+    display: none;
+    height: 100%;
+    overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+    .leftPanel {
+        flex: 0 0 45%;
+    }
+
+    .rightPanel {
+        display: block;
+    }
+}
+
+.image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.logoPlaceholder {
+    margin-bottom: var(--spacing-sm);
+}
+
+.logo {
+    width: 180px;
+    height: auto;
+    display: block;
+}
+
+.title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0056b3;
+    margin-bottom: var(--spacing-xs);
+}
+
+.subtitle {
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-xl);
+    font-size: 1rem;
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    width: 100%;
+    max-width: 450px;
+    margin: 0 auto;
+}
+
+.footer {
+    margin-top: var(--spacing-xl);
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    text-align: center;
+}
+
+.backLink {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.backLink:hover {
+    color: var(--color-primary);
+    text-decoration: underline;
+}
+
+.successMessage {
+    text-align: center;
+    color: var(--color-text-main);
+}
+
+.retryButton {
+    margin-top: var(--spacing-lg);
+}
+
+.copyright {
+    margin-top: auto;
+    padding-top: var(--spacing-xl);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-align: center;
+}
+
+/* Resend Timer & Button */
+.resendWrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: var(--spacing-sm);
+    min-height: 40px;
+}
+
+.timerContainer {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+}
+
+.timerSvg {
+    transform: rotate(-90deg);
+}
+
+.timerCircleBg {
+    fill: none;
+    stroke: #e0e0e0;
+    stroke-width: 3;
+}
+
+.timerCircleFg {
+    fill: none;
+    stroke: var(--color-primary);
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s linear;
+}
+
+.timerText {
+    position: absolute;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.resendButton {
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.resendButton:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+    /* Light blue tint */
+    text-decoration: none;
+}
+
+.resendButton:disabled {
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+}

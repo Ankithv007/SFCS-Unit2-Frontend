@@ -1,0 +1,120 @@
+.container {
+    display: flex;
+    height: 100vh;
+    background-color: #fff;
+    overflow: hidden;
+}
+
+.leftPanel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: var(--spacing-xl);
+    max-width: 100%;
+    margin: 0;
+    position: relative;
+    overflow-y: auto;
+    height: 100%;
+}
+
+.rightPanel {
+    flex: 0 0 55%;
+    background-color: #f8f9fa;
+    position: relative;
+    display: none;
+    height: 100%;
+    overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+    .leftPanel {
+        flex: 0 0 45%;
+    }
+
+    .rightPanel {
+        display: block;
+    }
+}
+
+.image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.logoPlaceholder {
+    margin-bottom: var(--spacing-sm);
+}
+
+.logo {
+    width: 180px;
+    height: auto;
+    display: block;
+}
+
+.title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0056b3;
+    margin-bottom: var(--spacing-xs);
+}
+
+.subtitle {
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-xl);
+    font-size: 1rem;
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    width: 100%;
+    max-width: 450px;
+    margin: 0 auto;
+}
+
+.passwordWrapper {
+    position: relative;
+    margin-bottom: var(--spacing-md);
+}
+
+.forgotLink {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+}
+
+.footer {
+    margin-top: var(--spacing-xl);
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    text-align: center;
+}
+
+.footerText {
+    color: var(--color-text-muted);
+    margin-right: var(--spacing-xs);
+}
+
+.signupLink {
+    font-weight: 600;
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.signupLink:hover {
+    text-decoration: underline;
+}
+
+.copyright {
+    margin-top: auto;
+    padding-top: var(--spacing-xl);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-align: center;
+}

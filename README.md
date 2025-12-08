@@ -76,3 +76,6 @@ The application uses an environment variable to determine whether to use the rea
 - Vite
 - CSS Modules
 - React Router DOM
+
+## Contributors
+- Ankith B V

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { processAvatarImage } from '../utils/imageUtils';
 
 export interface User {
     email: string;
     name?: string;
     id: string;
+    avatar?: string;
 }
 
 export interface AuthState {
@@ -87,7 +89,13 @@ export const useAuth = () => {
         setError(null);
         try {
             const data = await apiCall('/api/auth/login', 'POST', { email, password });
-            const sessionUser = { email: data.user.email, name: data.user.name, id: data.user.id };
+            // Backend now returns avatar in user object
+            const sessionUser = {
+                email: data.user.email,
+                name: data.user.name,
+                id: data.user.id,
+                avatar: data.user.avatar
+            };
 
             setUser(sessionUser);
             setIsAuthenticated(true);
@@ -117,6 +125,35 @@ export const useAuth = () => {
         localStorage.removeItem('user_data');
     }, []);
 
+    const updateUserAvatar = useCallback(async (file: File): Promise<void> => {
+        try {
+            // Process the image (resize & compress)
+            const base64Avatar = await processAvatarImage(file);
+
+            // Upload to server
+            if (user?.email) {
+                await apiCall('/api/auth/update-avatar', 'POST', {
+                    email: user.email,
+                    avatar: base64Avatar
+                });
+            }
+
+            // Update local state
+            setUser((prev) => {
+                if (!prev) return null;
+                const updatedUser = { ...prev, avatar: base64Avatar };
+
+                // Update local storage for session
+                localStorage.setItem('user_data', JSON.stringify(updatedUser));
+
+                return updatedUser;
+            });
+        } catch (error) {
+            console.error("Failed to process avatar:", error);
+            throw error;
+        }
+    }, [user]);
+
     return {
         user,
         isAuthenticated,
@@ -130,6 +167,7 @@ export const useAuth = () => {
         resendOtp,
         requestForgotOtp,
         confirmForgotOtp,
-        createPassword
+        createPassword,
+        updateUserAvatar
     };
 };

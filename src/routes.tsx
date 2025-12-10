@@ -3,6 +3,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Forgot } from './pages/Forgot';
 import { Dashboard } from './pages/Dashboard';
+import { SalesPurchase } from './pages/SalesPurchase';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -31,6 +32,14 @@ export const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <Dashboard />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/sales-purchase',
+                element: (
+                    <ProtectedRoute>
+                        <SalesPurchase />
                     </ProtectedRoute>
                 ),
             },

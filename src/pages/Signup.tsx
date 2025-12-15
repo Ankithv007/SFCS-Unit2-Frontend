@@ -59,7 +59,7 @@ export const Signup: React.FC = () => {
             await requestSignupOtp(name, email);
             setStep('otp');
             setTimer(30);
-            showToast('OTP sent to your email', 'success');
+            showToast('OTP is sent', 'success');
         } catch (err: any) {
             showToast(err.message || 'Failed to send OTP', 'error');
         }
@@ -75,7 +75,7 @@ export const Signup: React.FC = () => {
         try {
             await verifySignupOtp(email, otp);
             setStep('password');
-            showToast('Email verified! Please create a password.', 'success');
+            showToast('OTP is verified', 'success');
         } catch (err: any) {
             showToast(err.message || 'Verification failed', 'error');
         }

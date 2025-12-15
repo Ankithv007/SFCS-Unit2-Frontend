@@ -154,6 +154,27 @@ export const useAuth = () => {
         }
     }, [user]);
 
+    const removeUserAvatar = useCallback(async (): Promise<void> => {
+        try {
+            if (user?.email) {
+                await apiCall('/api/auth/update-avatar', 'POST', {
+                    email: user.email,
+                    avatar: null
+                });
+            }
+
+            setUser((prev) => {
+                if (!prev) return null;
+                const updatedUser = { ...prev, avatar: undefined }; // or null, but interface says optional string
+                localStorage.setItem('user_data', JSON.stringify(updatedUser));
+                return updatedUser;
+            });
+        } catch (error) {
+            console.error("Failed to remove avatar:", error);
+            throw error;
+        }
+    }, [user]);
+
     return {
         user,
         isAuthenticated,
@@ -168,6 +189,7 @@ export const useAuth = () => {
         requestForgotOtp,
         confirmForgotOtp,
         createPassword,
-        updateUserAvatar
+        updateUserAvatar,
+        removeUserAvatar
     };
 };

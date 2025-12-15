@@ -1,9 +1,7 @@
 .sidebar {
     width: 60px;
-    /* Collapsed width */
-    background-color: #ffffff;
+    background-color: var(--sidebar-bg);
     height: calc(100vh - 96px);
-    /* 72px header + 8px top + 8px gap + 8px bottom */
     display: flex;
     flex-direction: column;
     padding: 20px 0;
@@ -11,18 +9,34 @@
     position: fixed;
     left: 8px;
     top: 88px;
-    /* 72px header + 8px top + 8px gap */
     overflow-y: auto;
     overflow-x: hidden;
-    transition: width 0.3s ease;
+    transition: width 0.3s ease, background-color 0.3s;
     z-index: 900;
     border-radius: 12px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 4px var(--shadow-color);
+}
+
+/* Custom Scrollbar */
+.sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
 }
 
 .sidebar.expanded {
     width: 250px;
-    /* Expanded width */
     padding: 20px 10px;
 }
 
@@ -34,19 +48,20 @@
     border-radius: 8px;
     transition: background-color 0.2s;
     margin-bottom: 5px;
-    color: #333;
+    color: var(--text-primary);
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
+    flex-shrink: 0;
 }
 
 .menuItem:hover {
-    background-color: #f5f5f5;
+    background-color: var(--hover-bg);
 }
 
 .active {
-    background-color: #e6f7ff;
-    color: #1890ff;
+    background-color: rgba(0, 123, 255, 0.1);
+    color: var(--primary-color);
 }
 
 .menuIcon {
@@ -72,61 +87,127 @@
 .arrow {
     margin-left: auto;
     font-size: 12px;
-    color: #999;
+    color: var(--text-secondary);
     opacity: 0;
     transition: opacity 0.2s;
-}
-
-.sidebar.expanded .arrow {
-    opacity: 1;
-}
-
-.submenu {
-    margin-left: 20px;
-    margin-bottom: 10px;
-    border-left: 2px solid #f0f0f0;
-    padding-left: 10px;
-    display: none;
-    /* Hidden by default when collapsed */
-}
-
-.sidebar.expanded .submenu {
-    display: block;
-    /* Show only on hover */
-}
-
-.submenuHeader {
-    font-size: 11px;
-    color: #999;
-    font-weight: bold;
     margin: 10px 0 5px 0;
     text-transform: uppercase;
 }
 
+.moduleWrapper {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.submenu {
+    position: relative;
+    margin-left: 28px;
+    /* Indent from the icon center */
+    padding-left: 12px;
+
+    /* Create a line that stops at the last item's center approx */
+    /* We use a gradient that starts from top and goes down */
+    /* Start at 18px (approx center of first item) and end at calc(100% - 18px) */
+    background: linear-gradient(to bottom, var(--border-color) 0%, var(--border-color) 100%) no-repeat;
+    background-size: 1px calc(100% - 36px);
+    /* Height of line: total - top padding - bottom padding */
+    background-position: 0 18px;
+    /* Start 18px down */
+
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: slideDown 0.3s ease-out forwards;
+    transform-origin: top;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: scaleY(0.95) translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scaleY(1) translateY(0);
+    }
+}
+
 .submenuItem {
-    padding: 8px 10px;
-    font-size: 14px;
-    color: #666;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
     cursor: pointer;
     border-radius: 6px;
     display: flex;
     align-items: center;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+/* Dot on the vertical line */
+.submenuItem::before {
+    content: '';
+    position: absolute;
+    left: -15px;
+    /* Center on the vertical border */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 6px;
+    background-color: var(--text-secondary);
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    opacity: 0.5;
+}
+
+.submenuItem:hover::before {
+    background-color: var(--primary-color);
+    opacity: 1;
+}
+
+.activeSubmenu {
+    color: var(--primary-color);
+    font-weight: 600;
+    background-color: var(--hover-bg);
+}
+
+.activeSubmenu::before {
+    background-color: var(--primary-color);
+    opacity: 1;
+    width: 8px;
+    height: 8px;
+    left: -16px;
+    /* Adjust for larger size to keep centered */
+    box-shadow: 0 0 0 2px var(--bg-paper);
+    /* Optional ring effect */
 }
 
 .submenuItem:hover {
-    background-color: #f9f9f9;
-    color: #333;
+    background-color: var(--hover-bg);
+    color: var(--primary-color);
+}
+
+.submenuHeader {
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-weight: 700;
+    margin: 8px 0 4px 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .greenHover:hover {
-    color: #28a745;
-    background-color: #e8f5e9;
+    color: var(--color-success);
+    background-color: rgba(40, 167, 69, 0.1);
 }
 
 .exploreLink {
     display: block;
     font-size: 13px;
-    color: #1890ff;
+    color: var(--primary-color);
     text-decoration: none;
     margin-bottom: 10px;
     padding: 5px 0;
@@ -135,7 +216,7 @@
 .actionItem {
     padding: 6px 0;
     font-size: 13px;
-    color: #1890ff;
+    color: var(--primary-color);
     cursor: pointer;
 }
 

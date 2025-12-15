@@ -11,7 +11,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMouseLeave }) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [expandedModule, setExpandedModule] = useState<string | null>('sales-purchase');
+    const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
     const toggleModule = (module: string) => {
         setExpandedModule(expandedModule === module ? null : module);
@@ -19,11 +19,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
 
     const isActive = (path: string) => location.pathname === path;
 
+    const handleMouseLeave = () => {
+        onMouseLeave();
+        setExpandedModule(null);
+    };
+
     return (
         <div
             className={`${styles.sidebar} ${isExpanded ? styles.expanded : ''}`}
             onMouseEnter={onMouseEnter}
-            onMouseLeave={onMouseLeave}
+            onMouseLeave={handleMouseLeave}
         >
             <div
                 className={`${styles.menuItem} ${isActive('/dashboard') ? styles.active : ''}`}
@@ -34,59 +39,44 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                 <span className={styles.menuText}>Home</span>
             </div>
 
-            {/* Sales & Purchase Module */}
-            <div
-                className={`${styles.menuItem} ${expandedModule === 'sales-purchase' ? styles.active : ''}`}
-                onClick={() => toggleModule('sales-purchase')}
-                title="Sales & Purchase"
-            >
-                <span className={styles.menuIcon}>📋</span>
-                <span className={styles.menuText}>Sales & Purchase</span>
-                <span className={styles.arrow}>{expandedModule === 'sales-purchase' ? '▼' : '▶'}</span>
-            </div>
-
-            {expandedModule === 'sales-purchase' && (
-                <div className={styles.submenu}>
-                    <a href="#" className={styles.exploreLink}>Explore Sales & Purchase ›</a>
-
-                    <div className={styles.submenuHeader}>PAGES</div>
-                    <div className={`${styles.submenuItem} ${styles.greenHover}`}>
-                        <span className={styles.menuIcon}>🧾</span> Sales Transactions (Active) ↗
-                    </div>
-                    <div className={styles.submenuItem}>
-                        <span className={styles.menuIcon}>🛍️</span> Purchase Transactions ↗
-                    </div>
-                    <div className={styles.submenuItem}>
-                        <span className={styles.menuIcon}>➤</span> View Sales Quotations ↗
-                    </div>
-                    <div className={styles.submenuItem}>
-                        <span className={styles.menuIcon}>📁</span> All Documents ↗
-                    </div>
-                    <div className={styles.submenuItem}>
-                        <span className={styles.menuIcon}>🔔</span> All Reminders ↗
-                    </div>
-
-                    <div className={styles.submenuHeader}>ACTIONS</div>
-                    <div className={styles.actionItem}>
-                        + Create Order Confirmation ↗
-                    </div>
-                    <div className={styles.actionItem}>
-                        + Create Purchase Order ↗
-                    </div>
-                    <div className={styles.actionItem}>
-                        + Create Invoice ↗
-                    </div>
-                    <div className={styles.actionItem}>
-                        + Create Sales Quotation ↗
-                    </div>
+            {/* Inventory & Report Module */}
+            <div className={styles.moduleWrapper}>
+                <div
+                    className={`${styles.menuItem} ${expandedModule === 'inventory-report' ? styles.active : ''}`}
+                    onClick={() => toggleModule('inventory-report')}
+                    onMouseEnter={() => setExpandedModule('inventory-report')}
+                    title="Inventory & Report"
+                >
+                    <span className={styles.menuIcon}>📦</span>
+                    <span className={styles.menuText}>Inventory & Report</span>
+                    <span className={styles.arrow}>{expandedModule === 'inventory-report' ? '▼' : '▶'}</span>
                 </div>
-            )}
 
-            <div className={styles.menuItem} title="Inventory">
-                <span className={styles.menuIcon}>📦</span>
-                <span className={styles.menuText}>Inventory</span>
-                <span className={styles.arrow}>▶</span>
+                {expandedModule === 'inventory-report' && (
+                    <div className={styles.submenu}>
+
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/purchase-order') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/purchase-order')}
+                        >
+                            <span className={styles.menuIcon}>📝</span> Purchase Order (PO)
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/wip-stack') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/wip-stack')}
+                        >
+                            <span className={styles.menuIcon}>🏭</span> WIP Stack [Prod]
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/return-wip') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/return-wip')}
+                        >
+                            <span className={styles.menuIcon}>↩️</span> Return From WIP
+                        </div>
+                    </div>
+                )}
             </div>
+
             <div className={styles.menuItem} title="Production">
                 <span className={styles.menuIcon}>🏭</span>
                 <span className={styles.menuText}>Production</span>

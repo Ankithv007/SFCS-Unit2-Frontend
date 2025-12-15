@@ -1,6 +1,6 @@
 .header {
     height: 72px;
-    background-color: #ffffff;
+    background-color: var(--header-bg);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -11,7 +11,8 @@
     right: 8px;
     z-index: 1000;
     border-radius: 12px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 4px var(--shadow-color);
+    transition: background-color 0.3s, box-shadow 0.3s;
 }
 
 .brand {
@@ -35,7 +36,7 @@
 .titleContainer {
     font-weight: 700;
     font-size: 1.2rem;
-    color: #333;
+    color: var(--text-primary);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -50,13 +51,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #666;
-    transition: background-color 0.2s;
+    color: var(--text-secondary);
+    transition: background-color 0.2s, color 0.2s;
 }
 
 .menuToggleBtn:hover {
-    background-color: #f0f0f0;
-    color: #333;
+    background-color: var(--hover-bg);
+    color: var(--text-primary);
 }
 
 .brandLogo {
@@ -87,8 +88,8 @@
 }
 
 .logoutBtn {
-    background-color: #ffebee;
-    border: 1px solid #ffcdd2;
+    background-color: var(--bg-main);
+    border: 1px solid var(--border-color);
     cursor: pointer;
     color: #d32f2f;
     padding: 8px;
@@ -112,13 +113,13 @@
     position: absolute;
     top: 70px;
     right: 20px;
-    background-color: white;
+    background-color: var(--bg-paper);
     border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 20px var(--shadow-color);
     width: 300px;
     padding: 20px;
     z-index: 1100;
-    border: 1px solid #f0f0f0;
+    border: 1px solid var(--border-color);
     animation: slideDown 0.2s ease-out;
 }
 
@@ -183,13 +184,13 @@
 .menuName {
     font-weight: 700;
     font-size: 1.1rem;
-    color: #333;
+    color: var(--text-primary);
     margin: 5px 0 0;
 }
 
 .menuEmail {
     font-size: 0.9rem;
-    color: #666;
+    color: var(--text-secondary);
     margin: 0;
 }
 
@@ -197,7 +198,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    border-top: 1px solid #f0f0f0;
+    border-top: 1px solid var(--border-color);
     padding-top: 15px;
 }
 
@@ -209,7 +210,7 @@
     cursor: pointer;
     border-radius: 8px;
     font-size: 0.95rem;
-    color: #333;
+    color: var(--text-primary);
     transition: background-color 0.2s;
     display: flex;
     align-items: center;
@@ -217,15 +218,90 @@
 }
 
 .menuBtn:hover {
-    background-color: #f5f5f5;
+    background-color: var(--hover-bg);
 }
 
 .changePassBtn {
-    color: #007bff;
+    color: var(--primary-color);
 }
 
 .changePassBtn:hover {
-    background-color: #e6f7ff;
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.themeToggle {
+    width: 60px;
+    height: 30px;
+    border-radius: 15px;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    padding: 0 3px;
+    transition: background-color 0.3s ease;
+    margin-right: 15px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.themeToggle.light {
+    background-color: #ff6b00;
+    /* Orange for Light Mode */
+}
+
+.themeToggle.dark {
+    background-color: #000000;
+    /* Black for Dark Mode */
+}
+
+.toggleThumb {
+    width: 24px;
+    height: 24px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.themeToggle.dark .toggleThumb {
+    transform: translateX(30px);
+}
+
+.sunIcon,
+.moonIcon {
+    position: absolute;
+    font-size: 14px;
+    line-height: 1;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    user-select: none;
+}
+
+/* Light Mode: Show Sun, Hide Moon */
+.themeToggle.light .sunIcon {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.themeToggle.light .moonIcon {
+    opacity: 0;
+    transform: scale(0.5);
+}
+
+/* Dark Mode: Hide Sun, Show Moon */
+.themeToggle.dark .sunIcon {
+    opacity: 0;
+    transform: scale(0.5);
+}
+
+.themeToggle.dark .moonIcon {
+    opacity: 1;
+    transform: scale(1);
 }
 
 @keyframes vibgyor {

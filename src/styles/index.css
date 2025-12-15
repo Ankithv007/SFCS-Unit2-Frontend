@@ -28,6 +28,33 @@
     --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
     --shadow-md: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
     --shadow-lg: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+
+    /* New Theme Variables (For Dashboard) */
+    /* Light Theme Defaults */
+    --bg-main: #f8f9fa;
+    --bg-paper: #ffffff;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --border-color: #dee2e6;
+    --hover-bg: #f0f0f0;
+    --shadow-color: rgba(0, 0, 0, 0.05);
+    --primary-color: #007bff;
+    --header-bg: #ffffff;
+    --sidebar-bg: #ffffff;
+}
+
+[data-theme='dark'] {
+    /* Dark Theme Overrides */
+    --bg-main: #121212;
+    --bg-paper: #1e1e1e;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --border-color: #333333;
+    --hover-bg: #2c2c2c;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+    --primary-color: #4dabf7;
+    --header-bg: #1e1e1e;
+    --sidebar-bg: #1e1e1e;
 }
 
 * {
@@ -38,10 +65,11 @@
 
 body {
     font-family: var(--font-family);
-    background-color: var(--color-bg-light);
+    background-color: var(--bg-main);
     color: var(--color-text-main);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    transition: background-color 0.3s;
 }
 
 button {

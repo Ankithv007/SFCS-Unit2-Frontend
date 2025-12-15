@@ -5,12 +5,15 @@ import { useToast } from './Toast';
 import styles from './Header.module.css';
 import logo from '../assets/velankani-software.jpg';
 
+import { useTheme } from '../context/ThemeContext';
+
 interface HeaderProps {
     onToggleSidebar?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
-    const { user, logout, updateUserAvatar } = useAuth();
+    const { user, logout, updateUserAvatar, removeUserAvatar } = useAuth();
+    const { theme, toggleTheme } = useTheme();
     const { showToast } = useToast();
     const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = React.useState(false);
@@ -83,6 +86,12 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
         return () => clearInterval(interval);
     }, []);
 
+    const handleThemeToggle = () => {
+        const newTheme = theme === 'light' ? 'dark' : 'light';
+        toggleTheme();
+        showToast(`Switched to ${newTheme} mode`, 'success');
+    };
+
     return (
         <header className={styles.header}>
             <div className={styles.brand}>
@@ -108,6 +117,16 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                 )}
             </div>
             <div className={styles.userSection}>
+                <div
+                    className={`${styles.themeToggle} ${theme === 'dark' ? styles.dark : styles.light}`}
+                    onClick={handleThemeToggle}
+                    title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+                >
+                    <div className={styles.toggleThumb}>
+                        <span className={styles.sunIcon}>☀️</span>
+                        <span className={styles.moonIcon}>🌙</span>
+                    </div>
+                </div>
                 <div className={styles.userInfo} onClick={handleAvatarClick} style={{ cursor: 'pointer' }}>
                     <img
                         src={user?.avatar || "https://ui-avatars.com/api/?name=User&background=random"}
@@ -167,6 +186,24 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                             >
                                 🔑 Change Password
                             </button>
+                            {user?.avatar && (
+                                <button
+                                    className={`${styles.menuBtn} ${styles.removePhotoBtn}`}
+                                    onClick={async () => {
+                                        try {
+                                            if (removeUserAvatar) {
+                                                await removeUserAvatar();
+                                                showToast('Profile photo removed', 'success');
+                                            }
+                                        } catch (e) {
+                                            showToast('Failed to remove photo', 'error');
+                                        }
+                                    }}
+                                    style={{ marginTop: '0.5rem', color: '#ef4444' }}
+                                >
+                                    🗑️ Remove Photo
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}

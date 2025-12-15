@@ -3,7 +3,9 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Forgot } from './pages/Forgot';
 import { Dashboard } from './pages/Dashboard';
-import { SalesPurchase } from './pages/SalesPurchase';
+import { PurchaseOrder } from './pages/PurchaseOrder';
+import { WipStack } from './pages/WipStack';
+import { ReturnWip } from './pages/ReturnWip';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -36,10 +38,26 @@ export const router = createBrowserRouter([
                 ),
             },
             {
-                path: '/sales-purchase',
+                path: '/purchase-order',
                 element: (
                     <ProtectedRoute>
-                        <SalesPurchase />
+                        <PurchaseOrder />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/wip-stack',
+                element: (
+                    <ProtectedRoute>
+                        <WipStack />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/return-wip',
+                element: (
+                    <ProtectedRoute>
+                        <ReturnWip />
                     </ProtectedRoute>
                 ),
             },

@@ -20,7 +20,7 @@ export const Layout: React.FC = () => {
 
     return (
         <ToastProvider>
-            <div style={{ minHeight: '100vh', backgroundColor: '#f4f4f4' }}>
+            <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-main)' }}>
                 {showSidebar && <Header onToggleSidebar={toggleSidebar} />}
                 <div style={{ display: 'flex' }}>
                     {showSidebar && (

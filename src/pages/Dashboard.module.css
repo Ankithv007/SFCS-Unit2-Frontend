@@ -5,27 +5,28 @@
 }
 
 .content {
-    background-color: white;
+    background-color: var(--bg-paper);
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px var(--shadow-color);
+    color: var(--text-primary);
 }
 
 .card {
     margin-top: 20px;
     padding: 20px;
-    background-color: #f8f9fa;
+    background-color: var(--bg-main);
     border-radius: 8px;
-    border: 1px solid #e9ecef;
+    border: 1px solid var(--border-color);
 }
 
 .card h2 {
     margin-top: 0;
-    color: #495057;
+    color: var(--text-primary);
     font-size: 1.2rem;
 }
 
 .card p {
     margin: 10px 0;
-    color: #6c757d;
+    color: var(--text-secondary);
 }

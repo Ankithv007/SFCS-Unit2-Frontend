@@ -1,11 +1,17 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { Login } from './pages/Login';
-import { Signup } from './pages/Signup';
-import { Forgot } from './pages/Forgot';
-import { Dashboard } from './pages/Dashboard';
-import { PurchaseOrder } from './pages/PurchaseOrder';
-import { WipStack } from './pages/WipStack';
-import { ReturnWip } from './pages/ReturnWip';
+import { Login } from './pages/auth/Login';
+import { Signup } from './pages/auth/Signup';
+import { Forgot } from './pages/auth/Forgot';
+import { Dashboard } from './pages/dashboard/Dashboard';
+import { PurchaseOrder } from './pages/inventory/PurchaseOrder';
+import { WipStack } from './pages/inventory/WipStack';
+import { ReturnWip } from './pages/inventory/ReturnWip';
+import { Report } from './pages/inventory/Report';
+import { IQC } from './pages/pre-testing/IQC';
+import { Impedance } from './pages/pre-testing/Impedance';
+import { Calibration } from './pages/pre-testing/Calibration';
+import { ACLR } from './pages/pre-testing/ACLR';
+import { FinalQC } from './pages/pre-testing/FinalQC';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -58,6 +64,54 @@ export const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <ReturnWip />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/report',
+                element: (
+                    <ProtectedRoute>
+                        <Report />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/pre-testing/iqc',
+                element: (
+                    <ProtectedRoute>
+                        <IQC />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/pre-testing/impedance',
+                element: (
+                    <ProtectedRoute>
+                        <Impedance />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/pre-testing/calibration',
+                element: (
+                    <ProtectedRoute>
+                        <Calibration />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/pre-testing/aclr',
+                element: (
+                    <ProtectedRoute>
+                        <ACLR />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/pre-testing/final-qc',
+                element: (
+                    <ProtectedRoute>
+                        <FinalQC />
                     </ProtectedRoute>
                 ),
             },

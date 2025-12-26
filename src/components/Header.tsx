@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from './Toast';
 import styles from './Header.module.css';
-import logo from '../assets/velankani-software.jpg';
+import logo from '../assets/logo.webp';
 
 import { useTheme } from '../context/ThemeContext';
 
@@ -92,6 +92,19 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
         showToast(`Switched to ${newTheme} mode`, 'success');
     };
 
+    const [searchQuery, setSearchQuery] = React.useState('');
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (searchQuery.trim()) {
+            // Navigate to Purchase Order page with search query
+            // This assumes the PO page will handle the 'search' query param
+            // If not, it will just go there and the user can see the search bar.
+            // Ideally, we should update PO page to read this param.
+            navigate(`/inventory/purchase-order?search=${encodeURIComponent(searchQuery)}`);
+        }
+    };
+
     return (
         <header className={styles.header}>
             <div className={styles.brand}>
@@ -115,7 +128,29 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                         </button>
                     </div>
                 )}
+                <div className={styles.greeting}>
+                    Hola, {user?.name || 'User'}
+                </div>
             </div>
+
+            <div className={styles.searchContainer}>
+                <form onSubmit={handleSearch} className={styles.searchWrapper}>
+                    <input
+                        type="text"
+                        className={styles.searchInput}
+                        placeholder="Search PO Number..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <button type="submit" className={styles.searchIconBtn}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+
             <div className={styles.userSection}>
                 <div
                     className={`${styles.themeToggle} ${theme === 'dark' ? styles.dark : styles.light}`}

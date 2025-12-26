@@ -73,18 +73,67 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                         >
                             <span className={styles.menuIcon}>↩️</span> Return From WIP
                         </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/report') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/report')}
+                        >
+                            <span className={styles.menuIcon}>📊</span> Report
+                        </div>
                     </div>
                 )}
             </div>
 
-            <div className={styles.menuItem} title="Production">
-                <span className={styles.menuIcon}>🏭</span>
-                <span className={styles.menuText}>Production</span>
-                <span className={styles.arrow}>▶</span>
+            {/* Pre testing Module */}
+            <div className={styles.moduleWrapper}>
+                <div
+                    className={`${styles.menuItem} ${expandedModule === 'pre-testing' ? styles.active : ''}`}
+                    onClick={() => toggleModule('pre-testing')}
+                    onMouseEnter={() => setExpandedModule('pre-testing')}
+                    title="Pre testing"
+                >
+                    <span className={styles.menuIcon}>🧪</span>
+                    <span className={styles.menuText}>Pre testing</span>
+                    <span className={styles.arrow}>{expandedModule === 'pre-testing' ? '▼' : '▶'}</span>
+                </div>
+
+                {expandedModule === 'pre-testing' && (
+                    <div className={styles.submenu}>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/iqc') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/iqc')}
+                        >
+                            <span className={styles.menuIcon}>🔍</span> IQC
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/impedance') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/impedance')}
+                        >
+                            <span className={styles.menuIcon}>⚡</span> Impedance
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/calibration') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/calibration')}
+                        >
+                            <span className={styles.menuIcon}>⚖️</span> Calibration
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/aclr') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/aclr')}
+                        >
+                            <span className={styles.menuIcon}>📶</span> ACLR
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/final-qc') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/final-qc')}
+                        >
+                            <span className={styles.menuIcon}>🛡️</span> Final QC
+                        </div>
+                    </div>
+                )}
             </div>
-            <div className={styles.menuItem} title="Payments">
-                <span className={styles.menuIcon}>₹</span>
-                <span className={styles.menuText}>Payments</span>
+            <div className={styles.menuItem} title="Post testing">
+                <span className={styles.menuIcon}>✅</span>
+                <span className={styles.menuText}>Post testing</span>
                 <span className={styles.arrow}>▶</span>
             </div>
             <div className={styles.menuItem} title="Reports & Intelligence">

@@ -42,6 +42,71 @@
     align-items: center;
 }
 
+.greeting {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-left: 15px;
+    padding-left: 15px;
+    border-left: 2px solid var(--border-color);
+    height: 24px;
+    display: flex;
+    align-items: center;
+}
+
+.searchContainer {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    max-width: 500px;
+    margin: 0 20px;
+}
+
+.searchWrapper {
+    position: relative;
+    width: 100%;
+}
+
+.searchInput {
+    width: 100%;
+    padding: 10px 40px 10px 20px;
+    border-radius: 24px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-paper);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    transition: all 0.2s;
+}
+
+.searchInput:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.searchIconBtn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 50%;
+    transition: color 0.2s, background-color 0.2s;
+}
+
+.searchIconBtn:hover {
+    color: var(--primary-color);
+    background-color: var(--hover-bg);
+}
+
 .menuToggleBtn {
     background: none;
     border: none;

@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import { Button } from '../components/Button';
-import { FormField } from '../components/FormField';
-import { useToast } from '../components/Toast';
+import { useAuth } from '../../hooks/useAuth';
+import { Button } from '../../components/Button';
+import { FormField } from '../../components/FormField';
+import { useToast } from '../../components/Toast';
 import styles from './Login.module.css';
-import loginGif from '../assets/login-animation.mp4.gif';
+import loginGif from '../../assets/login-animation.mp4.gif';
 
 
-import logo from '../assets/velankani-software.jpg';
+import logo from '../../assets/velankani-software.jpg';
 
 export const Login: React.FC = () => {
     const navigate = useNavigate();

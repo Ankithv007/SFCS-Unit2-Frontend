@@ -1,0 +1,363 @@
+.container {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.searchSection {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.searchControls {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: 800px;
+}
+
+.orgSelector {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.orgSelector label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #333;
+    min-width: 120px;
+}
+
+.orgDropdown {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    background: #f8f9fa;
+    font-size: 1rem;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.orgDropdown:hover {
+    border-color: #adb5bd;
+}
+
+.orgDropdown:focus {
+    outline: none;
+    border-color: #228be6;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(34, 139, 230, 0.1);
+}
+
+.searchInputWrapper {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+    flex-wrap: nowrap;
+}
+
+.searchInput {
+    flex: 1;
+}
+
+.searchField {
+    margin-bottom: 0 !important;
+    color: #444;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.tableContainer {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th,
+.table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #444;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.table tbody tr:nth-child(even) {
+    background-color: #fafafa;
+}
+
+.table th:hover {
+    background: #f1f3f5;
+}
+
+.sortable {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sortIcon {
+    font-size: 0.8rem;
+    color: #999;
+}
+
+.sortIcon.active {
+    color: #333;
+    font-weight: bold;
+}
+
+.vendorCell {
+    display: flex;
+    flex-direction: column;
+}
+
+.vendorName {
+    font-weight: 500;
+}
+
+.vendorGstin {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.itemsCell {
+    display: flex;
+    flex-direction: column;
+}
+
+.itemCount {
+    font-weight: 500;
+    color: #228be6;
+}
+
+.itemPreview {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.totalCell {
+    font-weight: 600;
+    color: #2b8a3e;
+}
+
+.expandButton {
+    background: none;
+    border: none;
+    color: #228be6;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 0.5rem;
+    white-space: nowrap;
+}
+
+.expandButton:hover {
+    text-decoration: underline;
+}
+
+.expandedRow {
+    background-color: #f8f9fa;
+}
+
+.expandedContent {
+    padding: 1rem 2rem;
+}
+
+.expandedContent h4 {
+    margin-bottom: 1rem;
+    color: #444;
+}
+
+.itemTableContainer {
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.itemTable td {
+    font-size: 0.9rem;
+    padding: 0.75rem;
+    vertical-align: top;
+}
+
+.itemName {
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.itemDesc {
+    font-size: 0.85rem;
+    color: #666;
+    white-space: pre-wrap;
+}
+
+.paginationContainer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+    margin-top: 1rem;
+    border-top: 1px solid #eee;
+}
+
+.pageSizeSelector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.pageSizeSelector select {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+}
+
+.paginationButtons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pageButton {
+    padding: 0.25rem 0.75rem;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #444;
+}
+
+.pageButton:disabled {
+    background: #f1f3f5;
+    color: #adb5bd;
+    cursor: not-allowed;
+}
+
+.pageButton:hover:not(:disabled) {
+    background: #f8f9fa;
+    border-color: #ccc;
+}
+
+.pageInfo {
+    font-size: 0.9rem;
+    color: #666;
+    min-width: 100px;
+    text-align: center;
+}
+
+.emptyState {
+    text-align: center;
+    padding: 3rem;
+    background: white;
+    border-radius: 8px;
+    color: #666;
+}
+
+.qtyControl {
+    display: flex;
+    align-items: center;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+    width: fit-content;
+}
+
+.qtyBtn {
+    background: #f8f9fa;
+    border: none;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    font-weight: bold;
+    color: #444;
+}
+
+.qtyBtn:hover {
+    background: #e9ecef;
+}
+
+.qtyInputInner {
+    width: 50px;
+    border: none;
+    text-align: center;
+    padding: 0.25rem;
+    font-size: 0.9rem;
+    -moz-appearance: textfield;
+}
+
+.qtyInputInner::-webkit-outer-spin-button,
+.qtyInputInner::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.locationInput {
+    width: 100%;
+    min-width: 120px;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.locationInput:focus {
+    outline: none;
+    border-color: #228be6;
+    box-shadow: 0 0 0 2px rgba(34, 139, 230, 0.1);
+}
+
+.actionRow {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.saveButton {
+    background-color: #2b8a3e;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.saveButton:hover {
+    background-color: #237032;
+}
+
+.saveButton:disabled {
+    background-color: #adb5bd;
+    cursor: not-allowed;
+}

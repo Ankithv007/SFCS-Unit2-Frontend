@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import { Button } from '../components/Button';
-import { FormField } from '../components/FormField';
-import { OtpInput } from '../components/OtpInput';
-import { useToast } from '../components/Toast';
+import { useAuth } from '../../hooks/useAuth';
+import { Button } from '../../components/Button';
+import { FormField } from '../../components/FormField';
+import { OtpInput } from '../../components/OtpInput';
+import { useToast } from '../../components/Toast';
 import styles from './Signup.module.css';
-import loginGif from '../assets/login-animation.mp4.gif';
-import logo from '../assets/velankani-software.jpg';
+import loginGif from '../../assets/login-animation.mp4.gif';
+import logo from '../../assets/velankani-software.jpg';
 
 type SignupStep = 'details' | 'otp' | 'password' | 'success';
 

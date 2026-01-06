@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from './PreTesting.module.css';
+import styles from './Calibration.module.css';
 
 export const Calibration: React.FC = () => {
     return (

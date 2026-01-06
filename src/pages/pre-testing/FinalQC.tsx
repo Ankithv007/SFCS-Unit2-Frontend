@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from './PreTesting.module.css';
+import styles from './FinalQC.module.css';
 
 export const FinalQC: React.FC = () => {
     return (

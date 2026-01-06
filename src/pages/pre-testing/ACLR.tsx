@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from './PreTesting.module.css';
+import styles from './ACLR.module.css';
 
 export const ACLR: React.FC = () => {
     return (

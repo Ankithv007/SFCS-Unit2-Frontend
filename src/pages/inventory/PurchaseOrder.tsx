@@ -313,7 +313,7 @@ export const PurchaseOrder: React.FC = () => {
                             </thead>
                             <tbody>
                                 {paginatedData.map((po) => {
-                                    const totalValue = po.items.reduce((acc, item) => acc + (item.ordered_qty * item.unit_price), 0);
+                                    // const totalValue = po.items.reduce((acc, item) => acc + (item.ordered_qty * item.unit_price), 0);
                                     const isExpanded = expandedRows.has(po.po_number);
 
                                     return (

@@ -8,7 +8,9 @@ import { WipStack } from './pages/inventory/WipStack';
 import { ReturnWip } from './pages/inventory/ReturnWip';
 import { Report } from './pages/inventory/Report';
 import { IQC } from './pages/pre-testing/IQC';
+import { Warehouse } from './pages/pre-testing/Warehouse';
 import { Impedance } from './pages/pre-testing/Impedance';
+import { AdminPanel } from './pages/admin/AdminPanel';
 import { Calibration } from './pages/pre-testing/Calibration';
 import { ACLR } from './pages/pre-testing/ACLR';
 import { FinalQC } from './pages/pre-testing/FinalQC';
@@ -44,6 +46,14 @@ export const router = createBrowserRouter([
                 ),
             },
             {
+                path: '/admin-panel',
+                element: (
+                    <ProtectedRoute>
+                        <AdminPanel />
+                    </ProtectedRoute>
+                ),
+            },
+            {
                 path: '/purchase-order',
                 element: (
                     <ProtectedRoute>
@@ -72,6 +82,14 @@ export const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <Report />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/pre-testing/warehouse',
+                element: (
+                    <ProtectedRoute>
+                        <Warehouse />
                     </ProtectedRoute>
                 ),
             },

@@ -6,6 +6,7 @@ export interface User {
     name?: string;
     id: string;
     avatar?: string;
+    role: string;
 }
 
 export interface AuthState {
@@ -90,11 +91,12 @@ export const useAuth = () => {
         try {
             const data = await apiCall('/api/auth/login', 'POST', { email, password });
             // Backend now returns avatar in user object
-            const sessionUser = {
+            const sessionUser: User = {
                 email: data.user.email,
                 name: data.user.name,
                 id: data.user.id,
-                avatar: data.user.avatar
+                avatar: data.user.avatar,
+                role: data.user.role || 'User'
             };
 
             setUser(sessionUser);

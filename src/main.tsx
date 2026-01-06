@@ -5,11 +5,14 @@ import './styles/index.css'
 import { router } from './routes'
 
 import { ThemeProvider } from './context/ThemeContext'
+import { ToastProvider } from './components/Toast'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
-      <RouterProvider router={router} />
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
     </ThemeProvider>
   </StrictMode>,
 )

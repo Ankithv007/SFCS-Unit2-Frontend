@@ -13,7 +13,7 @@ type ForgotStep = 'email' | 'reset';
 
 export const Forgot: React.FC = () => {
     const navigate = useNavigate();
-    const { checkEmail, requestForgotOtp, confirmForgotOtp, resendOtp, isLoading } = useAuth();
+    const { requestForgotOtp, confirmForgotOtp, resendOtp, isLoading } = useAuth();
     const { showToast } = useToast();
 
     const [step, setStep] = useState<ForgotStep>('email');

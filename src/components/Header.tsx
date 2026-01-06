@@ -164,9 +164,13 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                 </div>
                 <div className={styles.userInfo} onClick={handleAvatarClick} style={{ cursor: 'pointer' }}>
                     <img
-                        src={user?.avatar || "https://ui-avatars.com/api/?name=User&background=random"}
+                        src={user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`}
                         alt="User"
                         className={styles.avatar}
+                        onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`;
+                        }}
                     />
                 </div>
                 <button
@@ -196,9 +200,13 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                         <div className={styles.menuHeader}>
                             <div className={styles.menuAvatarContainer} onClick={triggerFileInput}>
                                 <img
-                                    src={user?.avatar || "https://ui-avatars.com/api/?name=User&background=random"}
+                                    src={user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`}
                                     alt="User"
                                     className={styles.menuAvatar}
+                                    onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`;
+                                    }}
                                 />
                                 <div className={styles.avatarOverlay}>
                                     📷

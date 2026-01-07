@@ -378,11 +378,33 @@ export const IQC: React.FC = () => {
     const ITEMS_PER_PAGE = 10;
 
     // Filtered Batches
+    // Dynamic Target: The greater of Warehouse Expected (Plan) OR Warehouse Received (Actual)
+    // This ensures that if Warehouse scans EXTRA items (more than plan), IQC must also scan them to complete.
     // Filtered Batches
-    // Strict Validation: Completed ONLY when (Passed + Failed) equals Warehouse Total Target (Expected Qty)
-    // We use warehouse_expected_quantity if available, otherwise fallback to expected_quantity (for legacy/safety)
-    const completedBatches = batches.filter(b => (b.passed_count + b.failed_count) >= (b.warehouse_expected_quantity || b.expected_quantity));
-    const pendingBatches = batches.filter(b => (b.passed_count + b.failed_count) < (b.warehouse_expected_quantity || b.expected_quantity));
+    // Strict Business Rule: 
+    // Target is ALWAYS Warehouse Total Count (Expected Qty).
+    // EXCEPTION: If Warehouse scans MORE than expected (Extras), then Target increases to match Received Qty.
+    const getTargetQty = (b: Batch) => {
+        // User Feedback: "Warehouse Total Count" refers to the actual Scanned Quantity (Received),
+        // not the initial Plan (Expected). This supports the "Reversible" workflow where
+        // adding items (increasing Scanned Qty) moves batch back to Pending.
+
+        const warehouseReceived = Number(b.warehouse_received_quantity) || 0;
+
+        // We use the actual scanned count from Warehouse as the target.
+        // If Warehouse has scanned 4, and we processed 4, we are "Completed" (Up to date).
+        // If Warehouse scans a 5th, Target becomes 5, we become "Pending".
+
+        // Fallback: If warehouse data is missing (e.g. standalone IQC batch), use local expected.
+        if (warehouseReceived === 0 && !b.warehouse_received_quantity) {
+            return Number(b.expected_quantity) || 0;
+        }
+
+        return warehouseReceived;
+    };
+
+    const completedBatches = batches.filter(b => (b.passed_count + b.failed_count) >= getTargetQty(b));
+    const pendingBatches = batches.filter(b => (b.passed_count + b.failed_count) < getTargetQty(b));
 
     // Pagination Logic
     const paginatedPendingBatches = pendingBatches.slice((pendingPage - 1) * ITEMS_PER_PAGE, pendingPage * ITEMS_PER_PAGE);
@@ -530,7 +552,7 @@ export const IQC: React.FC = () => {
                                             <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
                                             <td>{batch.created_by}</td>
                                             <td>{new Date(batch.created_at).toLocaleDateString()}</td>
-                                            <td className={styles.statusBlue}>{batch.expected_quantity}</td>
+                                            <td className={styles.statusBlue}>{getTargetQty(batch)}</td>
                                             <td className={styles.statusGreen}>{batch.passed_count}</td>
                                             <td className={styles.statusRed}>{batch.failed_count}</td>
                                             <td>
@@ -600,7 +622,7 @@ export const IQC: React.FC = () => {
                                             <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
                                             <td>{batch.created_by}</td>
                                             <td>{new Date(batch.created_at).toLocaleDateString()}</td>
-                                            <td className={styles.statusBlue}>{batch.expected_quantity}</td>
+                                            <td className={styles.statusBlue}>{getTargetQty(batch)}</td>
                                             <td className={styles.statusGreen}>{batch.passed_count}</td>
                                             <td className={styles.statusRed}>{batch.failed_count}</td>
                                             <td>
@@ -614,6 +636,15 @@ export const IQC: React.FC = () => {
                                             </td>
                                             <td>
                                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    {['Admin', 'Super Admin', 'Manager'].includes(user?.role || '') && (
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            onClick={() => handleViewBatch(batch)}
+                                                            title="View Batch Details"
+                                                        >
+                                                            View
+                                                        </button>
+                                                    )}
                                                     <button
                                                         className={styles.deleteTextButton}
                                                         onClick={() => handleDeleteBatch(batch.id)}
@@ -648,7 +679,7 @@ export const IQC: React.FC = () => {
                         <div>
                             <h3>{activeBatch.batch_number}</h3>
                             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', fontSize: '0.95rem', color: '#4b5563' }}>
-                                <span>Total Scanned: <strong>{scannedComponents.length}</strong> {activeBatch.expected_quantity ? `/ ${activeBatch.expected_quantity}` : ''}</span>
+                                <span>Total Scanned: <strong>{scannedComponents.length}</strong> / {getTargetQty(activeBatch)}</span>
                                 <span style={{ color: '#2563eb', fontWeight: 600 }}>🏭 Available: {activeBatch.warehouse_received_quantity || 0}</span>
                                 <span style={{ color: '#10b981', fontWeight: 600 }}>✅ Passed: {scannedComponents.filter(c => c.status === 'ACCEPTED').length}</span>
                                 <span style={{ color: '#ef4444', fontWeight: 600 }}>❌ Failed: {scannedComponents.filter(c => c.status === 'REJECTED').length}</span>

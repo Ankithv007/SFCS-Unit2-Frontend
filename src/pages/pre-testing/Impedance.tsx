@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import styles from './Impedance.module.css';
 import { useToast } from '../../components/Toast';
+import { useAuth } from '../../hooks/useAuth';
+import { Pagination } from '../../components/Pagination';
 
 interface Batch {
     id: number;
     batch_number: string;
     quantity: number;
     created_at: string;
-    scanned_count?: number;
+    scan_count?: number;
     last_tested_by?: string;
     last_active?: string;
     passed_count?: number;
     failed_count?: number;
     iqc_passed_count?: number;
+    tested_by?: string;
+    started_at?: string;
 }
 
 export const Impedance: React.FC = () => {
@@ -21,12 +25,126 @@ export const Impedance: React.FC = () => {
     const [barcode, setBarcode] = useState<string>('');
     const [scannedItems, setScannedItems] = useState<any[]>([]);
     const [batches, setBatches] = useState<Batch[]>([]);
+    const [iqcBatches, setIQCBatches] = useState<any[]>([]);
+    const [selectedIQCBatch, setSelectedIQCBatch] = useState<string>('');
+    const [quantity, setQuantity] = useState<number | string>('');
+    const [currentBatchId, setCurrentBatchId] = useState<number | null>(null);
     const { showToast } = useToast();
+    const { user } = useAuth();
+
+    // Pagination State
+    const [pendingPage, setPendingPage] = useState(1);
+    const [completedPage, setCompletedPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
 
     // Fail Modal State
     const [failModalOpen, setFailModalOpen] = useState(false);
     const [selectedScan, setSelectedScan] = useState<any>(null);
     const [failRemark, setFailRemark] = useState('');
+
+    // Dropdown State
+    const [openDropdown, setOpenDropdown] = useState<{ id: number, test: string } | null>(null);
+
+    // Scan Modal State
+    const [scanModalOpen, setScanModalOpen] = useState(false);
+    const [pendingBarcode, setPendingBarcode] = useState('');
+    const [scanTestResults, setScanTestResults] = useState({
+        test_pa1: true,
+        test_pa2: true,
+        test_pa4: true,
+        test_pa5: true,
+        test_r160: true
+    });
+
+    // Search State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResult, setSearchResult] = useState<any | null>(null);
+    const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+
+    // View Batch Details State
+    const [viewBatch, setViewBatch] = useState<Batch | null>(null);
+    const [viewBatchScans, setViewBatchScans] = useState<any[]>([]);
+
+    const handleViewBatch = async (batch: Batch) => {
+        try {
+            const response = await fetch(`http://localhost:5002/api/impedance/sessions/${batch.id}/scans`);
+            if (response.ok) {
+                const data = await response.json();
+                setViewBatch(batch);
+                setViewBatchScans(data);
+            } else {
+                showToast('Failed to load batch details', 'error');
+            }
+        } catch (error) {
+            console.error('Error fetching batch details:', error);
+            showToast('Network error', 'error');
+        }
+    };
+
+    const handleSearch = async () => {
+        if (!searchQuery.trim()) {
+            showToast('Please enter a barcode', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`http://localhost:5002/api/impedance/search?barcode=${encodeURIComponent(searchQuery.trim())}`);
+            if (response.ok) {
+                const data = await response.json();
+                setSearchResult(data);
+                showToast('Component found!', 'success');
+                setIsSearchExpanded(false);
+                setSearchQuery('');
+            } else {
+                showToast('Component not found', 'error');
+                setSearchResult(null);
+            }
+        } catch (error) {
+            console.error('Search error:', error);
+            showToast('Network error', 'error');
+        }
+    };
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => setOpenDropdown(null);
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, []);
+
+    const handleTestUpdate = async (item: any, testKey: string, result: boolean) => {
+        setOpenDropdown(null); // Close dropdown
+
+        // Optimistic update
+        setScannedItems(prev => prev.map(s =>
+            s.id === item.id ? { ...s, [testKey]: result } : s
+        ));
+
+        try {
+            const response = await fetch(`http://localhost:5002/api/impedance/scans/${item.id}/test`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ test_name: testKey, result: result })
+            });
+
+            if (response.ok) {
+                const updatedScan = await response.json();
+                setScannedItems(prev => prev.map(s =>
+                    s.id === item.id ? updatedScan : s
+                ));
+                fetchBatches(); // Update counts
+            } else {
+                showToast('Failed to update test', 'error');
+                // Revert on failure
+                setScannedItems(prev => prev.map(s =>
+                    s.id === item.id ? { ...s, [testKey]: !result } : s
+                ));
+            }
+        } catch (error) {
+            console.error('Error updating test:', error);
+            showToast('Network error', 'error');
+        }
+    };
 
     const handleFailClick = (scan: any) => {
         setSelectedScan(scan);
@@ -74,7 +192,62 @@ export const Impedance: React.FC = () => {
     // Fetch batches on mount and when session ends
     useEffect(() => {
         fetchBatches();
+        fetchIQCBatches();
     }, [isSessionActive]);
+
+    // Polling for real-time updates (Sync with IQC)
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            fetchBatches(); // Keep batch counts updated
+            if (isSessionActive && currentBatchId) {
+                fetchSessionScans(currentBatchId); // Keep scan list updated (handle rollbacks)
+            }
+        }, 3000); // Poll every 3 seconds
+
+        return () => clearInterval(intervalId);
+    }, [isSessionActive, currentBatchId]);
+
+    // Fetch scans when entering a session
+    useEffect(() => {
+        console.log('Session Active State Changed:', { currentBatchId, isSessionActive });
+        if (currentBatchId && isSessionActive) {
+            console.log('Fetching scans for session:', currentBatchId);
+            fetchSessionScans(currentBatchId);
+        } else {
+            setScannedItems([]);
+        }
+    }, [currentBatchId, isSessionActive]);
+
+    const fetchSessionScans = async (sessionId: number) => {
+        try {
+            console.log(`Making API call to: http://localhost:5002/api/impedance/sessions/${sessionId}/scans`);
+            const response = await fetch(`http://localhost:5002/api/impedance/sessions/${sessionId}/scans`);
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Fetched scans data:', data);
+                setScannedItems(data);
+                // showToast(`Loaded ${data.length} scans`, 'success'); // Optional: might be too noisy
+            } else {
+                console.error('Failed to fetch scans:', response.statusText);
+                showToast('Failed to load scans', 'error');
+            }
+        } catch (error) {
+            console.error('Error fetching scans:', error);
+            showToast('Network error loading scans', 'error');
+        }
+    };
+
+    const fetchIQCBatches = async () => {
+        try {
+            const response = await fetch('http://localhost:5002/api/impedance/iqc-batches');
+            if (response.ok) {
+                const data = await response.json();
+                setIQCBatches(data);
+            }
+        } catch (error) {
+            console.error('Error fetching IQC batches:', error);
+        }
+    };
 
     const fetchBatches = async () => {
         try {
@@ -88,19 +261,69 @@ export const Impedance: React.FC = () => {
         }
     };
 
-    const handleStartTesting = () => {
-        if (!userName.trim()) {
-            showToast('Please enter Operator Name', 'error');
-            return;
+    const handleIQCBatchSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const batchId = e.target.value;
+        setSelectedIQCBatch(batchId);
+        const batch = iqcBatches.find(b => b.id.toString() === batchId);
+        if (batch) {
+            setQuantity(batch.passed_count);
+        } else {
+            setQuantity('');
         }
-        setIsSessionActive(true);
-        showToast('Scanning started. PCBs will be auto-assigned to batches.', 'success');
     };
 
-    const handleScan = async (e: React.FormEvent) => {
-        e.preventDefault();
-        let scannedBarcode = barcode.trim();
+    const handleCreateBatch = async () => {
+        if (!selectedIQCBatch || !userName.trim()) {
+            showToast('Please select a batch and enter Operator Name', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch('http://localhost:5002/api/impedance/batches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    iqc_batch_id: selectedIQCBatch,
+                    created_by: userName
+                })
+            });
+
+            if (response.ok) {
+                const newBatch = await response.json();
+                setCurrentBatchId(newBatch.id);
+                setIsSessionActive(true); // Automatically start session
+                showToast('Impedance Batch Created', 'success');
+
+                // Clear form
+                setSelectedIQCBatch('');
+                setQuantity('');
+
+                fetchBatches();
+                fetchIQCBatches();
+            } else {
+                showToast('Failed to create batch', 'error');
+            }
+        } catch (error) {
+            console.error('Error creating batch:', error);
+            showToast('Network error', 'error');
+        }
+    };
+
+    const handleScan = (input: React.FormEvent | string) => {
+        let scannedBarcode = '';
+        if (typeof input === 'string') {
+            scannedBarcode = input;
+        } else {
+            input.preventDefault();
+            scannedBarcode = barcode.trim();
+        }
+
         if (!scannedBarcode) return;
+
+        if (!userName.trim()) {
+            showToast('Please enter Scanned By name', 'error');
+            return;
+        }
 
         // Check for Part Number (PN) explicitly
         if (scannedBarcode.toUpperCase().startsWith('PN:')) {
@@ -110,9 +333,10 @@ export const Impedance: React.FC = () => {
         }
 
         // Validate that the barcode starts with 'AY-' (ignoring 'SN:' prefix if present)
-        const coreBarcode = scannedBarcode.toUpperCase().startsWith('SN:')
-            ? scannedBarcode.substring(3).trim()
-            : scannedBarcode;
+        let coreBarcode = scannedBarcode.trim();
+        if (coreBarcode.toUpperCase().startsWith('SN:')) {
+            coreBarcode = coreBarcode.substring(3).trim();
+        }
 
         if (!coreBarcode.toUpperCase().startsWith('AY-')) {
             showToast('Invalid Barcode. Serial Number must start with "AY-".', 'error');
@@ -120,18 +344,27 @@ export const Impedance: React.FC = () => {
             return;
         }
 
-        // Auto-format: If it doesn't start with SN:, add it
-        if (!scannedBarcode.toUpperCase().startsWith('SN:')) {
-            scannedBarcode = `SN:${scannedBarcode}`;
+        // Prevent duplicate processing if modal is already open for this barcode
+        if (scanModalOpen && pendingBarcode === coreBarcode) {
+            return;
         }
 
+        setPendingBarcode(coreBarcode);
+        setScanModalOpen(true);
+        setBarcode(''); // Clear input immediately for next scan
+    };
+
+
+    const handleScanConfirm = async () => {
         try {
             const response = await fetch('http://localhost:5002/api/impedance/scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    barcode: scannedBarcode,
-                    tested_by: userName
+                    session_id: currentBatchId,
+                    barcode: pendingBarcode,
+                    tested_by: userName,
+                    ...scanTestResults
                 })
             });
 
@@ -141,163 +374,469 @@ export const Impedance: React.FC = () => {
                 showToast(`Assigned to ${result.batch_number}`, 'success');
                 setScannedItems(prev => [result, ...prev]);
                 fetchBatches(); // Update counts in background
+                setScanModalOpen(false);
             } else {
                 showToast(result.error || 'Scan Failed', 'error');
             }
         } catch (error) {
             console.error('Error scanning PCB:', error);
             showToast('Failed to scan PCB', 'error');
-        } finally {
-            setBarcode('');
         }
     };
 
+    const handleScanCancel = () => {
+        setScanModalOpen(false);
+        setPendingBarcode('');
+        showToast('Scan cancelled', 'info');
+    };
+
+    // Filter and Paginate Batches
+    // Dynamic State: Pending if Scanned < IQC Passed, Completed if Scanned >= IQC Passed
+    const pendingBatches = batches.filter(b => (b.scan_count || 0) < (b.iqc_passed_count || 0));
+    const completedBatches = batches.filter(b => (b.scan_count || 0) >= (b.iqc_passed_count || 0));
+
+    const paginatedPendingBatches = pendingBatches.slice((pendingPage - 1) * ITEMS_PER_PAGE, pendingPage * ITEMS_PER_PAGE);
+    const paginatedCompletedBatches = completedBatches.slice((completedPage - 1) * ITEMS_PER_PAGE, completedPage * ITEMS_PER_PAGE);
+
+    const activeBatch = batches.find(b => b.id === currentBatchId);
+
     return (
         <div className={styles.container}>
-            <div className={styles.header}>
-                <h2><span role="img" aria-label="icon">⚡</span> Impedance Testing</h2>
-                <p>Measure and verify impedance characteristics of PCBs.</p>
+            <div className={styles.headerRow}>
+                <div className={styles.headerContent}>
+                    <h2><span role="img" aria-label="icon">⚡</span> Impedance Testing</h2>
+                    <p>Measure and verify impedance characteristics of PCBs.</p>
+                </div>
+                <div className={styles.searchWrapper}>
+                    {!isSearchExpanded ? (
+                        <button
+                            className={styles.searchIconBtn}
+                            onClick={() => setIsSearchExpanded(true)}
+                            title="Search Component"
+                        >
+                            🔍
+                        </button>
+                    ) : (
+                        <div className={styles.expandedSearchContainer}>
+                            <div className={styles.inputRow}>
+                                <span className={styles.searchIconStatic}>🔍</span>
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    className={styles.expandedInput}
+                                    placeholder="Scan or Type..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                                />
+                                <button
+                                    onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }}
+                                    className={styles.closeBtn}
+                                    title="Close Search"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                            <button className={styles.searchSubmitBtn} onClick={handleSearch}>
+                                Search
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
+
+            {/* Search Result Modal (Traceability View) */}
+            {searchResult && (
+                <div className={styles.modalOverlay} onClick={() => setSearchResult(null)}>
+                    <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+                        <h3>Traceability View</h3>
+                        <div className={styles.resultGrid}>
+                            <p><strong>Barcode:</strong> {searchResult.barcode}</p>
+
+                            {/* Warehouse Status */}
+                            <div style={{ padding: '0.75rem', background: '#f0f9ff', borderRadius: '0.5rem', border: '1px solid #bae6fd' }}>
+                                <h4 style={{ margin: '0 0 0.5rem 0', color: '#0369a1' }}>📦 Warehouse</h4>
+                                <p style={{ background: 'transparent', padding: '0.25rem 0' }}><strong>Batch:</strong> {searchResult.warehouse?.batch_number || 'N/A'}</p>
+                                <p style={{ background: 'transparent', padding: '0.25rem 0' }}><strong>Status:</strong> <span className={styles.statusBlue}>{searchResult.warehouse?.status}</span></p>
+                                {searchResult.warehouse?.scanned_at && (
+                                    <p style={{ background: 'transparent', padding: '0.25rem 0' }}><strong>Time:</strong> {new Date(searchResult.warehouse.scanned_at).toLocaleString()}</p>
+                                )}
+                            </div>
+
+                            {/* IQC Status */}
+                            <div style={{ padding: '0.75rem', background: '#fdf4ff', borderRadius: '0.5rem', border: '1px solid #f0abfc' }}>
+                                <h4 style={{ margin: '0 0 0.5rem 0', color: '#a21caf' }}>🔍 IQC</h4>
+                                <p style={{ background: 'transparent', padding: '0.25rem 0' }}><strong>Batch:</strong> {searchResult.iqc?.batch_number || 'N/A'}</p>
+                                <p style={{ background: 'transparent', padding: '0.25rem 0' }}><strong>Status:</strong>
+                                    <span className={
+                                        searchResult.iqc?.status === 'ACCEPTED' ? styles.statusGreen :
+                                            searchResult.iqc?.status === 'REJECTED' ? styles.statusRed : styles.statusYellow
+                                    }>
+                                        {searchResult.iqc?.status || 'Pending'}
+                                    </span>
+                                </p>
+                                {searchResult.iqc?.scanned_at && (
+                                    <p style={{ background: 'transparent', padding: '0.25rem 0' }}><strong>Time:</strong> {new Date(searchResult.iqc.scanned_at).toLocaleString()}</p>
+                                )}
+                            </div>
+
+                            {/* Impedance Status */}
+                            <div style={{ padding: '0.75rem', background: '#fff7ed', borderRadius: '0.5rem', border: '1px solid #fdba74' }}>
+                                <h4 style={{ margin: '0 0 0.5rem 0', color: '#c2410c' }}>⚡ Impedance</h4>
+                                <p style={{ background: 'transparent', padding: '0.25rem 0' }}><strong>Status:</strong>
+                                    <span className={
+                                        searchResult.impedance?.status === 'Passed' ? styles.statusGreen :
+                                            searchResult.impedance?.status?.includes('Failed') ? styles.statusRed : styles.statusYellow
+                                    }>
+                                        {searchResult.impedance?.status || 'Pending'}
+                                    </span>
+                                </p>
+                                {searchResult.impedance?.scanned_at && (
+                                    <p style={{ background: 'transparent', padding: '0.25rem 0' }}><strong>Time:</strong> {new Date(searchResult.impedance.scanned_at).toLocaleString()}</p>
+                                )}
+                            </div>
+
+                        </div>
+                        <button className={styles.secondaryButton} onClick={() => setSearchResult(null)} style={{ marginTop: '1rem', width: '100%' }}>
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* View Batch Details Modal */}
+            {viewBatch && (
+                <div className={styles.modalOverlay} onClick={() => setViewBatch(null)}>
+                    <div className={styles.modalContent} onClick={e => e.stopPropagation()} style={{ maxWidth: '800px', width: '90%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h3>Batch: <span className={styles.highlight}>{viewBatch.batch_number}</span></h3>
+                            <button onClick={() => setViewBatch(null)} className={styles.closeBtn} style={{ fontSize: '1.5rem' }}>×</button>
+                        </div>
+
+                        <div style={{
+                            display: 'flex',
+                            gap: '2rem',
+                            padding: '1rem',
+                            backgroundColor: '#f9fafb',
+                            borderRadius: '0.5rem',
+                            marginBottom: '1rem',
+                            flexWrap: 'wrap',
+                            fontSize: '1.1rem',
+                            border: '1px solid #e5e7eb'
+                        }}>
+                            <div style={{ fontWeight: 600 }}>
+                                Total Scanned: <span style={{ fontSize: '1.2rem' }}>{(viewBatch.passed_count || 0) + (viewBatch.failed_count || 0)}</span> / {viewBatch.iqc_passed_count || 0}
+                            </div>
+                            <div style={{ color: '#2563eb', fontWeight: 600 }}>
+                                🏭 Available: {viewBatch.iqc_passed_count || 0}
+                            </div>
+                            <div style={{ color: '#10b981', fontWeight: 600 }}>
+                                ✅ Passed: {viewBatch.passed_count || 0}
+                            </div>
+                            <div style={{ color: '#ef4444', fontWeight: 600 }}>
+                                ❌ Failed: {viewBatch.failed_count || 0}
+                            </div>
+                        </div>
+
+                        <div className={styles.tableContainer} style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                            <table className={styles.table}>
+                                <thead>
+                                    <tr>
+                                        <th>Barcode</th>
+                                        <th>Scanned By</th>
+                                        <th>PA_1(1V)</th>
+                                        <th>PA_2(1V)</th>
+                                        <th>PA_4(0.5V)</th>
+                                        <th>PA_5(0.5V)</th>
+                                        <th>R160(0.5V)</th>
+                                        <th>Status</th>
+                                        <th>Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {viewBatchScans.map((scan, index) => (
+                                        <tr key={index}>
+                                            <td style={{ fontWeight: 500 }}>{scan.barcode}</td>
+                                            <td>{scan.tested_by || '-'}</td>
+                                            <td style={{ textAlign: 'center' }}>{scan.test_pa1 ? '✅' : '❌'}</td>
+                                            <td style={{ textAlign: 'center' }}>{scan.test_pa2 ? '✅' : '❌'}</td>
+                                            <td style={{ textAlign: 'center' }}>{scan.test_pa4 ? '✅' : '❌'}</td>
+                                            <td style={{ textAlign: 'center' }}>{scan.test_pa5 ? '✅' : '❌'}</td>
+                                            <td style={{ textAlign: 'center' }}>{scan.test_r160 ? '✅' : '❌'}</td>
+                                            <td>
+                                                <span className={scan.status === 'ACCEPTED' ? styles.statusGreen : styles.statusRed}>
+                                                    {scan.status === 'ACCEPTED' ? 'PASS' : 'FAIL'}
+                                                </span>
+                                            </td>
+                                            <td>{new Date(scan.scanned_at).toLocaleTimeString()}</td>
+                                        </tr>
+                                    ))}
+                                    {viewBatchScans.length === 0 && (
+                                        <tr>
+                                            <td colSpan={9} style={{ textAlign: 'center', padding: '1rem' }}>No scans found for this batch.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                            <button className={styles.secondaryButton} onClick={() => setViewBatch(null)}>
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {!isSessionActive ? (
                 <>
                     <div className={styles.card}>
-                        <h3>Operator Setup</h3>
+                        <h3>Create New Impedance Batch</h3>
                         <div className={styles.formGrid}>
                             <div className={styles.inputGroup}>
-                                <label>Tested By (Operator Name) *</label>
+                                <label>Select IQC Batch *</label>
+                                <select
+                                    className={styles.batchSelect}
+                                    value={selectedIQCBatch}
+                                    onChange={handleIQCBatchSelect}
+                                >
+                                    <option value="">-- Select Batch --</option>
+                                    {iqcBatches.map(batch => (
+                                        <option key={batch.id} value={batch.id}>
+                                            {batch.batch_number}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className={styles.inputGroup}>
+                                <label>Total Quantity (Auto-filled)</label>
                                 <input
-                                    type="text"
+                                    type="number"
                                     className={styles.input}
-                                    placeholder="Enter your name"
-                                    value={userName}
-                                    onChange={(e) => setUserName(e.target.value)}
+                                    placeholder="Quantity"
+                                    value={quantity}
+                                    readOnly
+                                    style={{ backgroundColor: '#f3f4f6' }}
                                 />
                             </div>
-                            {/* Shift selection removed */}
                             <div className={styles.inputGroup}>
-                                <label>Date & Time</label>
+                                <label>Created By *</label>
                                 <input
                                     type="text"
                                     className={styles.input}
-                                    value={new Date().toLocaleString()}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
+                                    placeholder="Your Name"
+                                    value={userName}
+                                    onChange={(e) => setUserName(e.target.value)}
                                 />
                             </div>
                         </div>
                         <button
                             className={styles.button}
-                            onClick={handleStartTesting}
+                            onClick={handleCreateBatch}
                             style={{ marginTop: '2rem' }}
                         >
-                            Start Testing
+                            Create Batch
                         </button>
                     </div>
 
-                    {/* Recent Batches List */}
+                    {/* Pending Batches */}
                     <div className={styles.card}>
-                        <h3>Recent Batches</h3>
-                        <div className={styles.listContainer}>
+                        <h3>Pending Batches</h3>
+                        <div className={styles.tableContainer}>
                             <table className={styles.table}>
                                 <thead>
                                     <tr>
                                         <th>Batch Number</th>
                                         <th>Created By</th>
                                         <th>Date</th>
-                                        <th>Qty</th>
+                                        <th>Received Qty</th>
                                         <th>Passed</th>
                                         <th>Failed</th>
+                                        <th>Download</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {batches.map((batch) => (
+                                    {paginatedPendingBatches.map(batch => (
                                         <tr key={batch.id}>
                                             <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
-                                            <td>{batch.last_tested_by || '-'}</td>
-                                            <td>{batch.created_at ? new Date(batch.created_at).toLocaleString() : '-'}</td>
+                                            <td>{batch.tested_by || batch.last_tested_by}</td>
+                                            <td>{new Date(batch.created_at || batch.started_at || '').toLocaleDateString()}</td>
+                                            <td className={styles.statusBlue}>{batch.scan_count || 0} / {batch.iqc_passed_count}</td>
+                                            <td className={styles.statusGreen}>{batch.passed_count || 0}</td>
+                                            <td className={styles.statusRed}>{batch.failed_count || 0}</td>
                                             <td>
-                                                <span style={{
-                                                    fontWeight: 600,
-                                                    color: (batch.passed_count ?? 0) >= (batch.iqc_passed_count ?? batch.quantity) ? '#059669' : '#4f46e5'
-                                                }}>
-                                                    {batch.passed_count ?? 0} / {batch.iqc_passed_count ?? 0}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <span style={{ color: '#059669', fontWeight: 600 }}>
-                                                    {batch.passed_count || 0}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <span style={{ color: '#ef4444', fontWeight: 600 }}>
-                                                    {batch.failed_count || 0}
-                                                </span>
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    onClick={() => window.open(`http://localhost:5002/api/impedance/batches/${batch.id}/download`, '_blank')}
+                                                    title="Download CSV Report"
+                                                >
+                                                    📥
+                                                </button>
                                             </td>
                                             <td>
                                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                                                     <button
                                                         className={styles.secondaryButton}
-                                                        onClick={async () => {
-                                                            if (!userName.trim()) {
-                                                                showToast('Please enter Operator Name in settings above', 'error');
-                                                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                                return;
-                                                            }
-
-                                                            try {
-                                                                const response = await fetch(`http://localhost:5002/api/impedance/batches/${batch.id}/scans`);
-                                                                if (response.ok) {
-                                                                    const scans = await response.json();
-                                                                    setScannedItems(scans);
-                                                                    setIsSessionActive(true);
-                                                                    showToast(`Viewing ${batch.batch_number}`, 'success');
-                                                                } else {
-                                                                    showToast('Failed to load batch details', 'error');
-                                                                }
-                                                            } catch (err) {
-                                                                console.error(err);
-                                                                showToast('Network error loading batch details', 'error');
-                                                            }
+                                                        onClick={() => {
+                                                            setCurrentBatchId(batch.id);
+                                                            setUserName(''); // Clear name to force re-entry
+                                                            setIsSessionActive(true);
                                                         }}
                                                     >
-                                                        View
+                                                        Resume
                                                     </button>
-                                                    <button
-                                                        style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.375rem', cursor: 'pointer' }}
-                                                        onClick={async () => {
-                                                            const confirm1 = window.confirm('Are you sure you want to remove this batch from Impedance? This will delete all IMPEDANCE scans.');
-                                                            if (!confirm1) return;
+                                                    {['Admin', 'Super Admin', 'Manager'].includes(user?.role || '') && (
+                                                        <button
+                                                            className={styles.deleteTextButton}
+                                                            onClick={async () => {
+                                                                const confirm1 = window.confirm('Are you sure you want to remove this batch from Impedance? This will delete all IMPEDANCE scans.');
+                                                                if (!confirm1) return;
 
-                                                            const confirm2 = window.confirm('⚠️ FINAL WARNING: This will NOT delete the IQC batch, but all Impedance progress will be lost. Continue?');
-                                                            if (!confirm2) return;
+                                                                const confirm2 = window.confirm('⚠️ FINAL WARNING: This will NOT delete the IQC batch, but all Impedance progress will be lost. Continue?');
+                                                                if (!confirm2) return;
 
-                                                            try {
-                                                                const response = await fetch(`http://localhost:5002/api/impedance/batches/${batch.id}`, {
-                                                                    method: 'DELETE',
-                                                                });
+                                                                try {
+                                                                    const response = await fetch(`http://localhost:5002/api/impedance/batches/${batch.id}`, {
+                                                                        method: 'DELETE',
+                                                                    });
 
-                                                                if (response.ok) {
-                                                                    showToast('Impedance data cleared successfully', 'success');
-                                                                    fetchBatches();
-                                                                } else {
-                                                                    showToast('Failed to clear data', 'error');
+                                                                    if (response.ok) {
+                                                                        showToast('Impedance data cleared successfully', 'success');
+                                                                        fetchBatches();
+                                                                    } else {
+                                                                        showToast('Failed to delete batch', 'error');
+                                                                    }
+                                                                } catch (error) {
+                                                                    console.error('Error deleting batch:', error);
+                                                                    showToast('Network error', 'error');
                                                                 }
-                                                            } catch (err) {
-                                                                showToast('Network error during deletion', 'error');
-                                                            }
-                                                        }}
-                                                        className={styles.deleteTextButton}
-                                                    >
-                                                        Delete
-                                                    </button>
+                                                            }}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
                                     ))}
+                                    {pendingBatches.length === 0 && (
+                                        <tr>
+                                            <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                No pending batches.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
+                            <Pagination
+                                currentPage={pendingPage}
+                                totalPages={Math.ceil(pendingBatches.length / ITEMS_PER_PAGE)}
+                                onPageChange={setPendingPage}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Completed Batches */}
+                    <div className={styles.card}>
+                        <h3>Completed Batches</h3>
+                        <div className={styles.tableContainer}>
+                            <table className={styles.table}>
+                                <thead>
+                                    <tr>
+                                        <th>Batch Number</th>
+                                        <th>Created By</th>
+                                        <th>Date</th>
+                                        <th>Received Qty</th>
+                                        <th>Passed</th>
+                                        <th>Failed</th>
+                                        <th>Download</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {paginatedCompletedBatches.map(batch => (
+                                        <tr key={batch.id}>
+                                            <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
+                                            <td>{batch.tested_by || batch.last_tested_by}</td>
+                                            <td>{new Date(batch.created_at || batch.started_at || '').toLocaleDateString()}</td>
+                                            <td className={styles.statusBlue}>{(batch.passed_count || 0) + (batch.failed_count || 0)} / {batch.iqc_passed_count}</td>
+                                            <td className={styles.statusGreen}>{batch.passed_count || 0}</td>
+                                            <td className={styles.statusRed}>{batch.failed_count || 0}</td>
+                                            <td>
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    onClick={() => window.open(`http://localhost:5002/api/impedance/batches/${batch.id}/download`, '_blank')}
+                                                    title="Download CSV Report"
+                                                >
+                                                    📥
+                                                </button>
+                                            </td>
+                                            <td>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        onClick={() => {
+                                                            setCurrentBatchId(batch.id);
+                                                            setUserName(''); // Clear name
+                                                            setIsSessionActive(true);
+                                                            // We might need a way to signal "read-only" or "completed view" if we want to hide the scan input, 
+                                                            // but the user asked for "same how the pending batch show", so opening the session view is the correct first step.
+                                                            // If the batch is completed, they probably shouldn't scan more, but the logic handles that (completed batches move to completed list).
+                                                            // If they view a completed batch, they see the list.
+                                                        }}
+                                                    >
+                                                        View
+                                                    </button>
+                                                    {['Admin', 'Super Admin', 'Manager'].includes(user?.role || '') && (
+                                                        <button
+                                                            className={styles.deleteTextButton}
+                                                            onClick={async () => {
+                                                                const confirm1 = window.confirm('Are you sure you want to remove this batch from Impedance? This will delete all IMPEDANCE scans.');
+                                                                if (!confirm1) return;
+
+                                                                const confirm2 = window.confirm('⚠️ FINAL WARNING: This will NOT delete the IQC batch, but all Impedance progress will be lost. Continue?');
+                                                                if (!confirm2) return;
+
+                                                                try {
+                                                                    const response = await fetch(`http://localhost:5002/api/impedance/batches/${batch.id}`, {
+                                                                        method: 'DELETE',
+                                                                    });
+
+                                                                    if (response.ok) {
+                                                                        showToast('Impedance data cleared successfully', 'success');
+                                                                        fetchBatches();
+                                                                    } else {
+                                                                        showToast('Failed to delete batch', 'error');
+                                                                    }
+                                                                } catch (error) {
+                                                                    console.error('Error deleting batch:', error);
+                                                                    showToast('Network error', 'error');
+                                                                }
+                                                            }}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {completedBatches.length === 0 && (
+                                        <tr>
+                                            <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                No completed batches.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                            <Pagination
+                                currentPage={completedPage}
+                                totalPages={Math.ceil(completedBatches.length / ITEMS_PER_PAGE)}
+                                onPageChange={setCompletedPage}
+                            />
                         </div>
                     </div>
                 </>
@@ -305,75 +844,166 @@ export const Impedance: React.FC = () => {
                 <>
                     <div className={styles.activeBatchHeader}>
                         <div>
-                            <h3>Scanning Active</h3>
-                            <small>Operator: {userName}</small>
+                            <h3>Active Batch: <span className={styles.highlight}>{activeBatch?.batch_number}</span></h3>
                         </div>
-                        <button
-                            className={styles.secondaryButton}
-                            onClick={() => setIsSessionActive(false)}
-                        >
-                            End Session
-                        </button>
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            {!completedBatches.some(b => b.id === currentBatchId) && (
+                                <button
+                                    className={styles.secondaryButton}
+                                    onClick={() => {
+                                        if (currentBatchId) fetchSessionScans(currentBatchId);
+                                    }}
+                                >
+                                    🔄 Refresh
+                                </button>
+                            )}
+                            <button
+                                className={styles.secondaryButton}
+                                onClick={() => setIsSessionActive(false)}
+                            >
+                                End Session
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{
+                        display: 'flex',
+                        gap: '2rem',
+                        padding: '1rem',
+                        backgroundColor: 'white',
+                        borderRadius: '0.5rem',
+                        marginBottom: '1rem',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        flexWrap: 'wrap',
+                        fontSize: '1.1rem'
+                    }}>
+                        <div style={{ fontWeight: 600 }}>
+                            Total Scanned: <span style={{ fontSize: '1.2rem' }}>{(activeBatch?.passed_count || 0) + (activeBatch?.failed_count || 0)}</span> / {activeBatch?.iqc_passed_count || 0}
+                        </div>
+                        <div style={{ color: '#2563eb', fontWeight: 600 }}>
+                            🏭 Available: {activeBatch?.iqc_passed_count || 0}
+                        </div>
+                        <div style={{ color: '#10b981', fontWeight: 600 }}>
+                            ✅ Passed: {activeBatch?.passed_count || 0}
+                        </div>
+                        <div style={{ color: '#ef4444', fontWeight: 600 }}>
+                            ❌ Failed: {activeBatch?.failed_count || 0}
+                        </div>
                     </div>
 
                     <div className={styles.scanSection}>
-                        <form className={styles.scanForm} onSubmit={handleScan}>
-                            <input
-                                type="text"
-                                className={styles.scanInput}
-                                placeholder="Scan PCB Barcode..."
-                                value={barcode}
-                                onChange={(e) => setBarcode(e.target.value)}
-                                autoFocus
-                            />
-                            <button type="submit" className={styles.scanButton}>
-                                SCAN
-                            </button>
-                        </form>
+                        {/* Only show scan input if batch is NOT completed */}
+                        {!completedBatches.some(b => b.id === currentBatchId) && (
+                            <>
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Scanned By *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Enter Your Name"
+                                        value={userName}
+                                        onChange={(e) => setUserName(e.target.value)}
+                                        style={{ maxWidth: '300px' }}
+                                    />
+                                </div>
+
+                                <div className={styles.scanForm}>
+                                    <input
+                                        type="text"
+                                        className={styles.scanInput}
+                                        placeholder="Scan PCB Barcode..."
+                                        value={barcode}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setBarcode(val);
+                                            // Auto-scan if length is sufficient (e.g., 15 chars for typical barcode)
+                                            if (val.trim().length >= 15) {
+                                                // Trigger scan logic immediately
+                                                handleScan(val.trim());
+                                            }
+                                        }}
+                                        autoFocus
+                                    />
+                                    {/* Hidden button to keep form behavior if needed, but main interaction is auto-scan */}
+                                    <button
+                                        type="button"
+                                        className={styles.scanButton}
+                                        onClick={() => handleScan(barcode.trim())}
+                                    >
+                                        SCAN
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        <div style={{ marginBottom: '1rem', color: '#6b7280', fontSize: '0.9rem' }}>
+                            Session ID: {currentBatchId} | Scanned Items: {scannedItems.length}
+                        </div>
 
                         <table className={styles.table}>
                             <thead>
                                 <tr>
                                     <th>Barcode</th>
-                                    <th>Assigned Batch</th>
-                                    <th>Pass Status</th>
-                                    <th>Fail Status</th>
-                                    <th>IQC Status</th>
+                                    <th>Scanned By</th>
+                                    <th>PA_1(1V)</th>
+                                    <th>PA_2(1V)</th>
+                                    <th>PA_4(0.5V)</th>
+                                    <th>PA_5(0.5V)</th>
+                                    <th>R160(0.5V)</th>
+                                    <th>Status</th>
                                     <th>Time</th>
-                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {scannedItems.map((item) => (
                                     <tr key={item.id}>
                                         <td style={{ fontWeight: 'bold' }}>{item.barcode}</td>
-                                        <td style={{ color: '#4f46e5' }}>{item.batch_number}</td>
-                                        <td style={{ textAlign: 'center', fontSize: '1.2rem' }}>
-                                            {item.status === 'ACCEPTED' ? '✅' : '-'}
-                                        </td>
-                                        <td style={{ textAlign: 'center', fontSize: '1.2rem' }}>
-                                            {item.status !== 'ACCEPTED' ? '❌' : '-'}
-                                        </td>
-                                        <td style={{ textAlign: 'center', fontSize: '1.2rem' }}>
-                                            {item.iqc_status === 'ACCEPTED' ? '✅' : '❌'}
+                                        <td>{item.tested_by || '-'}</td>
+                                        {['test_pa1', 'test_pa2', 'test_pa4', 'test_pa5', 'test_r160'].map((testKey) => (
+                                            <td key={testKey} style={{ textAlign: 'center' }}>
+                                                <div className={styles.dropdownContainer}>
+                                                    <span style={{ fontSize: '1.2rem' }}>
+                                                        {item[testKey] !== false ? '✅' : '❌'}
+                                                    </span>
+                                                    {['Admin', 'Super Admin', 'Manager'].includes(user?.role || '') && !completedBatches.some(b => b.id === currentBatchId) && (
+                                                        <button
+                                                            className={styles.dropdownTrigger}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setOpenDropdown(openDropdown?.id === item.id && openDropdown?.test === testKey ? null : { id: item.id, test: testKey });
+                                                            }}
+                                                        >
+                                                            ▼
+                                                        </button>
+                                                    )}
+                                                    {openDropdown?.id === item.id && openDropdown?.test === testKey && (
+                                                        <div className={styles.dropdownMenu}>
+                                                            <button
+                                                                className={`${styles.dropdownItem} ${styles.dropdownItemPass}`}
+                                                                onClick={() => handleTestUpdate(item, testKey, true)}
+                                                            >
+                                                                Pass ✅
+                                                            </button>
+                                                            <button
+                                                                className={`${styles.dropdownItem} ${styles.dropdownItemFail}`}
+                                                                onClick={() => handleTestUpdate(item, testKey, false)}
+                                                            >
+                                                                Fail ❌
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        ))}
+                                        <td style={{ fontWeight: 600, color: item.status === 'ACCEPTED' ? '#10b981' : '#ef4444' }}>
+                                            {item.status === 'ACCEPTED' ? 'PASS' : 'FAIL'}
                                         </td>
                                         <td>{new Date(item.scanned_at || Date.now()).toLocaleTimeString()}</td>
-                                        <td>
-                                            {item.status === 'ACCEPTED' && (
-                                                <button
-                                                    onClick={() => handleFailClick(item)}
-                                                    className={styles.deleteTextButton}
-                                                    style={{ border: '1px solid #ef4444', color: '#ef4444' }}
-                                                >
-                                                    Fail
-                                                </button>
-                                            )}
-                                        </td>
                                     </tr>
                                 ))}
                                 {scannedItems.length === 0 && (
                                     <tr>
-                                        <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                        <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                             Ready to scan. PCBs will be auto-assigned.
                                         </td>
                                     </tr>
@@ -383,28 +1013,11 @@ export const Impedance: React.FC = () => {
                     </div>
                 </>
             )}
+
             {/* Fail Modal */}
             {failModalOpen && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1000
-                }}>
-                    <div style={{
-                        backgroundColor: 'white',
-                        padding: '2rem',
-                        borderRadius: '0.75rem',
-                        width: '100%',
-                        maxWidth: '500px',
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
-                    }}>
+                <div className={styles.modalOverlay}>
+                    <div className={styles.modalContent}>
                         <h3 style={{ marginTop: 0, marginBottom: '1rem', color: '#ef4444' }}>Mark PCB as Failed</h3>
                         <p style={{ marginBottom: '1.5rem', color: '#4b5563' }}>
                             Please provide a reason for failing PCB <strong>{selectedScan?.barcode}</strong>.
@@ -414,6 +1027,7 @@ export const Impedance: React.FC = () => {
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Remark / Failure Reason *</label>
                             <textarea
                                 className={styles.textarea}
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #d1d5db' }}
                                 rows={4}
                                 value={failRemark}
                                 onChange={(e) => setFailRemark(e.target.value)}
@@ -447,6 +1061,88 @@ export const Impedance: React.FC = () => {
                     </div>
                 </div>
             )}
-        </div>
+
+
+            {/* Scan Confirmation Modal */}
+            {
+                scanModalOpen && (
+                    <div className={styles.modalOverlay}>
+                        <div className={styles.modalContent} style={{ maxWidth: '500px' }}>
+                            <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Confirm Test Results</h3>
+                            <p style={{ marginBottom: '1.5rem', color: '#4b5563' }}>
+                                PCB Barcode: <strong>{pendingBarcode}</strong>
+                            </p>
+
+                            <div style={{ display: 'grid', gap: '1rem', marginBottom: '2rem' }}>
+                                {[
+                                    { key: 'test_pa1', label: 'PA_1(1V)' },
+                                    { key: 'test_pa2', label: 'PA_2(1V)' },
+                                    { key: 'test_pa4', label: 'PA_4(0.5V)' },
+                                    { key: 'test_pa5', label: 'PA_5(0.5V)' },
+                                    { key: 'test_r160', label: 'R160(0.5V)' }
+                                ].map((test) => (
+                                    <div key={test.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem' }}>
+                                        <span style={{ fontWeight: 500 }}>{test.label}</span>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setScanTestResults(prev => ({ ...prev, [test.key]: true }))}
+                                                style={{
+                                                    padding: '0.25rem 0.75rem',
+                                                    borderRadius: '0.25rem',
+                                                    border: '1px solid #10b981',
+                                                    backgroundColor: scanTestResults[test.key as keyof typeof scanTestResults] ? '#10b981' : 'white',
+                                                    color: scanTestResults[test.key as keyof typeof scanTestResults] ? 'white' : '#10b981',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                Pass ✅
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setScanTestResults(prev => ({ ...prev, [test.key]: false }))}
+                                                style={{
+                                                    padding: '0.25rem 0.75rem',
+                                                    borderRadius: '0.25rem',
+                                                    border: '1px solid #ef4444',
+                                                    backgroundColor: !scanTestResults[test.key as keyof typeof scanTestResults] ? '#ef4444' : 'white',
+                                                    color: !scanTestResults[test.key as keyof typeof scanTestResults] ? 'white' : '#ef4444',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                Fail ❌
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <button
+                                    onClick={handleScanCancel}
+                                    className={styles.secondaryButton}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleScanConfirm}
+                                    style={{
+                                        backgroundColor: '#2563eb',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '0.5rem 1.5rem',
+                                        borderRadius: '0.5rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Confirm & Save
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 };

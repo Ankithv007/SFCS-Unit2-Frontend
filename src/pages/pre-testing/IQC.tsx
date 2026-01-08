@@ -552,7 +552,7 @@ export const IQC: React.FC = () => {
                                             <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
                                             <td>{batch.created_by}</td>
                                             <td>{new Date(batch.created_at).toLocaleDateString()}</td>
-                                            <td className={styles.statusBlue}>{getTargetQty(batch)}</td>
+                                            <td className={styles.statusBlue}>{batch.passed_count + batch.failed_count} / {getTargetQty(batch)}</td>
                                             <td className={styles.statusGreen}>{batch.passed_count}</td>
                                             <td className={styles.statusRed}>{batch.failed_count}</td>
                                             <td>

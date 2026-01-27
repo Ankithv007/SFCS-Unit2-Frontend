@@ -14,6 +14,9 @@ import { AdminPanel } from './pages/admin/AdminPanel';
 import { Calibration } from './pages/pre-testing/Calibration';
 import { ACLR } from './pages/pre-testing/ACLR';
 import { FinalQC } from './pages/pre-testing/FinalQC';
+import { QCInspection } from './pages/qc-inspection/QCInspection';
+import { ShiftManagement } from './pages/qc-inspection/ShiftManagement';
+import { VacuumLeakTest } from './pages/vacuum-leak-test/VacuumLeakTest';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -50,6 +53,22 @@ export const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <AdminPanel />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/qc-inspection',
+                element: (
+                    <ProtectedRoute>
+                        <QCInspection />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/qc-inspection/shifts',
+                element: (
+                    <ProtectedRoute>
+                        <ShiftManagement />
                     </ProtectedRoute>
                 ),
             },
@@ -130,6 +149,14 @@ export const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <FinalQC />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/vacuum-leak-test',
+                element: (
+                    <ProtectedRoute>
+                        <VacuumLeakTest />
                     </ProtectedRoute>
                 ),
             },

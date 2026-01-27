@@ -48,6 +48,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                 <span className={styles.menuText}>Admin Panel</span>
             </div>
 
+            <div
+                className={`${styles.menuItem} ${isActive('/qc-inspection') ? styles.active : ''}`}
+                onClick={() => navigate('/qc-inspection')}
+                title="QC Inspection"
+            >
+                <span className={styles.menuIcon}>📋</span>
+                <span className={styles.menuText}>QC Inspection</span>
+            </div>
+
+            <div
+                className={`${styles.menuItem} ${isActive('/vacuum-leak-test') ? styles.active : ''}`}
+                onClick={() => navigate('/vacuum-leak-test')}
+                title="Vacuum Leak Test"
+            >
+                <span className={styles.menuIcon}>🔬</span>
+                <span className={styles.menuText}>Vacuum Leak Test</span>
+            </div>
+
             {/* Inventory & Report Module */}
             <div className={styles.moduleWrapper}>
                 <div

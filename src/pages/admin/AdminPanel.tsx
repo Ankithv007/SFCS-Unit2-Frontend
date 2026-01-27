@@ -22,10 +22,18 @@ export const AdminPanel: React.FC = () => {
         fetchUsers();
     }, []);
 
+    const isFetching = React.useRef(false);
+
     const fetchUsers = async () => {
+        // Prevent multiple simultaneous fetch requests
+        if (isFetching.current) return;
+        isFetching.current = true;
+
         try {
             const token = localStorage.getItem('auth_token');
             const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+            // Fetch users from the admin API
             const response = await fetch(`${baseUrl}/api/admin/users`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -36,13 +44,20 @@ export const AdminPanel: React.FC = () => {
             } else {
                 const errorText = await response.text();
                 console.error('Fetch users failed:', response.status, errorText);
-                showToast(`Failed to fetch users: ${response.status} ${response.statusText}`, 'error');
+
+                // If unauthorized (401), it means the session has expired
+                if (response.status === 401) {
+                    showToast('Session expired. Please login again.', 'error');
+                } else {
+                    showToast(`Failed to fetch users: ${response.status} ${response.statusText}`, 'error');
+                }
             }
         } catch (error) {
             console.error('Error fetching users:', error);
             showToast('Network error', 'error');
         } finally {
             setLoading(false);
+            isFetching.current = false;
         }
     };
 

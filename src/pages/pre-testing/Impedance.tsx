@@ -39,7 +39,7 @@ export const Impedance: React.FC = () => {
 
     // Fail Modal State
     const [failModalOpen, setFailModalOpen] = useState(false);
-    const [selectedScan, setSelectedScan] = useState<any>(null);
+    const [selectedScan] = useState<any>(null);
     const [failRemark, setFailRemark] = useState('');
 
     // Dropdown State
@@ -63,23 +63,9 @@ export const Impedance: React.FC = () => {
 
     // View Batch Details State
     const [viewBatch, setViewBatch] = useState<Batch | null>(null);
-    const [viewBatchScans, setViewBatchScans] = useState<any[]>([]);
+    const [viewBatchScans] = useState<any[]>([]);
 
-    const handleViewBatch = async (batch: Batch) => {
-        try {
-            const response = await fetch(`http://localhost:5002/api/impedance/sessions/${batch.id}/scans`);
-            if (response.ok) {
-                const data = await response.json();
-                setViewBatch(batch);
-                setViewBatchScans(data);
-            } else {
-                showToast('Failed to load batch details', 'error');
-            }
-        } catch (error) {
-            console.error('Error fetching batch details:', error);
-            showToast('Network error', 'error');
-        }
-    };
+
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) {
@@ -146,11 +132,7 @@ export const Impedance: React.FC = () => {
         }
     };
 
-    const handleFailClick = (scan: any) => {
-        setSelectedScan(scan);
-        setFailRemark('');
-        setFailModalOpen(true);
-    };
+
 
     const handleFailConfirm = async () => {
         if (!selectedScan) return;

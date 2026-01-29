@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../utils/api';
 import styles from './Impedance.module.css';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
@@ -74,20 +75,15 @@ export const Impedance: React.FC = () => {
         }
 
         try {
-            const response = await fetch(`http://localhost:5002/api/impedance/search?barcode=${encodeURIComponent(searchQuery.trim())}`);
-            if (response.ok) {
-                const data = await response.json();
-                setSearchResult(data);
-                showToast('Component found!', 'success');
-                setIsSearchExpanded(false);
-                setSearchQuery('');
-            } else {
-                showToast('Component not found', 'error');
-                setSearchResult(null);
-            }
+            const data = await apiFetch(`/api/pretest/impedance/search?barcode=${encodeURIComponent(searchQuery.trim())}`);
+            setSearchResult(data);
+            showToast('Component found!', 'success');
+            setIsSearchExpanded(false);
+            setSearchQuery('');
         } catch (error) {
             console.error('Search error:', error);
-            showToast('Network error', 'error');
+            showToast('Component not found or network error', 'error');
+            setSearchResult(null);
         }
     };
 
@@ -107,28 +103,22 @@ export const Impedance: React.FC = () => {
         ));
 
         try {
-            const response = await fetch(`http://localhost:5002/api/impedance/scans/${item.id}/test`, {
+            const updatedScan = await apiFetch(`/api/pretest/impedance/scans/${item.id}/test`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ test_name: testKey, result: result })
             });
 
-            if (response.ok) {
-                const updatedScan = await response.json();
-                setScannedItems(prev => prev.map(s =>
-                    s.id === item.id ? updatedScan : s
-                ));
-                fetchBatches(); // Update counts
-            } else {
-                showToast('Failed to update test', 'error');
-                // Revert on failure
-                setScannedItems(prev => prev.map(s =>
-                    s.id === item.id ? { ...s, [testKey]: !result } : s
-                ));
-            }
+            setScannedItems(prev => prev.map(s =>
+                s.id === item.id ? updatedScan : s
+            ));
+            fetchBatches(); // Update counts
         } catch (error) {
             console.error('Error updating test:', error);
-            showToast('Network error', 'error');
+            showToast('Failed to update test', 'error');
+            // Revert on failure
+            setScannedItems(prev => prev.map(s =>
+                s.id === item.id ? { ...s, [testKey]: !result } : s
+            ));
         }
     };
 
@@ -142,32 +132,27 @@ export const Impedance: React.FC = () => {
         }
 
         try {
-            const response = await fetch(`http://localhost:5002/api/impedance/scans/${selectedScan.id}`, {
+            await apiFetch(`/api/pretest/impedance/scans/${selectedScan.id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     status: 'FAILED',
                     remarks: failRemark
                 })
             });
 
-            if (response.ok) {
-                showToast('PCB marked as FAILED', 'success');
-                setFailModalOpen(false);
+            showToast('PCB marked as FAILED', 'success');
+            setFailModalOpen(false);
 
-                // Update local state
-                setScannedItems(prev => prev.map(item =>
-                    item.id === selectedScan.id
-                        ? { ...item, status: 'FAILED', remarks: failRemark }
-                        : item
-                ));
-                fetchBatches(); // Update batch counts
-            } else {
-                showToast('Failed to update status', 'error');
-            }
+            // Update local state
+            setScannedItems(prev => prev.map(item =>
+                item.id === selectedScan.id
+                    ? { ...item, status: 'FAILED', remarks: failRemark }
+                    : item
+            ));
+            fetchBatches(); // Update batch counts
         } catch (error) {
             console.error('Error updating scan:', error);
-            showToast('Network error', 'error');
+            showToast('Failed to update status', 'error');
         }
     };
 
@@ -202,30 +187,20 @@ export const Impedance: React.FC = () => {
 
     const fetchSessionScans = async (sessionId: number) => {
         try {
-            console.log(`Making API call to: http://localhost:5002/api/impedance/sessions/${sessionId}/scans`);
-            const response = await fetch(`http://localhost:5002/api/impedance/sessions/${sessionId}/scans`);
-            if (response.ok) {
-                const data = await response.json();
-                console.log('Fetched scans data:', data);
-                setScannedItems(data);
-                // showToast(`Loaded ${data.length} scans`, 'success'); // Optional: might be too noisy
-            } else {
-                console.error('Failed to fetch scans:', response.statusText);
-                showToast('Failed to load scans', 'error');
-            }
+            console.log(`Making API call to: /api/pretest/impedance/sessions/${sessionId}/scans`);
+            const data = await apiFetch(`/api/pretest/impedance/sessions/${sessionId}/scans`);
+            console.log('Fetched scans data:', data);
+            setScannedItems(data);
         } catch (error) {
             console.error('Error fetching scans:', error);
-            showToast('Network error loading scans', 'error');
+            showToast('Failed to load scans', 'error');
         }
     };
 
     const fetchIQCBatches = async () => {
         try {
-            const response = await fetch('http://localhost:5002/api/impedance/iqc-batches');
-            if (response.ok) {
-                const data = await response.json();
-                setIQCBatches(data);
-            }
+            const data = await apiFetch('/api/pretest/impedance/iqc-batches');
+            setIQCBatches(data);
         } catch (error) {
             console.error('Error fetching IQC batches:', error);
         }
@@ -233,11 +208,8 @@ export const Impedance: React.FC = () => {
 
     const fetchBatches = async () => {
         try {
-            const response = await fetch('http://localhost:5002/api/impedance/batches', { cache: 'no-store' });
-            if (response.ok) {
-                const data = await response.json();
-                setBatches(data);
-            }
+            const data = await apiFetch('/api/pretest/impedance/batches', { cache: 'no-store' });
+            setBatches(data);
         } catch (error) {
             console.error('Error fetching batches:', error);
         }
@@ -261,33 +233,27 @@ export const Impedance: React.FC = () => {
         }
 
         try {
-            const response = await fetch('http://localhost:5002/api/impedance/batches', {
+            const newBatch = await apiFetch('/api/pretest/impedance/batches', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     iqc_batch_id: selectedIQCBatch,
                     created_by: userName
                 })
             });
 
-            if (response.ok) {
-                const newBatch = await response.json();
-                setCurrentBatchId(newBatch.id);
-                setIsSessionActive(true); // Automatically start session
-                showToast('Impedance Batch Created', 'success');
+            setCurrentBatchId(newBatch.id);
+            setIsSessionActive(true); // Automatically start session
+            showToast('Impedance Batch Created', 'success');
 
-                // Clear form
-                setSelectedIQCBatch('');
-                setQuantity('');
+            // Clear form
+            setSelectedIQCBatch('');
+            setQuantity('');
 
-                fetchBatches();
-                fetchIQCBatches();
-            } else {
-                showToast('Failed to create batch', 'error');
-            }
+            fetchBatches();
+            fetchIQCBatches();
         } catch (error) {
             console.error('Error creating batch:', error);
-            showToast('Network error', 'error');
+            showToast('Failed to create batch', 'error');
         }
     };
 
@@ -339,9 +305,8 @@ export const Impedance: React.FC = () => {
 
     const handleScanConfirm = async () => {
         try {
-            const response = await fetch('http://localhost:5002/api/impedance/scan', {
+            const result = await apiFetch('/api/pretest/impedance/scan', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     session_id: currentBatchId,
                     barcode: pendingBarcode,
@@ -350,19 +315,13 @@ export const Impedance: React.FC = () => {
                 })
             });
 
-            const result = await response.json();
-
-            if (response.ok) {
-                showToast(`Assigned to ${result.batch_number}`, 'success');
-                setScannedItems(prev => [result, ...prev]);
-                fetchBatches(); // Update counts in background
-                setScanModalOpen(false);
-            } else {
-                showToast(result.error || 'Scan Failed', 'error');
-            }
-        } catch (error) {
+            showToast(`Assigned to ${result.batch_number}`, 'success');
+            setScannedItems(prev => [result, ...prev]);
+            fetchBatches(); // Update counts in background
+            setScanModalOpen(false);
+        } catch (error: any) {
             console.error('Error scanning PCB:', error);
-            showToast('Failed to scan PCB', 'error');
+            showToast(error.message || 'Scan Failed', 'error');
         }
     };
 
@@ -651,7 +610,18 @@ export const Impedance: React.FC = () => {
                                             <td>
                                                 <button
                                                     className={styles.secondaryButton}
-                                                    onClick={() => window.open(`http://localhost:5002/api/impedance/batches/${batch.id}/download`, '_blank')}
+                                                    onClick={async () => {
+                                                        try {
+                                                            const blob = await apiFetch(`/api/pretest/impedance/batches/${batch.id}/download`, {
+                                                                headers: { 'Accept': 'application/blob' }
+                                                            });
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            window.open(url, '_blank');
+                                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                        } catch (e) {
+                                                            showToast('Download failed', 'error');
+                                                        }
+                                                    }}
                                                     title="Download CSV Report"
                                                 >
                                                     📥
@@ -680,19 +650,15 @@ export const Impedance: React.FC = () => {
                                                                 if (!confirm2) return;
 
                                                                 try {
-                                                                    const response = await fetch(`http://localhost:5002/api/impedance/batches/${batch.id}`, {
+                                                                    await apiFetch(`/api/pretest/impedance/batches/${batch.id}`, {
                                                                         method: 'DELETE',
                                                                     });
 
-                                                                    if (response.ok) {
-                                                                        showToast('Impedance data cleared successfully', 'success');
-                                                                        fetchBatches();
-                                                                    } else {
-                                                                        showToast('Failed to delete batch', 'error');
-                                                                    }
+                                                                    showToast('Impedance data cleared successfully', 'success');
+                                                                    fetchBatches();
                                                                 } catch (error) {
                                                                     console.error('Error deleting batch:', error);
-                                                                    showToast('Network error', 'error');
+                                                                    showToast('Failed to delete batch', 'error');
                                                                 }
                                                             }}
                                                         >
@@ -749,7 +715,18 @@ export const Impedance: React.FC = () => {
                                             <td>
                                                 <button
                                                     className={styles.secondaryButton}
-                                                    onClick={() => window.open(`http://localhost:5002/api/impedance/batches/${batch.id}/download`, '_blank')}
+                                                    onClick={async () => {
+                                                        try {
+                                                            const blob = await apiFetch(`/api/pretest/impedance/batches/${batch.id}/download`, {
+                                                                headers: { 'Accept': 'application/blob' }
+                                                            });
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            window.open(url, '_blank');
+                                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                        } catch (e) {
+                                                            showToast('Download failed', 'error');
+                                                        }
+                                                    }}
                                                     title="Download CSV Report"
                                                 >
                                                     📥
@@ -782,19 +759,15 @@ export const Impedance: React.FC = () => {
                                                                 if (!confirm2) return;
 
                                                                 try {
-                                                                    const response = await fetch(`http://localhost:5002/api/impedance/batches/${batch.id}`, {
+                                                                    await apiFetch(`/api/pretest/impedance/batches/${batch.id}`, {
                                                                         method: 'DELETE',
                                                                     });
 
-                                                                    if (response.ok) {
-                                                                        showToast('Impedance data cleared successfully', 'success');
-                                                                        fetchBatches();
-                                                                    } else {
-                                                                        showToast('Failed to delete batch', 'error');
-                                                                    }
+                                                                    showToast('Impedance data cleared successfully', 'success');
+                                                                    fetchBatches();
                                                                 } catch (error) {
                                                                     console.error('Error deleting batch:', error);
-                                                                    showToast('Network error', 'error');
+                                                                    showToast('Failed to delete batch', 'error');
                                                                 }
                                                             }}
                                                         >

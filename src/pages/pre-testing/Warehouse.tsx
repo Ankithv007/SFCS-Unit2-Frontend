@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../utils/api';
 import styles from './Warehouse.module.css';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
@@ -52,21 +53,16 @@ export const Warehouse: React.FC = () => {
         }
 
         try {
-            const response = await fetch(`http://localhost:5002/api/warehouse/search?barcode=${encodeURIComponent(searchQuery.trim())}`);
-            if (response.ok) {
-                const data = await response.json();
-                // If multiple results (history), show the latest one
-                setSearchResult(data[0]);
-                showToast('Item found!', 'success');
-                setIsSearchExpanded(false);
-                setSearchQuery('');
-            } else {
-                showToast('Item not found in any batch', 'error');
-                setSearchResult(null);
-            }
+            const data = await apiFetch(`/api/pretest/warehouse/search?barcode=${encodeURIComponent(searchQuery.trim())}`);
+            // If multiple results (history), show the latest one
+            setSearchResult(data[0]);
+            showToast('Item found!', 'success');
+            setIsSearchExpanded(false);
+            setSearchQuery('');
         } catch (error) {
             console.error('Search error:', error);
-            showToast('Network error', 'error');
+            showToast('Item not found or network error', 'error');
+            setSearchResult(null);
         }
     };
 
@@ -89,11 +85,8 @@ export const Warehouse: React.FC = () => {
 
     const fetchBatches = async () => {
         try {
-            const response = await fetch('http://localhost:5002/api/warehouse/batches');
-            if (response.ok) {
-                const data = await response.json();
-                setBatches(data);
-            }
+            const data = await apiFetch('/api/pretest/warehouse/batches');
+            setBatches(data);
         } catch (error) {
             console.error('Error fetching batches:', error);
             showToast('Failed to load batches', 'error');
@@ -114,9 +107,8 @@ export const Warehouse: React.FC = () => {
         const batchNumber = `${batchPrefix}${batchSuffix.padStart(5, '0')}`;
 
         try {
-            const response = await fetch('http://localhost:5002/api/warehouse/batches', {
+            const newBatch = await apiFetch('/api/pretest/warehouse/batches', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     batch_number: batchNumber,
                     created_by: createdBy,
@@ -124,23 +116,17 @@ export const Warehouse: React.FC = () => {
                 })
             });
 
-            if (response.ok) {
-                const newBatch = await response.json();
-                showToast(`Batch ${batchNumber} created!`, 'success');
-                setBatchSuffix('');
-                setExpectedQty('');
+            showToast(`Batch ${batchNumber} created!`, 'success');
+            setBatchSuffix('');
+            setExpectedQty('');
 
-                // Auto-start scanning
-                setActiveBatch(newBatch);
-                setScannerName(createdBy);
-                fetchScans(newBatch.id);
-            } else {
-                const error = await response.json();
-                showToast(error.error || 'Failed to create batch', 'error');
-            }
-        } catch (error) {
+            // Auto-start scanning
+            setActiveBatch(newBatch);
+            setScannerName(createdBy);
+            fetchScans(newBatch.id);
+        } catch (error: any) {
             console.error('Error creating batch:', error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Failed to create batch', 'error');
         }
     };
 
@@ -153,11 +139,8 @@ export const Warehouse: React.FC = () => {
 
     const fetchScans = async (batchId: number) => {
         try {
-            const response = await fetch(`http://localhost:5002/api/warehouse/batches/${batchId}/scans`);
-            if (response.ok) {
-                const data = await response.json();
-                setScannedItems(data);
-            }
+            const data = await apiFetch(`/api/pretest/warehouse/batches/${batchId}/scans`);
+            setScannedItems(data);
         } catch (error) {
             console.error('Error fetching scans:', error);
         }
@@ -209,7 +192,7 @@ export const Warehouse: React.FC = () => {
 
     const submitScan = async (code: string) => {
         if (isSubmitting.current) return;
-        
+
         // 1. Check for Part Number (PN)
         if (code.toUpperCase().startsWith('PN:')) {
             showToast('Invalid Barcode. You scanned a Part Number (PN). Please scan the Serial Number (SN).', 'error');
@@ -234,9 +217,8 @@ export const Warehouse: React.FC = () => {
         isSubmitting.current = true;
 
         try {
-            const response = await fetch('http://localhost:5002/api/warehouse/scan', {
+            const newScan = await apiFetch('/api/pretest/warehouse/scan', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     batch_id: activeBatch?.id,
                     barcode: code,
@@ -244,25 +226,19 @@ export const Warehouse: React.FC = () => {
                 })
             });
 
-            if (response.ok) {
-                const newScan = await response.json();
-                setScannedItems(prev => {
-                    // Double check to prevent UI duplication if race condition occurs
-                    if (prev.some(item => item.barcode === newScan.barcode)) return prev;
-                    return [newScan, ...prev];
-                });
-                showToast('Item scanned', 'success');
-                setBarcode('');
-            } else {
-                const error = await response.json();
-                showToast(error.error || 'Scan failed', 'error');
-                if (response.status === 409) {
-                    setBarcode(''); // Clear input on duplicate
-                }
-            }
-        } catch (error) {
+            setScannedItems(prev => {
+                // Double check to prevent UI duplication if race condition occurs
+                if (prev.some(item => item.barcode === newScan.barcode)) return prev;
+                return [newScan, ...prev];
+            });
+            showToast('Item scanned', 'success');
+            setBarcode('');
+        } catch (error: any) {
             console.error('Error scanning item:', error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Scan failed', 'error');
+            if (error.message && error.message.includes('duplicate')) { // Assuming error message contains 'duplicate' or we check status code if apiFetch threw specific error
+                setBarcode('');
+            }
         } finally {
             // Small delay to ensure the 'Enter' key event from scanner is fully processed
             setTimeout(() => {
@@ -436,7 +412,18 @@ export const Warehouse: React.FC = () => {
                                             <td>
                                                 <button
                                                     className={styles.secondaryButton}
-                                                    onClick={() => window.open(`http://localhost:5002/api/warehouse/batches/${batch.id}/download`, '_blank')}
+                                                    onClick={async () => {
+                                                        try {
+                                                            const blob = await apiFetch(`/api/pretest/warehouse/batches/${batch.id}/download`, {
+                                                                headers: { 'Accept': 'application/blob' }
+                                                            });
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            window.open(url, '_blank');
+                                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                        } catch (e) {
+                                                            showToast('Download failed', 'error');
+                                                        }
+                                                    }}
                                                     title="Download CSV Report"
                                                 >
                                                     📥
@@ -466,29 +453,17 @@ export const Warehouse: React.FC = () => {
                                                             if (!confirm2) return;
 
                                                             try {
-                                                                console.log(`Attempting to delete batch ${batch.id} with token:`, localStorage.getItem('auth_token'));
-                                                                const response = await fetch(`http://localhost:5002/api/warehouse/batches/${batch.id}`, {
-                                                                    method: 'DELETE',
-                                                                    headers: {
-                                                                        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-                                                                    }
+                                                                console.log(`Attempting to delete batch ${batch.id}`);
+                                                                await apiFetch(`/api/pretest/warehouse/batches/${batch.id}`, {
+                                                                    method: 'DELETE'
                                                                 });
 
-                                                                console.log('Delete response status:', response.status);
-                                                                const data = await response.json();
-                                                                console.log('Delete response body:', data);
-
-                                                                if (response.ok) {
-                                                                    showToast('Batch deleted successfully', 'success');
-                                                                    fetchBatches();
-                                                                } else {
-                                                                    showToast(`Failed to delete: ${data.error || 'Unknown error'}`, 'error');
-                                                                    alert(`Delete Failed: ${data.error} (Status: ${response.status})`);
-                                                                }
-                                                            } catch (err) {
+                                                                showToast('Batch deleted successfully', 'success');
+                                                                fetchBatches();
+                                                            } catch (err: any) {
                                                                 console.error('Network error during deletion:', err);
-                                                                showToast('Network error during deletion', 'error');
-                                                                alert(`Network Error: ${err}`);
+                                                                showToast('Error during deletion: ' + err.message, 'error');
+                                                                alert(`Delete Failed: ${err.message}`);
                                                             }
                                                         }}
                                                     >

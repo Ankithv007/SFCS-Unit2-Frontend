@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styles from './ShiftManagement.module.css';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
+import { apiFetch } from '../../utils/api';
 
 interface Shift {
     id: number;
@@ -37,11 +38,8 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
 
     const fetchShifts = async () => {
         try {
-            const response = await fetch('http://localhost:5003/api/qc-inspection/shifts');
-            if (response.ok) {
-                const data = await response.json();
-                setShifts(data);
-            }
+            const data = await apiFetch('/api/qc/shifts');
+            setShifts(data);
         } catch (error) {
             console.error('Error fetching shifts:', error);
             showToast('Failed to load shifts', 'error');
@@ -62,17 +60,13 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
         if (!window.confirm('Are you sure you want to delete this shift?')) return;
 
         try {
-            const response = await fetch(`http://localhost:5003/api/qc-inspection/shifts/${id}`, {
+            await apiFetch(`/api/qc/shifts/${id}`, {
                 method: 'DELETE'
             });
 
-            if (response.ok) {
-                showToast('Shift deleted successfully', 'success');
-                fetchShifts();
-                if (onUpdate) onUpdate();
-            } else {
-                showToast('Failed to delete shift', 'error');
-            }
+            showToast('Shift deleted successfully', 'success');
+            fetchShifts();
+            if (onUpdate) onUpdate();
         } catch (error) {
             console.error('Error deleting shift:', error);
             showToast('Network error', 'error');
@@ -87,31 +81,24 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
 
         try {
             const url = editingShift
-                ? `http://localhost:5003/api/qc-inspection/shifts/${editingShift.id}`
-                : 'http://localhost:5003/api/qc-inspection/shifts';
+                ? `/api/qc/shifts/${editingShift.id}`
+                : '/api/qc/shifts';
 
             const method = editingShift ? 'PUT' : 'POST';
 
-            const response = await fetch(url, {
+            await apiFetch(url, {
                 method,
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...formData, created_by: user?.name || 'Admin' })
             });
 
-            if (response.ok) {
-                showToast(`Shift ${editingShift ? 'updated' : 'created'} successfully`, 'success');
-                fetchShifts();
-                setEditingShift(null);
-                setFormData({ name: '', start_time: '', end_time: '', status: 'active' });
-                if (onUpdate) onUpdate();
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('Failed to save shift. Status:', response.status, 'Error:', errorData);
-                showToast('Failed to save shift: ' + (errorData.error || 'Unknown error'), 'error');
-            }
-        } catch (error) {
+            showToast(`Shift ${editingShift ? 'updated' : 'created'} successfully`, 'success');
+            fetchShifts();
+            setEditingShift(null);
+            setFormData({ name: '', start_time: '', end_time: '', status: 'active' });
+            if (onUpdate) onUpdate();
+        } catch (error: any) {
             console.error('Error saving shift:', error);
-            showToast('Network error', 'error');
+            showToast('Failed to save shift: ' + (error.message || 'Unknown error'), 'error');
         }
     };
 

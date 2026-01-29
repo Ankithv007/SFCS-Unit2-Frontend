@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { apiFetch } from '../../utils/api';
 import styles from './PurchaseOrder.module.css';
 import { Button } from '../../components/Button';
 import { FormField } from '../../components/FormField';
@@ -64,11 +65,7 @@ export const PurchaseOrder: React.FC = () => {
         const fetchSavedPOs = async () => {
             setIsLoading(true);
             try {
-                const response = await fetch('/api/inventory/po');
-                if (!response.ok) {
-                    throw new Error('Failed to fetch saved POs');
-                }
-                const data = await response.json();
+                const data = await apiFetch('/api/inventory/po');
                 setPoList(data);
             } catch (error) {
                 console.error('Error fetching saved POs:', error);
@@ -89,11 +86,7 @@ export const PurchaseOrder: React.FC = () => {
 
         setIsLoading(true);
         try {
-            const response = await fetch(`/api/inventory/zoho/po/${encodeURIComponent(searchPo)}?org=${selectedOrg}`);
-            if (!response.ok) {
-                throw new Error('Failed to fetch PO details');
-            }
-            const data = await response.json();
+            const data = await apiFetch(`/api/inventory/zoho/po/${encodeURIComponent(searchPo)}?org=${selectedOrg}`);
 
             setPoList(prev => {
                 // Remove existing if present to update it
@@ -157,11 +150,8 @@ export const PurchaseOrder: React.FC = () => {
 
     const handleSavePO = async (po: PurchaseOrderData) => {
         try {
-            const response = await fetch('/api/inventory/po', {
+            await apiFetch('/api/inventory/po', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     po_number: po.po_number,
                     date: po.date,
@@ -171,23 +161,15 @@ export const PurchaseOrder: React.FC = () => {
                 }),
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to save PO');
-            }
-
             showToast('Purchase Order saved successfully!', 'success');
 
             // Refresh list to ensure we have the latest state (including ID)
-            const refreshResponse = await fetch('/api/inventory/po');
-            if (refreshResponse.ok) {
-                const data = await refreshResponse.json();
-                setPoList(data);
-            }
+            const data = await apiFetch('/api/inventory/po');
+            setPoList(data);
 
         } catch (error: any) {
             console.error('Error saving PO:', error);
-            showToast(error.message, 'error');
+            showToast(error.message || 'Failed to save PO', 'error');
         }
     };
 

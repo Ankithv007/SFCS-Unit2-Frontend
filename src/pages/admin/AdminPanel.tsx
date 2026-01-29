@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../utils/api';
 import styles from './AdminPanel.module.css';
 import { useAuth } from '../../hooks/useAuth';
 import type { User } from '../../hooks/useAuth';
@@ -30,31 +31,12 @@ export const AdminPanel: React.FC = () => {
         isFetching.current = true;
 
         try {
-            const token = localStorage.getItem('auth_token');
-            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-
             // Fetch users from the admin API
-            const response = await fetch(`${baseUrl}/api/admin/users`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setUsers(data);
-            } else {
-                const errorText = await response.text();
-                console.error('Fetch users failed:', response.status, errorText);
-
-                // If unauthorized (401), it means the session has expired
-                if (response.status === 401) {
-                    showToast('Session expired. Please login again.', 'error');
-                } else {
-                    showToast(`Failed to fetch users: ${response.status} ${response.statusText}`, 'error');
-                }
-            }
-        } catch (error) {
+            const data = await apiFetch('/api/auth/admin/users');
+            setUsers(data);
+        } catch (error: any) {
             console.error('Error fetching users:', error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Failed to fetch users', 'error');
         } finally {
             setLoading(false);
             isFetching.current = false;
@@ -71,27 +53,16 @@ export const AdminPanel: React.FC = () => {
         }
 
         try {
-            const token = localStorage.getItem('auth_token');
-            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-            const response = await fetch(`${baseUrl}/api/admin/users/${targetUserId}/role`, {
+            await apiFetch(`/api/auth/admin/users/${targetUserId}/role`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
                 body: JSON.stringify({ role: newRole })
             });
 
-            if (response.ok) {
-                showToast('User role updated successfully', 'success');
-                fetchUsers(); // Refresh list
-            } else {
-                const error = await response.json();
-                showToast(error.message || 'Failed to update role', 'error');
-            }
-        } catch (error) {
+            showToast('User role updated successfully', 'success');
+            fetchUsers(); // Refresh list
+        } catch (error: any) {
             console.error('Error updating role:', error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Failed to update role', 'error');
         }
     };
 

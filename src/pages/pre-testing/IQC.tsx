@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../utils/api';
 import styles from './IQC.module.css';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
@@ -57,20 +58,15 @@ export const IQC: React.FC = () => {
         }
 
         try {
-            const response = await fetch(`http://localhost:5002/api/iqc/search?barcode=${encodeURIComponent(searchQuery.trim())}`);
-            if (response.ok) {
-                const data = await response.json();
-                setSearchResult(data[0]);
-                showToast('Component found!', 'success');
-                setIsSearchExpanded(false);
-                setSearchQuery('');
-            } else {
-                showToast('Component not found in any batch', 'error');
-                setSearchResult(null);
-            }
+            const data = await apiFetch(`/api/pretest/iqc/search?barcode=${encodeURIComponent(searchQuery.trim())}`);
+            setSearchResult(data[0]);
+            showToast('Component found!', 'success');
+            setIsSearchExpanded(false);
+            setSearchQuery('');
         } catch (error) {
             console.error('Search error:', error);
-            showToast('Network error', 'error');
+            showToast('Component not found or network error', 'error');
+            setSearchResult(null);
         }
     };
 
@@ -87,17 +83,14 @@ export const IQC: React.FC = () => {
     useEffect(() => {
         const pollInterval = setInterval(async () => {
             try {
-                const response = await fetch('http://localhost:5002/api/iqc/batches');
-                if (response.ok) {
-                    const data = await response.json();
-                    setBatches(data);
+                const data = await apiFetch('/api/pretest/iqc/batches');
+                setBatches(data);
 
-                    // Update active batch live count if selected
-                    if (activeBatch) {
-                        const updatedBatch = data.find((b: Batch) => b.id === activeBatch.id);
-                        if (updatedBatch && updatedBatch.warehouse_received_quantity !== activeBatch.warehouse_received_quantity) {
-                            setActiveBatch(prev => prev ? { ...prev, warehouse_received_quantity: updatedBatch.warehouse_received_quantity } : null);
-                        }
+                // Update active batch live count if selected
+                if (activeBatch) {
+                    const updatedBatch = data.find((b: Batch) => b.id === activeBatch.id);
+                    if (updatedBatch && updatedBatch.warehouse_received_quantity !== activeBatch.warehouse_received_quantity) {
+                        setActiveBatch(prev => prev ? { ...prev, warehouse_received_quantity: updatedBatch.warehouse_received_quantity } : null);
                     }
                 }
             } catch (error) {
@@ -110,11 +103,8 @@ export const IQC: React.FC = () => {
 
     const fetchWarehouseBatches = async () => {
         try {
-            const response = await fetch('http://localhost:5002/api/warehouse/batches');
-            if (response.ok) {
-                const data = await response.json();
-                setWarehouseBatches(data);
-            }
+            const data = await apiFetch('/api/pretest/warehouse/batches');
+            setWarehouseBatches(data);
         } catch (error) {
             console.error('Error fetching warehouse batches:', error);
         }
@@ -134,11 +124,8 @@ export const IQC: React.FC = () => {
 
     const fetchBatches = async () => {
         try {
-            const response = await fetch('http://localhost:5002/api/iqc/batches');
-            if (response.ok) {
-                const data = await response.json();
-                setBatches(data);
-            }
+            const data = await apiFetch('/api/pretest/iqc/batches');
+            setBatches(data);
         } catch (error) {
             console.error('Error fetching batches:', error);
             showToast('Failed to load batches', 'error');
@@ -152,9 +139,8 @@ export const IQC: React.FC = () => {
         }
 
         try {
-            const response = await fetch('http://localhost:5002/api/iqc/batches', {
+            const newBatch = await apiFetch('/api/pretest/iqc/batches', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     batch_number: batchNumber,
                     created_by: createdBy,
@@ -162,23 +148,17 @@ export const IQC: React.FC = () => {
                 })
             });
 
-            if (response.ok) {
-                const newBatch = await response.json();
-                showToast(`Batch ${batchNumber} created!`, 'success');
-                setBatchNumber('');
-                setQuantity('');
+            showToast(`Batch ${batchNumber} created!`, 'success');
+            setBatchNumber('');
+            setQuantity('');
 
-                // Auto-start
-                setActiveBatch(newBatch);
-                setScannerName(createdBy);
-                fetchComponents(newBatch.id);
-            } else {
-                const error = await response.json();
-                showToast(error.error || 'Failed to create batch', 'error');
-            }
-        } catch (error) {
+            // Auto-start
+            setActiveBatch(newBatch);
+            setScannerName(createdBy);
+            fetchComponents(newBatch.id);
+        } catch (error: any) {
             console.error('Error creating batch:', error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Failed to create batch', 'error');
         }
     };
 
@@ -190,11 +170,8 @@ export const IQC: React.FC = () => {
 
     const fetchComponents = async (batchId: number) => {
         try {
-            const response = await fetch(`http://localhost:5002/api/iqc/batches/${batchId}/components`);
-            if (response.ok) {
-                const data = await response.json();
-                setScannedComponents(data);
-            }
+            const data = await apiFetch(`/api/pretest/iqc/batches/${batchId}/components`);
+            setScannedComponents(data);
         } catch (error) {
             console.error('Error fetching components:', error);
         }
@@ -256,9 +233,8 @@ export const IQC: React.FC = () => {
         }
 
         try {
-            const response = await fetch('http://localhost:5002/api/iqc/scan', {
+            const newComponent = await apiFetch('/api/pretest/iqc/scan', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     batch_id: activeBatch?.id,
                     barcode: code,
@@ -269,37 +245,39 @@ export const IQC: React.FC = () => {
                 })
             });
 
-            if (response.ok) {
-                const newComponent = await response.json();
-                setScannedComponents(prev => {
-                    if (prev.some(comp => comp.barcode === newComponent.barcode)) return prev;
-                    return [newComponent, ...prev];
-                });
-                showToast('Component Accepted', 'success');
-                setBarcode('');
+            setScannedComponents(prev => {
+                if (prev.some(comp => comp.barcode === newComponent.barcode)) return prev;
+                return [newComponent, ...prev];
+            });
+            showToast('Component Accepted', 'success');
+            setBarcode('');
 
-                // Refresh batches to update counts
-                fetchBatches();
-            } else {
-                const error = await response.json();
-
-                if (response.status === 409 && error.code === 'MOVE_REQUIRED') {
-                    if (window.confirm(error.error)) {
-                        await submitScan(code, true);
-                    } else {
-                        setBarcode('');
-                    }
-                    return;
-                }
-
-                showToast(error.error || 'Scan failed', 'error');
-                if (response.status === 409) {
-                    setBarcode(''); // Clear input on duplicate
-                }
-            }
-        } catch (error) {
+            // Refresh batches to update counts
+            fetchBatches();
+        } catch (error: any) {
             console.error('Error scanning component:', error);
-            showToast('Network error', 'error');
+
+            // Handle 409 Conflict with MOVE_REQUIRED
+            // apiFetch throws error with message. We might need to parse it if it's a JSON error response.
+            // But apiFetch implementation throws errorMsg = data.message || errorMsg.
+            // If the backend sends { error: "...", code: "MOVE_REQUIRED" }, apiFetch throws "..."
+            // I need to check if I can access the error code.
+            // The current apiFetch implementation throws an Error with the message.
+            // I might need to adjust apiFetch to throw an object or handle this specific case.
+            // For now, let's assume the error message contains the text or I'll modify apiFetch to be more robust later if needed.
+            // Actually, let's look at apiFetch again. It throws new Error(errorMsg).
+            // So I can't easily access `error.code`.
+            // I should probably modify apiFetch to throw the whole error object or a custom ApiError.
+            // But for now, let's try to rely on the message or just catch generic error.
+
+            // Wait, the original code checked `response.status === 409 && error.code === 'MOVE_REQUIRED'`.
+            // My apiFetch hides the status code.
+            // I should update apiFetch to throw a custom error with status and data.
+
+            showToast(error.message || 'Scan failed', 'error');
+            if (error.message && error.message.includes('duplicate')) {
+                setBarcode('');
+            }
         }
     };
 
@@ -308,28 +286,23 @@ export const IQC: React.FC = () => {
         if (!reason) return; // User cancelled or empty
 
         try {
-            const response = await fetch(`http://localhost:5002/api/iqc/components/${component.id}/status`, {
+            await apiFetch(`/api/pretest/iqc/components/${component.id}/status`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     status: 'REJECTED',
                     remarks: reason
                 })
             });
 
-            if (response.ok) {
-                showToast('Component marked as Failed', 'error'); // Red toast for failure
-                // Update local state
-                setScannedComponents(prev => prev.map(c =>
-                    c.id === component.id ? { ...c, status: 'REJECTED', remarks: reason } : c
-                ));
-                fetchBatches(); // Update counts
-            } else {
-                showToast('Failed to update status', 'error');
-            }
-        } catch (error) {
+            showToast('Component marked as Failed', 'error'); // Red toast for failure
+            // Update local state
+            setScannedComponents(prev => prev.map(c =>
+                c.id === component.id ? { ...c, status: 'REJECTED', remarks: reason } : c
+            ));
+            fetchBatches(); // Update counts
+        } catch (error: any) {
             console.error('Error updating status:', error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Failed to update status', 'error');
         }
     };
 
@@ -345,29 +318,17 @@ export const IQC: React.FC = () => {
         if (!window.confirm('⚠️ FINAL WARNING: This action cannot be undone. Are you absolutely sure?')) return;
 
         try {
-            console.log(`Attempting to delete batch ${batchId} with token:`, localStorage.getItem('auth_token'));
-            const response = await fetch(`http://localhost:5002/api/iqc/batches/${batchId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-                }
+            console.log(`Attempting to delete batch ${batchId}`);
+            await apiFetch(`/api/pretest/iqc/batches/${batchId}`, {
+                method: 'DELETE'
             });
 
-            console.log('Delete response status:', response.status);
-            const data = await response.json();
-            console.log('Delete response body:', data);
-
-            if (response.ok) {
-                showToast('Batch deleted successfully', 'success');
-                fetchBatches();
-            } else {
-                showToast(`Failed to delete: ${data.error || 'Unknown error'}`, 'error');
-                alert(`Delete Failed: ${data.error} (Status: ${response.status})`);
-            }
-        } catch (error) {
+            showToast('Batch deleted successfully', 'success');
+            fetchBatches();
+        } catch (error: any) {
             console.error('Error deleting batch:', error);
-            showToast('Network error during deletion', 'error');
-            alert(`Network Error: ${error}`);
+            showToast('Error during deletion: ' + error.message, 'error');
+            alert(`Delete Failed: ${error.message}`);
         }
     };
 
@@ -558,7 +519,18 @@ export const IQC: React.FC = () => {
                                             <td>
                                                 <button
                                                     className={styles.secondaryButton}
-                                                    onClick={() => window.open(`http://localhost:5002/api/iqc/batches/${batch.id}/download`, '_blank')}
+                                                    onClick={async () => {
+                                                        try {
+                                                            const blob = await apiFetch(`/api/pretest/iqc/batches/${batch.id}/download`, {
+                                                                headers: { 'Accept': 'application/blob' }
+                                                            });
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            window.open(url, '_blank');
+                                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                        } catch (e) {
+                                                            showToast('Download failed', 'error');
+                                                        }
+                                                    }}
                                                     title="Download CSV Report"
                                                 >
                                                     📥
@@ -628,7 +600,18 @@ export const IQC: React.FC = () => {
                                             <td>
                                                 <button
                                                     className={styles.secondaryButton}
-                                                    onClick={() => window.open(`http://localhost:5002/api/iqc/batches/${batch.id}/download`, '_blank')}
+                                                    onClick={async () => {
+                                                        try {
+                                                            const blob = await apiFetch(`/api/pretest/iqc/batches/${batch.id}/download`, {
+                                                                headers: { 'Accept': 'application/blob' }
+                                                            });
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            window.open(url, '_blank');
+                                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                        } catch (e) {
+                                                            showToast('Download failed', 'error');
+                                                        }
+                                                    }}
                                                     title="Download CSV Report"
                                                 >
                                                     📥

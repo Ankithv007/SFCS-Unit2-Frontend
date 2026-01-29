@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../../utils/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../components/Toast';
 import styles from './QCInspection.module.css';
@@ -77,13 +78,10 @@ export const QCInspection: React.FC = () => {
 
     const fetchFormData = useCallback(async () => {
         try {
-            const response = await fetch('http://localhost:5003/api/qc-inspection/form-data');
-            if (response.ok) {
-                const data = await response.json();
-                setShifts(data.shifts);
-                setUnitTpns(data.unitTpns);
-                setUnitPns(data.unitPns);
-            }
+            const data = await apiFetch('/api/qc/form-data');
+            setShifts(data.shifts);
+            setUnitTpns(data.unitTpns);
+            setUnitPns(data.unitPns);
         } catch (error) {
             console.error('Error fetching form data:', error);
             showToast('Failed to load form data: ' + String(error), 'error');
@@ -285,19 +283,15 @@ export const QCInspection: React.FC = () => {
         }
 
         try {
-            const response = await fetch('http://localhost:5003/api/qc-inspection/tpn', {
+            const data = await apiFetch('/api/qc/tpn', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ value })
             });
-            if (response.ok) {
-                const data = await response.json();
-                if (data.created) {
-                    setUnitTpns(prev => [...prev, data.value].sort());
-                    showToast('TPN added to list', 'success');
-                } else {
-                    showToast('Value already exists', 'info');
-                }
+            if (data.created) {
+                setUnitTpns(prev => [...prev, data.value].sort());
+                showToast('TPN added to list', 'success');
+            } else {
+                showToast('Value already exists', 'info');
             }
         } catch (error) {
             console.error('Error scanning TPN:', error);
@@ -322,19 +316,15 @@ export const QCInspection: React.FC = () => {
         }
 
         try {
-            const response = await fetch('http://localhost:5003/api/qc-inspection/pn', {
+            const data = await apiFetch('/api/qc/pn', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ value })
             });
-            if (response.ok) {
-                const data = await response.json();
-                if (data.created) {
-                    setUnitPns(prev => [...prev, data.value].sort());
-                    showToast('PN added to list', 'success');
-                } else {
-                    showToast('Value already exists', 'info');
-                }
+            if (data.created) {
+                setUnitPns(prev => [...prev, data.value].sort());
+                showToast('PN added to list', 'success');
+            } else {
+                showToast('Value already exists', 'info');
             }
         } catch (error) {
             console.error('Error scanning PN:', error);
@@ -346,15 +336,12 @@ export const QCInspection: React.FC = () => {
         if (!unitSerial) return showToast('Please enter a Serial Number', 'error');
 
         try {
-            const response = await fetch('http://localhost:5003/api/qc-inspection/validate-sn', {
+            const data = await apiFetch('/api/qc/validate-sn', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ serial_number: unitSerial })
             });
 
-            const data = await response.json();
-
-            if (response.ok && data.status === 'success') {
+            if (data.status === 'success') {
                 showToast(data.message, 'success');
 
                 if (data.existingData) {
@@ -403,9 +390,9 @@ export const QCInspection: React.FC = () => {
                 showToast(data.error || 'Validation Failed', 'error');
                 setUnitSerial(''); // Clear invalid input
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error validating SN:', error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Network error', 'error');
         }
     };
 
@@ -428,23 +415,20 @@ export const QCInspection: React.FC = () => {
         }
 
         try {
-            const response = await fetch('http://localhost:5003/api/qc-inspection/validate-pam', {
+            const data = await apiFetch('/api/qc/validate-pam', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pam_value: value })
             });
 
-            const data = await response.json();
-
-            if (response.ok && data.status === 'success') {
+            if (data.status === 'success') {
                 showToast(`${fieldName} Verified`, 'success');
             } else {
                 showToast(data.error || 'Validation Failed', 'error');
                 setter(''); // Clear invalid input
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error(`Error validating ${fieldName}:`, error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Network error', 'error');
         }
     };
 
@@ -452,23 +436,20 @@ export const QCInspection: React.FC = () => {
         if (!ranBarcode) return showToast('Please enter a RAN Barcode', 'error');
 
         try {
-            const response = await fetch('http://localhost:5003/api/qc-inspection/validate-ran', {
+            const data = await apiFetch('/api/qc/validate-ran', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ran_barcode: ranBarcode })
             });
 
-            const data = await response.json();
-
-            if (response.ok && data.status === 'success') {
+            if (data.status === 'success') {
                 showToast(data.message, 'success');
             } else {
                 showToast(data.error || 'Validation Failed', 'error');
                 setRanBarcode(''); // Clear invalid input
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error validating RAN Barcode:', error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Network error', 'error');
         }
     };
 
@@ -549,40 +530,35 @@ export const QCInspection: React.FC = () => {
         };
 
         try {
-            const response = await fetch('http://localhost:5003/api/qc-inspection/submit', {
+            await apiFetch('/api/qc/submit', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
-            if (response.ok) {
-                showToast('Inspection submitted successfully', 'success');
+            showToast('Inspection submitted successfully', 'success');
 
-                // Trigger table refresh
-                setRefreshTrigger(prev => prev + 1);
+            // Trigger table refresh
+            setRefreshTrigger(prev => prev + 1);
 
-                // Reset Form
-                setUnitSerial('');
-                setPamTpn('611-PCA000146-L');
-                setPam1('');
-                setPam2('');
-                setPam3('');
-                setPam4('');
-                setRanBarcode('');
-                setBand('');
-                setChecklist(INITIAL_CHECKLIST);
-                setFinalStatus(null);
-                setDeAssemblyStatus(null);
-                setReworkCount(0);
-                setCombinedRemarks('');
-                setCurrentDeAssemblyRemark('');
-                setIsDeAssemblyConfirmed(false);
-            } else {
-                showToast('Failed to submit inspection', 'error');
-            }
-        } catch (error) {
+            // Reset Form
+            setUnitSerial('');
+            setPamTpn('611-PCA000146-L');
+            setPam1('');
+            setPam2('');
+            setPam3('');
+            setPam4('');
+            setRanBarcode('');
+            setBand('');
+            setChecklist(INITIAL_CHECKLIST);
+            setFinalStatus(null);
+            setDeAssemblyStatus(null);
+            setReworkCount(0);
+            setCombinedRemarks('');
+            setCurrentDeAssemblyRemark('');
+            setIsDeAssemblyConfirmed(false);
+        } catch (error: any) {
             console.error('Error submitting inspection:', error);
-            showToast('Network error', 'error');
+            showToast(error.message || 'Network error', 'error');
         }
     };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../utils/api';
 import { useToast } from '../../components/Toast';
 import { Pagination } from '../../components/Pagination';
 
@@ -32,17 +33,12 @@ export const CompletedInspectionsTable: React.FC<Props> = ({ refreshTrigger = 0 
     const fetchInspections = async (page: number) => {
         setLoading(true);
         try {
-            const response = await fetch(`http://localhost:5003/api/qc-inspection/completed?page=${page}&limit=10`);
-            if (response.ok) {
-                const data = await response.json();
-                setInspections(data.data);
-                setTotalPages(data.pagination.totalPages);
-            } else {
-                showToast('Failed to load completed inspections', 'error');
-            }
+            const data = await apiFetch(`/api/qc/completed?page=${page}&limit=10`);
+            setInspections(data.data);
+            setTotalPages(data.pagination.totalPages);
         } catch (error) {
             console.error('Error fetching inspections:', error);
-            showToast('Network error', 'error');
+            showToast('Failed to load completed inspections', 'error');
         } finally {
             setLoading(false);
         }
@@ -50,24 +46,22 @@ export const CompletedInspectionsTable: React.FC<Props> = ({ refreshTrigger = 0 
 
     const handleDownload = async (id: number) => {
         try {
-            const response = await fetch(`http://localhost:5003/api/qc-inspection/export?id=${id}`);
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `QC_Inspection_${id}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-                showToast('Download started', 'success');
-            } else {
-                showToast('Failed to download file', 'error');
-            }
+            const blob = await apiFetch(`/api/qc/export?id=${id}`, {
+                headers: { 'Accept': 'application/blob' }
+            });
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `QC_Inspection_${id}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            showToast('Download started', 'success');
         } catch (error) {
             console.error('Error downloading file:', error);
-            showToast('Network error', 'error');
+            showToast('Failed to download file', 'error');
         }
     };
 

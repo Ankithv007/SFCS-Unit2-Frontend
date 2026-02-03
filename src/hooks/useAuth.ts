@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { processAvatarImage } from '../utils/imageUtils';
+import { apiFetch } from '../utils/api';
 
 export interface User {
     email: string;
@@ -15,8 +16,6 @@ export interface AuthState {
     isLoading: boolean;
     error: string | null;
 }
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 export const useAuth = () => {
     const [user, setUser] = useState<User | null>(null);
@@ -36,60 +35,49 @@ export const useAuth = () => {
         setIsLoading(false);
     }, []);
 
-    const apiCall = async (endpoint: string, method: string, body?: any) => {
-        try {
-            const headers: HeadersInit = {
-                'Content-Type': 'application/json',
-            };
-
-            const token = localStorage.getItem('auth_token');
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                method,
-                headers,
-                body: body ? JSON.stringify(body) : undefined,
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'API Error');
-            }
-
-            return data;
-        } catch (err: any) {
-            throw new Error(err.message || 'Network Error');
-        }
-    };
-
     const checkEmail = useCallback(async (email: string): Promise<{ exists: boolean; message: string }> => {
-        return await apiCall('/api/auth/check-email', 'POST', { email });
+        return await apiFetch('/api/auth/check-email', {
+            method: 'POST',
+            body: JSON.stringify({ email })
+        });
     }, []);
 
     const requestSignupOtp = useCallback(async (name: string, email: string): Promise<void> => {
-        await apiCall('/api/auth/request-signup-otp', 'POST', { name, email });
+        await apiFetch('/api/auth/request-signup-otp', {
+            method: 'POST',
+            body: JSON.stringify({ name, email })
+        });
     }, []);
 
     const verifySignupOtp = useCallback(async (email: string, otp: string): Promise<void> => {
-        await apiCall('/api/auth/verify-signup-otp', 'POST', { email, otp });
+        await apiFetch('/api/auth/verify-signup-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email, otp })
+        });
     }, []);
 
     const createPassword = useCallback(async (email: string, password: string, confirmPassword: string): Promise<void> => {
-        await apiCall('/api/auth/create-password', 'POST', { email, password, confirmPassword });
+        await apiFetch('/api/auth/create-password', {
+            method: 'POST',
+            body: JSON.stringify({ email, password, confirmPassword })
+        });
     }, []);
 
     const resendOtp = useCallback(async (email: string, purpose: 'signup' | 'forgot'): Promise<void> => {
-        await apiCall('/api/auth/resend-otp', 'POST', { email, purpose });
+        await apiFetch('/api/auth/resend-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email, purpose })
+        });
     }, []);
 
     const login = useCallback(async (email: string, password: string): Promise<void> => {
         setIsLoading(true);
         setError(null);
         try {
-            const data = await apiCall('/api/auth/login', 'POST', { email, password });
+            const data = await apiFetch('/api/auth/login', {
+                method: 'POST',
+                body: JSON.stringify({ email, password })
+            });
             // Backend now returns avatar in user object
             const sessionUser: User = {
                 email: data.user.email,
@@ -113,11 +101,17 @@ export const useAuth = () => {
     }, []);
 
     const requestForgotOtp = useCallback(async (email: string): Promise<void> => {
-        await apiCall('/api/auth/request-forgot-otp', 'POST', { email });
+        await apiFetch('/api/auth/request-forgot-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email })
+        });
     }, []);
 
     const confirmForgotOtp = useCallback(async (email: string, otp: string, newPassword: string): Promise<void> => {
-        await apiCall('/api/auth/confirm-forgot-otp', 'POST', { email, otp, newPassword });
+        await apiFetch('/api/auth/confirm-forgot-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email, otp, newPassword })
+        });
     }, []);
 
     const logout = useCallback(async () => {
@@ -134,9 +128,12 @@ export const useAuth = () => {
 
             // Upload to server
             if (user?.email) {
-                await apiCall('/api/auth/update-avatar', 'POST', {
-                    email: user.email,
-                    avatar: base64Avatar
+                await apiFetch('/api/auth/update-avatar', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        email: user.email,
+                        avatar: base64Avatar
+                    })
                 });
             }
 
@@ -159,9 +156,12 @@ export const useAuth = () => {
     const removeUserAvatar = useCallback(async (): Promise<void> => {
         try {
             if (user?.email) {
-                await apiCall('/api/auth/update-avatar', 'POST', {
-                    email: user.email,
-                    avatar: null
+                await apiFetch('/api/auth/update-avatar', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        email: user.email,
+                        avatar: null
+                    })
                 });
             }
 

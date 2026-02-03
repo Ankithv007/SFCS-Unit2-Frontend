@@ -44,20 +44,47 @@ export const CompletedInspectionsTable: React.FC<Props> = ({ refreshTrigger = 0 
         }
     };
 
+    /**
+     * ===============================
+     * FIXED: Excel Download Handling
+     * ===============================
+     * We DO NOT use apiFetch here because:
+     * - apiFetch is JSON-based
+     * - Excel files are binary (blob)
+     * - Using apiFetch caused download failure
+     */
     const handleDownload = async (id: number) => {
         try {
-            const blob = await apiFetch(`/api/qc/export?id=${id}`, {
-                headers: { 'Accept': 'application/blob' }
+            // 🔹 Get JWT token manually
+            const token = localStorage.getItem('token');
+
+            // 🔹 Use native fetch for binary file
+            const response = await fetch(`/api/qc/export?id=${id}`, {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
             });
 
+            if (!response.ok) {
+                throw new Error('Failed to download file');
+            }
+
+            // 🔹 Convert response to Blob
+            const blob = await response.blob();
+
+            // 🔹 Create temporary download link
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `QC_Inspection_${id}.xlsx`;
             document.body.appendChild(a);
             a.click();
+
+            // 🔹 Cleanup
             a.remove();
             window.URL.revokeObjectURL(url);
+
             showToast('Download started', 'success');
         } catch (error) {
             console.error('Error downloading file:', error);
@@ -66,47 +93,117 @@ export const CompletedInspectionsTable: React.FC<Props> = ({ refreshTrigger = 0 
     };
 
     return (
-        <div style={{ marginTop: '2rem', background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '600', color: '#111827', marginBottom: '1rem' }}>Completed Batches</h3>
+        <div
+            style={{
+                marginTop: '2rem',
+                background: 'white',
+                padding: '1.5rem',
+                borderRadius: '8px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            }}
+        >
+            <h3
+                style={{
+                    fontSize: '1.125rem',
+                    fontWeight: '600',
+                    color: '#111827',
+                    marginBottom: '1rem',
+                }}
+            >
+                Completed Batches
+            </h3>
 
             <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                <table
+                    style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        fontSize: '0.875rem',
+                    }}
+                >
                     <thead>
-                        <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                            <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Unit Serial No</th>
-                            <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Inspected By</th>
-                            <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Date & Time</th>
-                            <th style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Passed</th>
-                            <th style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Failed</th>
-                            <th style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Action</th>
+                        <tr
+                            style={{
+                                background: '#f9fafb',
+                                borderBottom: '1px solid #e5e7eb',
+                            }}
+                        >
+                            <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>
+                                Unit Serial No
+                            </th>
+                            <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>
+                                Inspected By
+                            </th>
+                            <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>
+                                Date & Time
+                            </th>
+                            <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                                Passed
+                            </th>
+                            <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                                Failed
+                            </th>
+                            <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                                Action
+                            </th>
                         </tr>
                     </thead>
+
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center' }}>Loading...</td></tr>
+                            <tr>
+                                <td colSpan={6} style={{ padding: '2rem', textAlign: 'center' }}>
+                                    Loading...
+                                </td>
+                            </tr>
                         ) : inspections.length === 0 ? (
-                            <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>No completed inspections found</td></tr>
+                            <tr>
+                                <td
+                                    colSpan={6}
+                                    style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}
+                                >
+                                    No completed inspections found
+                                </td>
+                            </tr>
                         ) : (
                             inspections.map(item => (
                                 <tr key={item.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                                    <td style={{ padding: '0.75rem 1rem' }}>{item.unit_serial_no}</td>
-                                    <td style={{ padding: '0.75rem 1rem' }}>{item.inspected_by}</td>
-                                    <td style={{ padding: '0.75rem 1rem' }}>{new Date(item.inspection_date_time).toLocaleString()}</td>
+                                    <td style={{ padding: '0.75rem 1rem' }}>
+                                        {item.unit_serial_no}
+                                    </td>
+                                    <td style={{ padding: '0.75rem 1rem' }}>
+                                        {item.inspected_by}
+                                    </td>
+                                    <td style={{ padding: '0.75rem 1rem' }}>
+                                        {new Date(item.inspection_date_time).toLocaleString()}
+                                    </td>
                                     <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
-                                        <span style={{
-                                            padding: '2px 8px', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '500',
-                                            backgroundColor: item.passed === 'YES' ? '#d1fae5' : '#f3f4f6',
-                                            color: item.passed === 'YES' ? '#065f46' : '#374151'
-                                        }}>
+                                        <span
+                                            style={{
+                                                padding: '2px 8px',
+                                                borderRadius: '9999px',
+                                                backgroundColor:
+                                                    item.passed === 'YES' ? '#d1fae5' : '#f3f4f6',
+                                                color:
+                                                    item.passed === 'YES' ? '#065f46' : '#374151',
+                                                fontSize: '0.75rem',
+                                            }}
+                                        >
                                             {item.passed}
                                         </span>
                                     </td>
                                     <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
-                                        <span style={{
-                                            padding: '2px 8px', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '500',
-                                            backgroundColor: item.failed === 'YES' ? '#fee2e2' : '#f3f4f6',
-                                            color: item.failed === 'YES' ? '#991b1b' : '#374151'
-                                        }}>
+                                        <span
+                                            style={{
+                                                padding: '2px 8px',
+                                                borderRadius: '9999px',
+                                                backgroundColor:
+                                                    item.failed === 'YES' ? '#fee2e2' : '#f3f4f6',
+                                                color:
+                                                    item.failed === 'YES' ? '#991b1b' : '#374151',
+                                                fontSize: '0.75rem',
+                                            }}
+                                        >
                                             {item.failed}
                                         </span>
                                     </td>
@@ -120,7 +217,7 @@ export const CompletedInspectionsTable: React.FC<Props> = ({ refreshTrigger = 0 
                                                 border: 'none',
                                                 borderRadius: '4px',
                                                 cursor: 'pointer',
-                                                fontSize: '0.75rem'
+                                                fontSize: '0.75rem',
                                             }}
                                         >
                                             Download

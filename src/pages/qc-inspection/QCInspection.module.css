@@ -97,6 +97,13 @@
     color: #6b7280;
 }
 
+.attemptInfo {
+    margin-bottom: 15px;   /* 👈 THIS creates the gap */
+    font-size: 0.9rem;
+    color: #374151;        /* neutral text */
+}
+
+
 .errorInput {
     border-color: #ef4444;
     background-color: #fef2f2;

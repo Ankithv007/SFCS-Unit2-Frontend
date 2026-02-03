@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast';
 import styles from './QCInspection.module.css';
 import { CompletedInspectionsTable } from './CompletedInspectionsTable';
 import { ShiftManagement } from './ShiftManagement';
+import { ROLES } from '../../constants/roles';
 
 interface ChecklistHistory {
     status: 'PASS' | 'FAIL' | 'REJECTED';
@@ -74,7 +75,10 @@ export const QCInspection: React.FC = () => {
     const [isShiftManagementOpen, setIsShiftManagementOpen] = useState(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-    const isManager = ['admin', 'super admin', 'superadmin', 'manager'].includes((user?.role || '').toLowerCase().trim());
+    const authorizedRoles = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.MANAGER].map(r => r.toLowerCase());
+    const userRole = (user?.role || '').toLowerCase().trim();
+    const isAuthorized = authorizedRoles.includes(userRole);
+    const isManager = isAuthorized; // Backward compatibility for any other checks
 
     const fetchFormData = useCallback(async () => {
         try {
@@ -333,12 +337,18 @@ export const QCInspection: React.FC = () => {
     };
 
     const handleScanSerial = async () => {
-        if (!unitSerial) return showToast('Please enter a Serial Number', 'error');
+        // 🔒 Basic validation
+        if (!unitSerial) {
+            return showToast('Please enter a Serial Number', 'error');
+        }
 
         try {
             const data = await apiFetch('/api/qc/validate-sn', {
                 method: 'POST',
-                body: JSON.stringify({ serial_number: unitSerial })
+                body: JSON.stringify({
+                    // ✅ FIXED: Backend expects `unit_serial_no`
+                    unit_serial_no: unitSerial
+                })
             });
 
             if (data.status === 'success') {
@@ -346,7 +356,8 @@ export const QCInspection: React.FC = () => {
 
                 if (data.existingData) {
                     const ed = data.existingData;
-                    // Auto-populate unit information from the existing record
+
+                    // ✅ Auto-populate unit information
                     setUnitTpn(ed.unit_tpn || '');
                     setUnitPn(ed.unit_pn || '');
                     setPamTpn(ed.pam_tpn || '');
@@ -360,21 +371,21 @@ export const QCInspection: React.FC = () => {
                     setCombinedRemarks(ed.combined_remarks || '');
                     setDeAssemblyStatus(ed.de_assembly_status || null);
 
-                    // If De-Assembly was already passed, mark it as confirmed
+                    // ✅ Mark De-Assembly confirmed if already passed
                     setIsDeAssemblyConfirmed(ed.de_assembly_status === 'PASS');
 
-                    // Map the saved checklist results back to the frontend state
+                    // ✅ Restore checklist history
                     if (ed.checklist && ed.checklist.length > 0) {
                         const newChecklist = INITIAL_CHECKLIST.map(item => {
-                            // Find the matching result from the database by description
-                            const match = ed.checklist.find((c: any) => c.checkpoint_description === item.text);
+                            const match = ed.checklist.find(
+                                (c: any) => c.checkpoint_description === item.text
+                            );
+
                             if (match) {
                                 return {
                                     ...item,
                                     status: match.result,
-                                    // CRITICAL: We only auto-confirm items that were previously 'PASS'.
-                                    // If an item was 'FAIL' or 'REJECTED', we leave it unconfirmed 
-                                    // so the user can change it to 'PASS' during this rework session.
+                                    // Only auto-confirm PASS items
                                     is_confirmed: match.result === 'PASS',
                                     remarks: match.remark,
                                     rework_count: match.rework_count,
@@ -383,11 +394,12 @@ export const QCInspection: React.FC = () => {
                             }
                             return item;
                         });
+
                         setChecklist(newChecklist);
                     }
                 }
             } else {
-                showToast(data.error || 'Validation Failed', 'error');
+                showToast(data.message || 'Validation Failed', 'error');
                 setUnitSerial(''); // Clear invalid input
             }
         } catch (error: any) {
@@ -395,6 +407,7 @@ export const QCInspection: React.FC = () => {
             showToast(error.message || 'Network error', 'error');
         }
     };
+
 
     const handleScanPam = async (value: string, setter: (val: string) => void, fieldName: string) => {
         if (!value) return showToast(`Please enter ${fieldName}`, 'error');
@@ -417,13 +430,13 @@ export const QCInspection: React.FC = () => {
         try {
             const data = await apiFetch('/api/qc/validate-pam', {
                 method: 'POST',
-                body: JSON.stringify({ pam_value: value })
+                body: JSON.stringify({ pam_no: value })
             });
 
             if (data.status === 'success') {
                 showToast(`${fieldName} Verified`, 'success');
             } else {
-                showToast(data.error || 'Validation Failed', 'error');
+                showToast(data.message || 'Validation Failed', 'error');
                 setter(''); // Clear invalid input
             }
         } catch (error: any) {
@@ -444,7 +457,7 @@ export const QCInspection: React.FC = () => {
             if (data.status === 'success') {
                 showToast(data.message, 'success');
             } else {
-                showToast(data.error || 'Validation Failed', 'error');
+                showToast(data.message || 'Validation Failed', 'error');
                 setRanBarcode(''); // Clear invalid input
             }
         } catch (error: any) {
@@ -513,7 +526,7 @@ export const QCInspection: React.FC = () => {
             shift,
             unit_tpn: unitTpn,
             unit_pn: unitPn,
-            unit_serial_number: unitSerial,
+            unit_serial_no: unitSerial,
             pam_tpn: pamTpn,
             pam_1: pam1,
             pam_2: pam2,
@@ -598,7 +611,7 @@ export const QCInspection: React.FC = () => {
                     <div className={styles.inputGroup}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <label>Shift *</label>
-                            {isManager && (
+                            {isAuthorized && (
                                 <button
                                     onClick={() => setIsShiftManagementOpen(!isShiftManagementOpen)}
                                     style={{
@@ -632,8 +645,8 @@ export const QCInspection: React.FC = () => {
                 </div>
             </div>
 
-            {/* Shift Management Section (For Managers) */}
-            {isManager && isShiftManagementOpen && (
+            {/* Shift Management Section (For Managers/Admins/SuperAdmins) */}
+            {isAuthorized && isShiftManagementOpen && (
                 <ShiftManagement
                     isStandalone={true}
                     onUpdate={fetchFormData}
@@ -927,9 +940,18 @@ export const QCInspection: React.FC = () => {
             {/* De-Assembly Section */}
             <div className={styles.card}>
                 <h3>De-Assembly</h3>
+
+                {/* INFO TEXT BELOW HEADING */}
+                <p className={styles.attemptInfo}>
+                    Only <strong>3 attempts</strong> are allowed to mark <strong>Pass</strong> or <strong>Fail</strong>.
+                </p>
+
                 <div className={styles.deAssemblyContent}>
                     <div className={styles.reworkInfo}>
-                        <strong>Status:</strong> {reworkCount === 0 ? 'Initial De-Assembly' : `Rework Attempt ${reworkCount}`}
+                        <strong>Status:</strong>{' '}
+                        {reworkCount === 0
+                            ? 'Initial De-Assembly'
+                            : `Rework Attempt ${reworkCount}`}
                     </div>
 
                     <div className={styles.statusButtons} style={{ marginTop: '1rem' }}>
@@ -946,6 +968,7 @@ export const QCInspection: React.FC = () => {
                         >
                             ✅ Pass
                         </button>
+
                         <button
                             className={`${styles.statusBtn} ${deAssemblyStatus === 'FAIL' ? styles.failActive : ''}`}
                             onClick={() => {
@@ -959,6 +982,7 @@ export const QCInspection: React.FC = () => {
                         >
                             ❌ Fail
                         </button>
+
                         {reworkCount === 2 && (
                             <button
                                 className={`${styles.statusBtn} ${deAssemblyStatus === 'REJECTED' ? styles.failActive : ''}`}
@@ -999,9 +1023,29 @@ export const QCInspection: React.FC = () => {
                     )}
 
                     {combinedRemarks && (
-                        <div className={styles.remarksDisplay} style={{ marginTop: '1rem', padding: '1rem', background: '#fef2f2', borderRadius: '8px', border: '1px solid #fee2e2' }}>
-                            <h4 style={{ margin: '0 0 0.5rem 0', color: '#991b1b' }}>Remarks History</h4>
-                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '0.9rem', color: '#b91c1c' }}>{combinedRemarks}</pre>
+                        <div
+                            className={styles.remarksDisplay}
+                            style={{
+                                marginTop: '1rem',
+                                padding: '1rem',
+                                background: '#fef2f2',
+                                borderRadius: '8px',
+                                border: '1px solid #fee2e2',
+                            }}
+                        >
+                            <h4 style={{ margin: '0 0 0.5rem 0', color: '#991b1b' }}>
+                                Remarks History
+                            </h4>
+                            <pre
+                                style={{
+                                    margin: 0,
+                                    whiteSpace: 'pre-wrap',
+                                    fontSize: '0.9rem',
+                                    color: '#b91c1c',
+                                }}
+                            >
+                                {combinedRemarks}
+                            </pre>
                         </div>
                     )}
                 </div>

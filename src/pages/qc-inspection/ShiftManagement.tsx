@@ -3,6 +3,7 @@ import styles from './ShiftManagement.module.css';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../utils/api';
+import { ROLES } from '../../constants/roles';
 
 interface Shift {
     id: number;
@@ -26,6 +27,8 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
     const [editingShift, setEditingShift] = useState<Shift | null>(null);
     const [formData, setFormData] = useState({ name: '', start_time: '', end_time: '', status: 'active' });
 
+    const isSuperAdmin = (user?.role || '').toLowerCase().trim() === ROLES.SUPER_ADMIN.toLowerCase().trim();
+
     useEffect(() => {
         console.log('ShiftManagement component mounted. isStandalone:', isStandalone, 'isOpen:', isOpen);
     }, []);
@@ -47,6 +50,7 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
     };
 
     const handleEdit = (shift: Shift) => {
+        if (!isSuperAdmin) return;
         setEditingShift(shift);
         setFormData({
             name: shift.name,
@@ -57,6 +61,7 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
     };
 
     const handleDelete = async (id: number) => {
+        if (!isSuperAdmin) return;
         if (!window.confirm('Are you sure you want to delete this shift?')) return;
 
         try {
@@ -74,6 +79,7 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
     };
 
     const handleSave = async () => {
+        if (!isSuperAdmin) return;
         console.log('Saving shift:', formData);
         if (!formData.name || !formData.start_time || !formData.end_time) {
             return showToast('Please fill all fields', 'error');
@@ -106,52 +112,54 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
 
     const content = (
         <div className={isStandalone ? styles.standaloneContent : styles.content}>
-            <div className={styles.form}>
-                <h3>{editingShift ? 'Edit Shift' : 'Create New Shift'}</h3>
-                <div className={styles.formGroup}>
-                    <input
-                        type="text"
-                        placeholder="Shift Name (e.g. Shift A)"
-                        value={formData.name}
-                        onChange={e => setFormData({ ...formData, name: e.target.value })}
-                        className={styles.input}
-                    />
-                    <input
-                        type="time"
-                        value={formData.start_time}
-                        onChange={e => setFormData({ ...formData, start_time: e.target.value })}
-                        className={styles.input}
-                    />
-                    <input
-                        type="time"
-                        value={formData.end_time}
-                        onChange={e => setFormData({ ...formData, end_time: e.target.value })}
-                        className={styles.input}
-                    />
-                    <select
-                        value={formData.status}
-                        onChange={e => setFormData({ ...formData, status: e.target.value })}
-                        className={styles.select}
-                    >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                    </select>
-                    <button onClick={handleSave} className={styles.saveBtn}>
-                        {editingShift ? 'Update' : 'Create'}
-                    </button>
-                    {editingShift && (
-                        <button
-                            onClick={() => {
-                                setEditingShift(null);
-                                setFormData({ name: '', start_time: '', end_time: '', status: 'active' });
-                            }}
-                            className={styles.cancelBtn}
+            {isSuperAdmin && (
+                <div className={styles.form}>
+                    <h3>{editingShift ? 'Edit Shift' : 'Create New Shift'}</h3>
+                    <div className={styles.formGroup}>
+                        <input
+                            type="text"
+                            placeholder="Shift Name (e.g. Shift A)"
+                            value={formData.name}
+                            onChange={e => setFormData({ ...formData, name: e.target.value })}
+                            className={styles.input}
+                        />
+                        <input
+                            type="time"
+                            value={formData.start_time}
+                            onChange={e => setFormData({ ...formData, start_time: e.target.value })}
+                            className={styles.input}
+                        />
+                        <input
+                            type="time"
+                            value={formData.end_time}
+                            onChange={e => setFormData({ ...formData, end_time: e.target.value })}
+                            className={styles.input}
+                        />
+                        <select
+                            value={formData.status}
+                            onChange={e => setFormData({ ...formData, status: e.target.value })}
+                            className={styles.select}
                         >
-                            Cancel Edit
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                        <button onClick={handleSave} className={styles.saveBtn}>
+                            {editingShift ? 'Update' : 'Create'}
                         </button>
-                    )}
+                        {editingShift && (
+                            <button
+                                onClick={() => {
+                                    setEditingShift(null);
+                                    setFormData({ name: '', start_time: '', end_time: '', status: 'active' });
+                                }}
+                                className={styles.cancelBtn}
+                            >
+                                Cancel Edit
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             <div className={styles.list}>
                 <h3>Existing Shifts</h3>
@@ -163,7 +171,7 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
                                 <th>Start</th>
                                 <th>End</th>
                                 <th>Status</th>
-                                <th>Action</th>
+                                {isSuperAdmin && <th>Action</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -177,16 +185,18 @@ export const ShiftManagement: React.FC<ShiftManagementProps> = ({ isOpen = true,
                                             {shift.status}
                                         </span>
                                     </td>
-                                    <td>
-                                        <button onClick={() => handleEdit(shift)} className={styles.editBtn}>Edit</button>
-                                        <button
-                                            onClick={() => handleDelete(shift.id)}
-                                            className={styles.deleteBtn}
-                                            style={{ marginLeft: '0.5rem', background: '#ef4444', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                                        >
-                                            Delete
-                                        </button>
-                                    </td>
+                                    {isSuperAdmin && (
+                                        <td>
+                                            <button onClick={() => handleEdit(shift)} className={styles.editBtn}>Edit</button>
+                                            <button
+                                                onClick={() => handleDelete(shift.id)}
+                                                className={styles.deleteBtn}
+                                                style={{ marginLeft: '0.5rem', background: '#ef4444', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}
+                                            >
+                                                Delete
+                                            </button>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>

@@ -6,6 +6,7 @@ import styles from './QCInspection.module.css';
 import { CompletedInspectionsTable } from './CompletedInspectionsTable';
 import { ShiftManagement } from './ShiftManagement';
 import { ROLES } from '../../constants/roles';
+import { formatIST } from '../../utils/dateUtils';
 
 interface ChecklistHistory {
     status: 'PASS' | 'FAIL' | 'REJECTED';
@@ -71,6 +72,7 @@ export const QCInspection: React.FC = () => {
     const [shifts, setShifts] = useState<{ name: string, start_time: string, end_time: string }[]>([]);
     const [unitTpns, setUnitTpns] = useState<string[]>([]);
     const [unitPns, setUnitPns] = useState<string[]>([]);
+    const [mappings, setMappings] = useState<Record<string, { unitTpn: string, band: string, pamCount: number }>>({});
 
     const [isShiftManagementOpen, setIsShiftManagementOpen] = useState(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -86,6 +88,7 @@ export const QCInspection: React.FC = () => {
             setShifts(data.shifts);
             setUnitTpns(data.unitTpns);
             setUnitPns(data.unitPns);
+            setMappings(data.mappings || {});
         } catch (error) {
             console.error('Error fetching form data:', error);
             showToast('Failed to load form data: ' + String(error), 'error');
@@ -297,6 +300,16 @@ export const QCInspection: React.FC = () => {
             } else {
                 showToast('Value already exists', 'info');
             }
+            // Check for mapping even after scan
+            const mapping = mappings[value];
+            if (mapping) {
+                setUnitTpn(mapping.unitTpn);
+                setBand(mapping.band);
+                if (mapping.band === 'DB') {
+                    setPam3('');
+                    setPam4('');
+                }
+            }
         } catch (error) {
             console.error('Error scanning TPN:', error);
             showToast('Failed to scan TPN', 'error');
@@ -329,6 +342,16 @@ export const QCInspection: React.FC = () => {
                 showToast('PN added to list', 'success');
             } else {
                 showToast('Value already exists', 'info');
+            }
+            // Trigger auto-mapping if exists
+            const mapping = mappings[value];
+            if (mapping) {
+                setUnitTpn(mapping.unitTpn);
+                setBand(mapping.band);
+                if (mapping.band === 'DB') {
+                    setPam3('');
+                    setPam4('');
+                }
             }
         } catch (error) {
             console.error('Error scanning PN:', error);
@@ -601,7 +624,7 @@ export const QCInspection: React.FC = () => {
                         <label>Date & Time</label>
                         <input
                             type="text"
-                            value={currentTime.toLocaleString()}
+                            value={formatIST(currentTime)}
                             readOnly
                             className={styles.input}
                             style={{ backgroundColor: '#f3f4f6' }}
@@ -660,41 +683,27 @@ export const QCInspection: React.FC = () => {
                 <div className={styles.formGrid}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', gridColumn: 'span 2' }}>
                         <div className={styles.inputGroup}>
-                            <label>Unit TPN</label>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <input
-                                    list="unitTpns"
-                                    value={unitTpn}
-                                    onChange={e => setUnitTpn(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleScanTpn();
-                                    }}
-                                    className={styles.input}
-                                    placeholder="Scan or Select TPN"
-                                />
-                                <datalist id="unitTpns">{unitTpns.map(t => <option key={t} value={t} />)}</datalist>
-                                <button
-                                    onClick={handleScanTpn}
-                                    style={{
-                                        padding: '0 1rem',
-                                        background: '#4f46e5',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Scan
-                                </button>
-                            </div>
-                        </div>
-                        <div className={styles.inputGroup}>
                             <label>Unit PN</label>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                 <input
                                     list="unitPns"
                                     value={unitPn}
-                                    onChange={e => setUnitPn(e.target.value)}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        setUnitPn(val);
+                                        const mapping = mappings[val];
+                                        if (mapping) {
+                                            setUnitTpn(mapping.unitTpn);
+                                            setBand(mapping.band);
+                                            if (mapping.band === 'DB') {
+                                                setPam3('');
+                                                setPam4('');
+                                            }
+                                        } else if (!val) {
+                                            setUnitTpn('');
+                                            setBand('');
+                                        }
+                                    }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleScanPn();
                                     }}
@@ -711,6 +720,38 @@ export const QCInspection: React.FC = () => {
                                         border: 'none',
                                         borderRadius: '6px',
                                         cursor: 'pointer'
+                                    }}
+                                >
+                                    Scan
+                                </button>
+                            </div>
+                        </div>
+                        <div className={styles.inputGroup}>
+                            <label>Unit TPN</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input
+                                    list="unitTpns"
+                                    value={unitTpn}
+                                    onChange={e => setUnitTpn(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleScanTpn();
+                                    }}
+                                    className={styles.input}
+                                    placeholder="Scan or Select TPN"
+                                    readOnly={!!mappings[unitPn]}
+                                    style={mappings[unitPn] ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
+                                />
+                                <datalist id="unitTpns">{unitTpns.map(t => <option key={t} value={t} />)}</datalist>
+                                <button
+                                    onClick={handleScanTpn}
+                                    disabled={!!mappings[unitPn]}
+                                    style={{
+                                        padding: '0 1rem',
+                                        background: mappings[unitPn] ? '#9ca3af' : '#4f46e5',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: mappings[unitPn] ? 'not-allowed' : 'pointer'
                                     }}
                                 >
                                     Scan
@@ -927,6 +968,8 @@ export const QCInspection: React.FC = () => {
                                     }
                                 }}
                                 className={styles.select}
+                                disabled={!!mappings[unitPn]}
+                                style={mappings[unitPn] ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                             >
                                 <option value="">Select Band</option>
                                 <option value="B1">B1</option>
@@ -1170,7 +1213,7 @@ export const QCInspection: React.FC = () => {
             <div className={styles.footer}>
                 {/* Final Status Selection: Only visible when the checklist is complete or rejected */}
                 <div className={styles.finalStatus}>
-                    <label>Final Status</label>
+                    <label><b>Final Status</b></label>
                     <div className={styles.statusButtons}>
                         {deAssemblyStatus === 'REJECTED' ? (
                             <button className={`${styles.finalBtn} ${styles.failActive}`}>REJECTED</button>

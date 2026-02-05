@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 import { useToast } from '../../components/Toast';
 import { Pagination } from '../../components/Pagination';
+import { formatIST } from '../../utils/dateUtils';
 
 interface Inspection {
     id: number;
@@ -56,7 +57,7 @@ export const CompletedInspectionsTable: React.FC<Props> = ({ refreshTrigger = 0 
     const handleDownload = async (id: number) => {
         try {
             // 🔹 Get JWT token manually
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('auth_token');
 
             // 🔹 Use native fetch for binary file
             const response = await fetch(`/api/qc/export?id=${id}`, {
@@ -175,7 +176,7 @@ export const CompletedInspectionsTable: React.FC<Props> = ({ refreshTrigger = 0 
                                         {item.inspected_by}
                                     </td>
                                     <td style={{ padding: '0.75rem 1rem' }}>
-                                        {new Date(item.inspection_date_time).toLocaleString()}
+                                        {formatIST(item.inspection_date_time)}
                                     </td>
                                     <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
                                         <span

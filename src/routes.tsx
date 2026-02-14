@@ -11,9 +11,8 @@ import { IQC } from './pages/pre-testing/IQC';
 import { Warehouse } from './pages/pre-testing/Warehouse';
 import { Impedance } from './pages/pre-testing/Impedance';
 import { AdminPanel } from './pages/admin/AdminPanel';
-import { Calibration } from './pages/pre-testing/Calibration';
-import { ACLR } from './pages/pre-testing/ACLR';
-import { FinalQC } from './pages/pre-testing/FinalQC';
+import { PreCalibration } from './pages/pre-testing/PreCalibration';
+import { PreACLR } from './pages/pre-testing/PreACLR';
 import { QCInspection } from './pages/qc-inspection/QCInspection';
 import { ShiftManagement } from './pages/qc-inspection/ShiftManagement';
 import { VacuumLeakTest } from './pages/vacuum-leak-test/VacuumLeakTest';
@@ -132,23 +131,15 @@ export const router = createBrowserRouter([
                 path: '/pre-testing/calibration',
                 element: (
                     <ProtectedRoute>
-                        <Calibration />
+                        <PreCalibration />
                     </ProtectedRoute>
                 ),
             },
             {
-                path: '/pre-testing/aclr',
+                path: '/pre-testing/pre-aclr',
                 element: (
                     <ProtectedRoute>
-                        <ACLR />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/pre-testing/final-qc',
-                element: (
-                    <ProtectedRoute>
-                        <FinalQC />
+                        <PreACLR />
                     </ProtectedRoute>
                 ),
             },

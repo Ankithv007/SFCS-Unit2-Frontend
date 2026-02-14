@@ -17,6 +17,8 @@ interface Batch {
     warehouse_expected_quantity?: number;
     passed_count: number;
     failed_count: number;
+    rework_count: number;
+    scrap_count: number;
 }
 
 interface Component {
@@ -24,7 +26,7 @@ interface Component {
     barcode: string;
     scanned_by: string;
     scanned_at: string;
-    status: 'ACCEPTED' | 'REJECTED';
+    status: 'ACCEPTED' | 'REJECTED' | 'REWORK' | 'SCRAP';
     remarks: string;
     previous_batch?: string;
 }
@@ -84,13 +86,15 @@ export const IQC: React.FC = () => {
         const pollInterval = setInterval(async () => {
             try {
                 const data = await apiFetch('/api/pretest/iqc/batches');
-                setBatches(data);
+                if (data) {
+                    setBatches(data);
 
-                // Update active batch live count if selected
-                if (activeBatch) {
-                    const updatedBatch = data.find((b: Batch) => b.id === activeBatch.id);
-                    if (updatedBatch && updatedBatch.warehouse_received_quantity !== activeBatch.warehouse_received_quantity) {
-                        setActiveBatch(prev => prev ? { ...prev, warehouse_received_quantity: updatedBatch.warehouse_received_quantity } : null);
+                    // Update active batch live count if selected
+                    if (activeBatch) {
+                        const updatedBatch = data.find((b: Batch) => b.id === activeBatch.id);
+                        if (updatedBatch && updatedBatch.warehouse_received_quantity !== activeBatch.warehouse_received_quantity) {
+                            setActiveBatch(prev => prev ? { ...prev, warehouse_received_quantity: updatedBatch.warehouse_received_quantity } : null);
+                        }
                     }
                 }
             } catch (error) {
@@ -104,7 +108,7 @@ export const IQC: React.FC = () => {
     const fetchWarehouseBatches = async () => {
         try {
             const data = await apiFetch('/api/pretest/warehouse/batches');
-            setWarehouseBatches(data);
+            if (data) setWarehouseBatches(data);
         } catch (error) {
             console.error('Error fetching warehouse batches:', error);
         }
@@ -125,7 +129,7 @@ export const IQC: React.FC = () => {
     const fetchBatches = async () => {
         try {
             const data = await apiFetch('/api/pretest/iqc/batches');
-            setBatches(data);
+            if (data) setBatches(data);
         } catch (error) {
             console.error('Error fetching batches:', error);
             showToast('Failed to load batches', 'error');
@@ -219,6 +223,38 @@ export const IQC: React.FC = () => {
         await submitScan(finalBarcode, false);
     };
 
+    const handleUpdateStatus = async (component: Component, newStatus: 'ACCEPTED' | 'REWORK' | 'SCRAP') => {
+        let reason = '';
+        if (newStatus === 'REWORK' || newStatus === 'SCRAP') {
+            reason = prompt(`Enter mandatory remarks for ${newStatus}:`) || '';
+            if (!reason.trim()) {
+                showToast(`Remarks are mandatory for ${newStatus}`, 'error');
+                return;
+            }
+        }
+
+        try {
+            const updated = await apiFetch(`/api/pretest/iqc/components/${component.id}/status`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    status: newStatus,
+                    remarks: reason
+                })
+            });
+
+            showToast(`Component marked as ${newStatus}`, newStatus === 'ACCEPTED' ? 'success' : 'error');
+
+            // Update local state
+            setScannedComponents(prev => prev.map(c =>
+                c.id === component.id ? { ...c, status: updated.status, remarks: updated.remarks } : c
+            ));
+            fetchBatches(); // Update counts
+        } catch (error: any) {
+            console.error('Error updating status:', error);
+            showToast(error.message || 'Failed to update status', 'error');
+        }
+    };
+
     const submitScan = async (code: string, forceMove: boolean) => {
         // Validation: Must start with AY- and be 15 chars
         if (!code.toUpperCase().startsWith('AY-')) {
@@ -256,53 +292,10 @@ export const IQC: React.FC = () => {
             fetchBatches();
         } catch (error: any) {
             console.error('Error scanning component:', error);
-
-            // Handle 409 Conflict with MOVE_REQUIRED
-            // apiFetch throws error with message. We might need to parse it if it's a JSON error response.
-            // But apiFetch implementation throws errorMsg = data.message || errorMsg.
-            // If the backend sends { error: "...", code: "MOVE_REQUIRED" }, apiFetch throws "..."
-            // I need to check if I can access the error code.
-            // The current apiFetch implementation throws an Error with the message.
-            // I might need to adjust apiFetch to throw an object or handle this specific case.
-            // For now, let's assume the error message contains the text or I'll modify apiFetch to be more robust later if needed.
-            // Actually, let's look at apiFetch again. It throws new Error(errorMsg).
-            // So I can't easily access `error.code`.
-            // I should probably modify apiFetch to throw the whole error object or a custom ApiError.
-            // But for now, let's try to rely on the message or just catch generic error.
-
-            // Wait, the original code checked `response.status === 409 && error.code === 'MOVE_REQUIRED'`.
-            // My apiFetch hides the status code.
-            // I should update apiFetch to throw a custom error with status and data.
-
             showToast(error.message || 'Scan failed', 'error');
-            if (error.message && error.message.includes('duplicate')) {
+            if (error.message && (error.message.includes('duplicate') || error.message.includes('scrapped') || error.message.includes('Rework'))) {
                 setBarcode('');
             }
-        }
-    };
-
-    const handleMarkAsFailed = async (component: Component) => {
-        const reason = prompt('Enter remarks for rejection:');
-        if (!reason) return; // User cancelled or empty
-
-        try {
-            await apiFetch(`/api/pretest/iqc/components/${component.id}/status`, {
-                method: 'PUT',
-                body: JSON.stringify({
-                    status: 'REJECTED',
-                    remarks: reason
-                })
-            });
-
-            showToast('Component marked as Failed', 'error'); // Red toast for failure
-            // Update local state
-            setScannedComponents(prev => prev.map(c =>
-                c.id === component.id ? { ...c, status: 'REJECTED', remarks: reason } : c
-            ));
-            fetchBatches(); // Update counts
-        } catch (error: any) {
-            console.error('Error updating status:', error);
-            showToast(error.message || 'Failed to update status', 'error');
         }
     };
 
@@ -346,26 +339,21 @@ export const IQC: React.FC = () => {
     // Target is ALWAYS Warehouse Total Count (Expected Qty).
     // EXCEPTION: If Warehouse scans MORE than expected (Extras), then Target increases to match Received Qty.
     const getTargetQty = (b: Batch) => {
-        // User Feedback: "Warehouse Total Count" refers to the actual Scanned Quantity (Received),
-        // not the initial Plan (Expected). This supports the "Reversible" workflow where
-        // adding items (increasing Scanned Qty) moves batch back to Pending.
-
-        const warehouseReceived = Number(b.warehouse_received_quantity) || 0;
-
-        // We use the actual scanned count from Warehouse as the target.
-        // If Warehouse has scanned 4, and we processed 4, we are "Completed" (Up to date).
-        // If Warehouse scans a 5th, Target becomes 5, we become "Pending".
-
-        // Fallback: If warehouse data is missing (e.g. standalone IQC batch), use local expected.
-        if (warehouseReceived === 0 && !b.warehouse_received_quantity) {
-            return Number(b.expected_quantity) || 0;
-        }
-
-        return warehouseReceived;
+        return Number(b.expected_quantity) || 0;
     };
 
-    const completedBatches = batches.filter(b => (b.passed_count + b.failed_count) >= getTargetQty(b));
-    const pendingBatches = batches.filter(b => (b.passed_count + b.failed_count) < getTargetQty(b));
+    const completedBatches = batches.filter(b => {
+        const target = getTargetQty(b);
+        const processed = b.passed_count + b.scrap_count;
+        // Batch moves to Completed only if all Rework -> Pass or Scrap
+        return processed >= target && b.rework_count === 0;
+    });
+    const pendingBatches = batches.filter(b => {
+        const target = getTargetQty(b);
+        const processed = b.passed_count + b.scrap_count;
+        // If any Rework exists, batch stays in Pending Batches
+        return processed < target || b.rework_count > 0;
+    });
 
     // Pagination Logic
     const paginatedPendingBatches = pendingBatches.slice((pendingPage - 1) * ITEMS_PER_PAGE, pendingPage * ITEMS_PER_PAGE);
@@ -501,8 +489,9 @@ export const IQC: React.FC = () => {
                                         <th>Created By</th>
                                         <th>Date</th>
                                         <th>Received Qty</th>
-                                        <th>Total passed QTY</th>
-                                        <th>Failed</th>
+                                        <th>Passed</th>
+                                        <th>Rework</th>
+                                        <th>Scrap</th>
                                         <th>Download</th>
                                         <th>Action</th>
                                     </tr>
@@ -513,25 +502,35 @@ export const IQC: React.FC = () => {
                                             <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
                                             <td>{batch.created_by}</td>
                                             <td>{new Date(batch.created_at).toLocaleDateString()}</td>
-                                            <td className={styles.statusBlue}>{batch.passed_count + batch.failed_count} / {getTargetQty(batch)}</td>
+                                            <td className={styles.statusBlue}>{batch.passed_count + batch.rework_count + batch.scrap_count} / {getTargetQty(batch)}</td>
                                             <td className={styles.statusGreen}>{batch.passed_count}</td>
-                                            <td className={styles.statusRed}>{batch.failed_count}</td>
+                                            <td className={styles.statusYellow}>{batch.rework_count}</td>
+                                            <td className={styles.statusRed}>{batch.scrap_count}</td>
                                             <td>
                                                 <button
                                                     className={styles.secondaryButton}
                                                     onClick={async () => {
                                                         try {
-                                                            const blob = await apiFetch(`/api/pretest/iqc/batches/${batch.id}/download`, {
-                                                                headers: { 'Accept': 'application/blob' }
-                                                            });
+                                                            const blob = await apiFetch(`/api/pretest/iqc/batches/${batch.id}/download`);
                                                             const url = window.URL.createObjectURL(blob);
-                                                            window.open(url, '_blank');
-                                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                            const link = document.createElement('a');
+                                                            link.href = url;
+
+                                                            const now = new Date();
+                                                            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+                                                            const cleanBatch = batch.batch_number.replace(/[^a-zA-Z0-9_-]/g, '_');
+                                                            const fileName = `IQC_Report_${cleanBatch}_${timestamp}.xlsx`;
+
+                                                            link.setAttribute('download', fileName);
+                                                            document.body.appendChild(link);
+                                                            link.click();
+                                                            document.body.removeChild(link);
+                                                            window.URL.revokeObjectURL(url);
                                                         } catch (e) {
                                                             showToast('Download failed', 'error');
                                                         }
                                                     }}
-                                                    title="Download CSV Report"
+                                                    title="Download Excel Report"
                                                 >
                                                     📥
                                                 </button>
@@ -582,8 +581,9 @@ export const IQC: React.FC = () => {
                                         <th>Created By</th>
                                         <th>Date</th>
                                         <th>Received Qty</th>
-                                        <th>Total passed QTY</th>
-                                        <th>Failed</th>
+                                        <th>Passed</th>
+                                        <th>Rework</th>
+                                        <th>Scrap</th>
                                         <th>Download</th>
                                         <th>Action</th>
                                     </tr>
@@ -596,7 +596,8 @@ export const IQC: React.FC = () => {
                                             <td>{new Date(batch.created_at).toLocaleDateString()}</td>
                                             <td className={styles.statusBlue}>{getTargetQty(batch)}</td>
                                             <td className={styles.statusGreen}>{batch.passed_count}</td>
-                                            <td className={styles.statusRed}>{batch.failed_count}</td>
+                                            <td className={styles.statusYellow}>{batch.rework_count}</td>
+                                            <td className={styles.statusRed}>{batch.scrap_count}</td>
                                             <td>
                                                 <button
                                                     className={styles.secondaryButton}
@@ -606,8 +607,13 @@ export const IQC: React.FC = () => {
                                                                 headers: { 'Accept': 'application/blob' }
                                                             });
                                                             const url = window.URL.createObjectURL(blob);
-                                                            window.open(url, '_blank');
-                                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                            const link = document.createElement('a');
+                                                            link.href = url;
+                                                            link.setAttribute('download', `iqc_batch_${batch.batch_number}.csv`);
+                                                            document.body.appendChild(link);
+                                                            link.click();
+                                                            document.body.removeChild(link);
+                                                            window.URL.revokeObjectURL(url);
                                                         } catch (e) {
                                                             showToast('Download failed', 'error');
                                                         }
@@ -665,7 +671,8 @@ export const IQC: React.FC = () => {
                                 <span>Total Scanned: <strong>{scannedComponents.length}</strong> / {getTargetQty(activeBatch)}</span>
                                 <span style={{ color: '#2563eb', fontWeight: 600 }}>🏭 Available: {activeBatch.warehouse_received_quantity || 0}</span>
                                 <span style={{ color: '#10b981', fontWeight: 600 }}>✅ Passed: {scannedComponents.filter(c => c.status === 'ACCEPTED').length}</span>
-                                <span style={{ color: '#ef4444', fontWeight: 600 }}>❌ Failed: {scannedComponents.filter(c => c.status === 'REJECTED').length}</span>
+                                <span style={{ color: '#eab308', fontWeight: 600 }}>🔄 Rework: {scannedComponents.filter(c => c.status === 'REWORK').length}</span>
+                                <span style={{ color: '#ef4444', fontWeight: 600 }}>🗑 Scrap: {scannedComponents.filter(c => c.status === 'SCRAP').length}</span>
                             </div>
                         </div>
                         <button
@@ -723,19 +730,42 @@ export const IQC: React.FC = () => {
                                         <td style={{ fontWeight: 600 }}>{comp.barcode}</td>
                                         <td>{comp.scanned_by}</td>
                                         <td>{new Date(comp.scanned_at).toLocaleTimeString()}</td>
-                                        <td className={comp.status === 'ACCEPTED' ? styles.statusGreen : styles.statusRed}>
+                                        <td className={comp.status === 'ACCEPTED' ? styles.statusGreen : (comp.status === 'REWORK' ? styles.statusYellow : (comp.status === 'SCRAP' ? styles.statusRed : ''))}>
                                             {comp.status}
                                         </td>
                                         <td>{comp.remarks || '-'}</td>
                                         <td>
-                                            {comp.status === 'ACCEPTED' && (
-                                                <button
-                                                    className={styles.deleteTextButton}
-                                                    onClick={() => handleMarkAsFailed(comp)}
-                                                >
-                                                    Mark as Failed
-                                                </button>
-                                            )}
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                {comp.status !== 'SCRAP' && (
+                                                    <>
+                                                        {comp.status !== 'ACCEPTED' && (
+                                                            <button
+                                                                className={styles.statusGreen}
+                                                                style={{ border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600 }}
+                                                                onClick={() => handleUpdateStatus(comp, 'ACCEPTED')}
+                                                            >
+                                                                Pass
+                                                            </button>
+                                                        )}
+                                                        {comp.status !== 'REWORK' && (
+                                                            <button
+                                                                className={styles.statusYellow}
+                                                                style={{ border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600 }}
+                                                                onClick={() => handleUpdateStatus(comp, 'REWORK')}
+                                                            >
+                                                                Rework
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            className={styles.statusRed}
+                                                            style={{ border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600 }}
+                                                            onClick={() => handleUpdateStatus(comp, 'SCRAP')}
+                                                        >
+                                                            Scrap
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -748,7 +778,8 @@ export const IQC: React.FC = () => {
                         />
                     </div>
                 </>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 };

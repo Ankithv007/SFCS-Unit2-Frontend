@@ -86,7 +86,7 @@ export const Warehouse: React.FC = () => {
     const fetchBatches = async () => {
         try {
             const data = await apiFetch('/api/pretest/warehouse/batches');
-            setBatches(data);
+            if (data) setBatches(data);
         } catch (error) {
             console.error('Error fetching batches:', error);
             showToast('Failed to load batches', 'error');
@@ -140,7 +140,7 @@ export const Warehouse: React.FC = () => {
     const fetchScans = async (batchId: number) => {
         try {
             const data = await apiFetch(`/api/pretest/warehouse/batches/${batchId}/scans`);
-            setScannedItems(data);
+            if (data) setScannedItems(data);
         } catch (error) {
             console.error('Error fetching scans:', error);
         }
@@ -414,17 +414,26 @@ export const Warehouse: React.FC = () => {
                                                     className={styles.secondaryButton}
                                                     onClick={async () => {
                                                         try {
-                                                            const blob = await apiFetch(`/api/pretest/warehouse/batches/${batch.id}/download`, {
-                                                                headers: { 'Accept': 'application/blob' }
-                                                            });
+                                                            const blob = await apiFetch(`/api/pretest/warehouse/batches/${batch.id}/download`);
                                                             const url = window.URL.createObjectURL(blob);
-                                                            window.open(url, '_blank');
-                                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                            const link = document.createElement('a');
+                                                            link.href = url;
+
+                                                            const now = new Date();
+                                                            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+                                                            const cleanBatch = batch.batch_number.replace(/[^a-zA-Z0-9_-]/g, '_');
+                                                            const fileName = `Warehouse_Report_${cleanBatch}_${timestamp}.xlsx`;
+
+                                                            link.setAttribute('download', fileName);
+                                                            document.body.appendChild(link);
+                                                            link.click();
+                                                            document.body.removeChild(link);
+                                                            window.URL.revokeObjectURL(url);
                                                         } catch (e) {
                                                             showToast('Download failed', 'error');
                                                         }
                                                     }}
-                                                    title="Download CSV Report"
+                                                    title="Download Excel Report"
                                                 >
                                                     📥
                                                 </button>

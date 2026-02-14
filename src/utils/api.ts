@@ -42,16 +42,24 @@ export async function apiFetch(
         headers,
     });
 
-    if (!response.ok) {
-        let errorMsg = 'API error';
+    // 304 is NOT an error, it means the browser is using a valid cached response.
+    if (!response.ok && response.status !== 304) {
+        let errorMsg = `API Error (${response.status})`;
         try {
-            const data = await response.json();
-            errorMsg = data.message || errorMsg;
-        } catch {
+            const text = await response.text();
             try {
-                const text = await response.text();
-                if (text) errorMsg = text;
-            } catch { }
+                const data = JSON.parse(text);
+                // Check all common error fields from various backend frameworks
+                errorMsg = data.error || data.message || data.msg || data.err || errorMsg;
+                // If it's a 409 and we still have the default msg, make it clearer
+                if (response.status === 409 && errorMsg.startsWith('API Error')) {
+                    errorMsg = 'Duplicate scan detected';
+                }
+            } catch {
+                if (text && text.length < 200) errorMsg = text;
+            }
+        } catch (e) {
+            console.error('Failed to parse error response', e);
         }
 
         if (response.status === 401) {
@@ -66,7 +74,16 @@ export async function apiFetch(
     }
 
     const contentType = response.headers.get('Content-Type');
-    if (contentType && (contentType.includes('application/octet-stream') || contentType.includes('application/blob') || contentType.includes('image/'))) {
+    const isBlob = contentType && (
+        contentType.includes('application/octet-stream') ||
+        contentType.includes('application/blob') ||
+        contentType.includes('text/csv') ||
+        contentType.includes('application/vnd.openxmlformats-officedocument') ||
+        contentType.includes('application/vnd.ms-excel') ||
+        contentType.includes('image/')
+    );
+
+    if (isBlob) {
         return response.blob();
     }
 

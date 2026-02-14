@@ -150,16 +150,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             <span className={styles.menuIcon}>⚖️</span> Pre-Calibration
                         </div>
                         <div
-                            className={`${styles.submenuItem} ${isActive('/pre-testing/aclr') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/pre-testing/aclr')}
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/pre-aclr') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/pre-aclr')}
                         >
-                            <span className={styles.menuIcon}>📶</span> Pre-ACLR
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/pre-testing/final-qc') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/pre-testing/final-qc')}
-                        >
-                            <span className={styles.menuIcon}>🛡️</span> Pre-Rework
+                            <span className={styles.menuIcon}>📡</span> Pre-ACLR
                         </div>
                     </div>
                 )}

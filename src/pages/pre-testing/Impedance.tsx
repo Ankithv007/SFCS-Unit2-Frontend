@@ -16,6 +16,7 @@ interface Batch {
     passed_count?: number;
     failed_count?: number;
     iqc_passed_count?: number;
+    warehouse_received_quantity?: number;
     tested_by?: string;
     started_at?: string;
 }
@@ -166,6 +167,12 @@ export const Impedance: React.FC = () => {
     useEffect(() => {
         const intervalId = setInterval(() => {
             fetchBatches(); // Keep batch counts updated
+
+            // Poll for available IQC batches if on the creation screen
+            if (!isSessionActive) {
+                fetchIQCBatches();
+            }
+
             if (isSessionActive && currentBatchId) {
                 fetchSessionScans(currentBatchId); // Keep scan list updated (handle rollbacks)
             }
@@ -648,7 +655,7 @@ export const Impedance: React.FC = () => {
                                                     >
                                                         Resume
                                                     </button>
-                                                    {['Admin', 'Super Admin', 'Manager'].includes(user?.role || '') && (
+                                                    {['admin', 'super admin', 'manager'].includes(user?.role?.toLowerCase() || '') && (
                                                         <button
                                                             className={styles.deleteTextButton}
                                                             onClick={async () => {
@@ -847,6 +854,9 @@ export const Impedance: React.FC = () => {
                         <div style={{ color: '#2563eb', fontWeight: 600 }}>
                             🏭 Available: {activeBatch?.iqc_passed_count || 0}
                         </div>
+                        <div style={{ color: '#6366f1', fontWeight: 600 }}>
+                            📦 From Warehouse: {activeBatch?.warehouse_received_quantity || 0}
+                        </div>
                         <div style={{ color: '#10b981', fontWeight: 600 }}>
                             ✅ Passed: {activeBatch?.passed_count || 0}
                         </div>
@@ -929,7 +939,7 @@ export const Impedance: React.FC = () => {
                                                     <span style={{ fontSize: '1.2rem' }}>
                                                         {item[testKey] !== false ? '✅' : '❌'}
                                                     </span>
-                                                    {['Admin', 'Super Admin', 'Manager'].includes(user?.role || '') && !completedBatches.some(b => b.id === currentBatchId) && (
+                                                    {['admin', 'super admin', 'manager'].includes(user?.role?.toLowerCase() || '') && !completedBatches.some(b => b.id === currentBatchId) && (
                                                         <button
                                                             className={styles.dropdownTrigger}
                                                             onClick={(e) => {

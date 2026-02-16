@@ -85,22 +85,29 @@ export const IQC: React.FC = () => {
     useEffect(() => {
         const pollInterval = setInterval(async () => {
             try {
-                const data = await apiFetch('/api/pretest/iqc/batches');
-                if (data) {
-                    setBatches(data);
+                // Poll IQC Batches
+                const iqcData = await apiFetch('/api/pretest/iqc/batches');
+                if (iqcData) {
+                    setBatches(iqcData);
 
                     // Update active batch live count if selected
                     if (activeBatch) {
-                        const updatedBatch = data.find((b: Batch) => b.id === activeBatch.id);
+                        const updatedBatch = iqcData.find((b: Batch) => b.id === activeBatch.id);
                         if (updatedBatch && updatedBatch.warehouse_received_quantity !== activeBatch.warehouse_received_quantity) {
                             setActiveBatch(prev => prev ? { ...prev, warehouse_received_quantity: updatedBatch.warehouse_received_quantity } : null);
                         }
                     }
                 }
+
+                // Poll Warehouse Batches (Important for the "Create Batch" screen)
+                if (!activeBatch) {
+                    const whData = await apiFetch('/api/pretest/warehouse/batches');
+                    if (whData) setWarehouseBatches(whData);
+                }
             } catch (error) {
                 console.error('Polling error:', error);
             }
-        }, 2000); // Poll every 2 seconds
+        }, 3000); // Poll every 3 seconds
 
         return () => clearInterval(pollInterval);
     }, [activeBatch]);
@@ -625,7 +632,7 @@ export const IQC: React.FC = () => {
                                             </td>
                                             <td>
                                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                    {['Admin', 'Super Admin', 'Manager'].includes(user?.role || '') && (
+                                                    {['admin', 'super admin', 'manager'].includes(user?.role?.toLowerCase() || '') && (
                                                         <button
                                                             className={styles.secondaryButton}
                                                             onClick={() => handleViewBatch(batch)}

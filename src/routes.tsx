@@ -13,6 +13,7 @@ import { Impedance } from './pages/pre-testing/Impedance';
 import { AdminPanel } from './pages/admin/AdminPanel';
 import { PreCalibration } from './pages/pre-testing/PreCalibration';
 import { PreACLR } from './pages/pre-testing/PreACLR';
+import { Trace } from './pages/pre-testing/Trace';
 import { QCInspection } from './pages/qc-inspection/QCInspection';
 import { ShiftManagement } from './pages/qc-inspection/ShiftManagement';
 import { VacuumLeakTest } from './pages/vacuum-leak-test/VacuumLeakTest';
@@ -140,6 +141,14 @@ export const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <PreACLR />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/pre-testing/trace',
+                element: (
+                    <ProtectedRoute>
+                        <Trace />
                     </ProtectedRoute>
                 ),
             },

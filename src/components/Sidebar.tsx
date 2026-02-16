@@ -155,6 +155,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                         >
                             <span className={styles.menuIcon}>📡</span> Pre-ACLR
                         </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/trace') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/trace')}
+                        >
+                            <span className={styles.menuIcon}>🕵️‍♂️</span> Trace
+                        </div>
                     </div>
                 )}
             </div>

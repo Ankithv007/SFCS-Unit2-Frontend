@@ -90,11 +90,11 @@ export const IQC: React.FC = () => {
                 if (iqcData) {
                     setBatches(iqcData);
 
-                    // Update active batch live count if selected
+                    // Update active batch live counts dynamically from the main array
                     if (activeBatch) {
                         const updatedBatch = iqcData.find((b: Batch) => b.id === activeBatch.id);
-                        if (updatedBatch && updatedBatch.warehouse_received_quantity !== activeBatch.warehouse_received_quantity) {
-                            setActiveBatch(prev => prev ? { ...prev, warehouse_received_quantity: updatedBatch.warehouse_received_quantity } : null);
+                        if (updatedBatch) {
+                            setActiveBatch(updatedBatch);
                         }
                     }
                 }
@@ -203,12 +203,14 @@ export const IQC: React.FC = () => {
             return;
         }
 
-        // Auto-submit if it matches AY- format (15 chars)
-        if (trimmed.startsWith('AY-') && trimmed.length === 15) {
+        const validPrefixes = ['AY-', 'AB-', 'BD-'];
+
+        // Auto-submit if it matches valid format (15 chars)
+        if (validPrefixes.some(prefix => trimmed.startsWith(prefix)) && trimmed.length === 15) {
             submitScan(trimmed, false);
         }
-        // Auto-submit if it matches SN:AY- format (18 chars)
-        else if (trimmed.startsWith('SN:AY-') && trimmed.length === 18) {
+        // Auto-submit if it matches SN: prefix format (18 chars)
+        else if (trimmed.startsWith('SN:') && validPrefixes.some(prefix => trimmed.substring(3).startsWith(prefix)) && trimmed.length === 18) {
             submitScan(trimmed.substring(3), false);
         }
     };
@@ -263,9 +265,10 @@ export const IQC: React.FC = () => {
     };
 
     const submitScan = async (code: string, forceMove: boolean) => {
-        // Validation: Must start with AY- and be 15 chars
-        if (!code.toUpperCase().startsWith('AY-')) {
-            showToast('Invalid Barcode. Serial Number must start with "AY-".', 'error');
+        const validPrefixes = ['AY-', 'AB-', 'BD-'];
+        // Validation: Must start with AY-, AB-, or BD- and be 15 chars
+        if (!validPrefixes.some(prefix => code.toUpperCase().startsWith(prefix))) {
+            showToast('Invalid Barcode. Serial Number must start with "AY-", "AB-", or "BD-".', 'error');
             setBarcode('');
             return;
         }
@@ -346,20 +349,20 @@ export const IQC: React.FC = () => {
     // Target is ALWAYS Warehouse Total Count (Expected Qty).
     // EXCEPTION: If Warehouse scans MORE than expected (Extras), then Target increases to match Received Qty.
     const getTargetQty = (b: Batch) => {
-        return Number(b.expected_quantity) || 0;
+        return Number(b.warehouse_received_quantity) || 0;
     };
 
     const completedBatches = batches.filter(b => {
         const target = getTargetQty(b);
         const processed = b.passed_count + b.scrap_count;
         // Batch moves to Completed only if all Rework -> Pass or Scrap
-        return processed >= target && b.rework_count === 0;
+        return processed >= target && target > 0 && b.rework_count === 0;
     });
     const pendingBatches = batches.filter(b => {
         const target = getTargetQty(b);
         const processed = b.passed_count + b.scrap_count;
         // If any Rework exists, batch stays in Pending Batches
-        return processed < target || b.rework_count > 0;
+        return target === 0 || processed < target || b.rework_count > 0;
     });
 
     // Pagination Logic
@@ -670,11 +673,11 @@ export const IQC: React.FC = () => {
                 </>
             ) : (
                 <>
-                    {/* Active Batch */}
                     <div className={styles.activeBatchHeader}>
                         <div>
-                            <h3>{activeBatch.batch_number}</h3>
-                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', fontSize: '0.95rem', color: '#4b5563' }}>
+                            <h3>Batch: {activeBatch.batch_number}</h3>
+                            <small>Created by: {activeBatch.created_by}</small>
+                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', fontSize: '0.95rem', color: '#4b5563', marginTop: '0.5rem' }}>
                                 <span>Total Scanned: <strong>{scannedComponents.length}</strong> / {getTargetQty(activeBatch)}</span>
                                 <span style={{ color: '#2563eb', fontWeight: 600 }}>🏭 Available: {activeBatch.warehouse_received_quantity || 0}</span>
                                 <span style={{ color: '#10b981', fontWeight: 600 }}>✅ Passed: {scannedComponents.filter(c => c.status === 'ACCEPTED').length}</span>

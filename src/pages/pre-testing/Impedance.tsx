@@ -287,14 +287,15 @@ export const Impedance: React.FC = () => {
             return;
         }
 
-        // Validate that the barcode starts with 'AY-' (ignoring 'SN:' prefix if present)
+        // Validate that the barcode starts with AY-, AB-, or BD- (ignoring 'SN:' prefix if present)
         let coreBarcode = scannedBarcode.trim();
         if (coreBarcode.toUpperCase().startsWith('SN:')) {
             coreBarcode = coreBarcode.substring(3).trim();
         }
 
-        if (!coreBarcode.toUpperCase().startsWith('AY-')) {
-            showToast('Invalid Barcode. Serial Number must start with "AY-".', 'error');
+        const validPrefixes = ['AY-', 'AB-', 'BD-'];
+        if (!validPrefixes.some(prefix => coreBarcode.toUpperCase().startsWith(prefix))) {
+            showToast('Invalid Barcode. Serial Number must start with "AY-", "AB-", or "BD-".', 'error');
             setBarcode('');
             return;
         }
@@ -339,9 +340,9 @@ export const Impedance: React.FC = () => {
     };
 
     // Filter and Paginate Batches
-    // Dynamic State: Pending if Scanned < IQC Passed, Completed if Scanned >= IQC Passed
-    const pendingBatches = batches.filter(b => (b.scan_count || 0) < (b.iqc_passed_count || 0));
-    const completedBatches = batches.filter(b => (b.scan_count || 0) >= (b.iqc_passed_count || 0));
+    // Dynamic State: Pending if Scanned < IQC Passed or IQC is 0, Completed if Scanned >= IQC Passed & IQC > 0
+    const pendingBatches = batches.filter(b => (b.iqc_passed_count || 0) === 0 || (b.scan_count || 0) < (b.iqc_passed_count || 0));
+    const completedBatches = batches.filter(b => (b.scan_count || 0) >= (b.iqc_passed_count || 0) && (b.iqc_passed_count || 0) > 0);
 
     const paginatedPendingBatches = pendingBatches.slice((pendingPage - 1) * ITEMS_PER_PAGE, pendingPage * ITEMS_PER_PAGE);
     const paginatedCompletedBatches = completedBatches.slice((completedPage - 1) * ITEMS_PER_PAGE, completedPage * ITEMS_PER_PAGE);

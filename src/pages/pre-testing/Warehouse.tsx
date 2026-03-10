@@ -161,12 +161,14 @@ export const Warehouse: React.FC = () => {
             return;
         }
 
-        // Auto-submit if it matches AY- format (15 chars)
-        if (trimmed.startsWith('AY-') && trimmed.length === 15) {
+        const validPrefixes = ['AY-', 'AB-', 'BD-'];
+
+        // Auto-submit if it matches valid format (15 chars)
+        if (validPrefixes.some(prefix => trimmed.startsWith(prefix)) && trimmed.length === 15) {
             submitScan(trimmed);
         }
-        // Auto-submit if it matches SN:AY- format (18 chars)
-        else if (trimmed.startsWith('SN:AY-') && trimmed.length === 18) {
+        // Auto-submit if it matches SN: prefix format (18 chars)
+        else if (trimmed.startsWith('SN:') && validPrefixes.some(prefix => trimmed.substring(3).startsWith(prefix)) && trimmed.length === 18) {
             submitScan(trimmed.substring(3));
         }
     };
@@ -200,9 +202,10 @@ export const Warehouse: React.FC = () => {
             return;
         }
 
-        // 2. Validate it starts with AY-
-        if (!code.toUpperCase().startsWith('AY-')) {
-            showToast('Invalid Barcode. Serial Number must start with "AY-".', 'error');
+        const validPrefixes = ['AY-', 'AB-', 'BD-'];
+        // 2. Validate it starts with AY-, AB-, or BD-
+        if (!validPrefixes.some(prefix => code.toUpperCase().startsWith(prefix))) {
+            showToast('Invalid Barcode. Serial Number must start with "AY-", "AB-", or "BD-".', 'error');
             setBarcode('');
             return;
         }
@@ -248,12 +251,18 @@ export const Warehouse: React.FC = () => {
     };
 
     // Pagination State
-    const [batchesPage, setBatchesPage] = useState(1);
+    const [pendingPage, setPendingPage] = useState(1);
+    const [completedPage, setCompletedPage] = useState(1);
     const [scansPage, setScansPage] = useState(1);
     const ITEMS_PER_PAGE = 10;
 
+    // Filter Batches
+    const pendingBatches = batches.filter(b => b.received_quantity < b.expected_quantity);
+    const completedBatches = batches.filter(b => b.received_quantity >= b.expected_quantity);
+
     // Pagination Logic
-    const paginatedBatches = batches.slice((batchesPage - 1) * ITEMS_PER_PAGE, batchesPage * ITEMS_PER_PAGE);
+    const paginatedPendingBatches = pendingBatches.slice((pendingPage - 1) * ITEMS_PER_PAGE, pendingPage * ITEMS_PER_PAGE);
+    const paginatedCompletedBatches = completedBatches.slice((completedPage - 1) * ITEMS_PER_PAGE, completedPage * ITEMS_PER_PAGE);
     const paginatedScannedItems = scannedItems.slice((scansPage - 1) * ITEMS_PER_PAGE, scansPage * ITEMS_PER_PAGE);
 
     return (
@@ -373,9 +382,9 @@ export const Warehouse: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Recent Batches Table */}
+                    {/* Pending Batches Table */}
                     <div className={styles.card}>
-                        <h3>Recent Batches</h3>
+                        <h3>Pending Batches</h3>
                         <div className={styles.tableContainer}>
                             <table className={styles.table}>
                                 <thead>
@@ -392,7 +401,7 @@ export const Warehouse: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {paginatedBatches.map(batch => (
+                                    {paginatedPendingBatches.map(batch => (
                                         <tr key={batch.id}>
                                             <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
                                             <td>{batch.created_by}</td>
@@ -482,19 +491,145 @@ export const Warehouse: React.FC = () => {
                                             </td>
                                         </tr>
                                     ))}
-                                    {batches.length === 0 && (
+                                    {pendingBatches.length === 0 && (
                                         <tr>
                                             <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                No batches found. Create one to get started.
+                                                No pending batches. Create one to get started.
                                             </td>
                                         </tr>
                                     )}
                                 </tbody>
                             </table>
                             <Pagination
-                                currentPage={batchesPage}
-                                totalPages={Math.ceil(batches.length / ITEMS_PER_PAGE)}
-                                onPageChange={setBatchesPage}
+                                currentPage={pendingPage}
+                                totalPages={Math.ceil(pendingBatches.length / ITEMS_PER_PAGE)}
+                                onPageChange={setPendingPage}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Completed Batches Table */}
+                    <div className={styles.card}>
+                        <h3>Completed Batches</h3>
+                        <div className={styles.tableContainer}>
+                            <table className={styles.table}>
+                                <thead>
+                                    <tr>
+                                        <th>Batch Number</th>
+                                        <th>Created By</th>
+                                        <th>Date</th>
+                                        <th>Received Qty</th>
+                                        <th>Extra Qty</th>
+                                        <th>Shortage Qty</th>
+                                        <th>Total Count</th>
+                                        <th>Download</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {paginatedCompletedBatches.map(batch => (
+                                        <tr key={batch.id}>
+                                            <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
+                                            <td>{batch.created_by}</td>
+                                            <td>{new Date(batch.created_at).toLocaleDateString()}</td>
+                                            <td className={styles.statusBlue}>
+                                                {batch.expected_quantity}
+                                            </td>
+                                            <td className={batch.extra_quantity > 0 ? styles.statusYellow : ''}>
+                                                {batch.extra_quantity > 0 ? `+${batch.extra_quantity}` : '-'}
+                                            </td>
+                                            <td className={batch.shortage_quantity > 0 ? styles.statusRed : ''}>
+                                                {batch.shortage_quantity > 0 ? `-${batch.shortage_quantity}` : '-'}
+                                            </td>
+                                            <td className={styles.statusGreen}>
+                                                {batch.received_quantity}
+                                            </td>
+                                            <td>
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    onClick={async () => {
+                                                        try {
+                                                            const blob = await apiFetch(`/api/pretest/warehouse/batches/${batch.id}/download`);
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            const link = document.createElement('a');
+                                                            link.href = url;
+
+                                                            const now = new Date();
+                                                            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+                                                            const cleanBatch = batch.batch_number.replace(/[^a-zA-Z0-9_-]/g, '_');
+                                                            const fileName = `Warehouse_Report_${cleanBatch}_${timestamp}.xlsx`;
+
+                                                            link.setAttribute('download', fileName);
+                                                            document.body.appendChild(link);
+                                                            link.click();
+                                                            document.body.removeChild(link);
+                                                            window.URL.revokeObjectURL(url);
+                                                        } catch (e) {
+                                                            showToast('Download failed', 'error');
+                                                        }
+                                                    }}
+                                                    title="Download Excel Report"
+                                                >
+                                                    📥
+                                                </button>
+                                            </td>
+                                            <td>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        onClick={() => handleViewBatch(batch)}
+                                                    >
+                                                        View
+                                                    </button>
+                                                    <button
+                                                        className={styles.deleteTextButton}
+                                                        onClick={async () => {
+                                                            console.log('Current User:', user);
+                                                            if (user?.role !== 'Admin' && user?.role !== 'Super Admin' && user?.role !== 'Manager') {
+                                                                alert(`Only Admin, Super Admin, or Manager can delete this batch. Your role: ${user?.role}`);
+                                                                return;
+                                                            }
+
+                                                            const confirm1 = window.confirm('Are you sure you want to delete this batch? This will remove all associated scans.');
+                                                            if (!confirm1) return;
+
+                                                            const confirm2 = window.confirm('⚠️ FINAL WARNING: This action cannot be undone. Are you absolutely sure?');
+                                                            if (!confirm2) return;
+
+                                                            try {
+                                                                console.log(`Attempting to delete batch ${batch.id}`);
+                                                                await apiFetch(`/api/pretest/warehouse/batches/${batch.id}`, {
+                                                                    method: 'DELETE'
+                                                                });
+
+                                                                showToast('Batch deleted successfully', 'success');
+                                                                fetchBatches();
+                                                            } catch (err: any) {
+                                                                console.error('Network error during deletion:', err);
+                                                                showToast('Error during deletion: ' + err.message, 'error');
+                                                                alert(`Delete Failed: ${err.message}`);
+                                                            }
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {completedBatches.length === 0 && (
+                                        <tr>
+                                            <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                No completed batches.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                            <Pagination
+                                currentPage={completedPage}
+                                totalPages={Math.ceil(completedBatches.length / ITEMS_PER_PAGE)}
+                                onPageChange={setCompletedPage}
                             />
                         </div>
                     </div>

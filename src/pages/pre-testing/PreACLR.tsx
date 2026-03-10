@@ -155,13 +155,17 @@ export const PreACLR: React.FC = () => {
     const isSubmitDisabled = !isVerified || (isFail && !isValidFailCode) || !selectedJig;
 
     const handleVerifyBarcode = async (barcodeToVerify?: string) => {
-        const trimmedBarcode = (barcodeToVerify || barcode).trim();
+        let trimmedBarcode = (barcodeToVerify || barcode).trim();
         if (!trimmedBarcode) return;
 
-        // Regex: AA-####-##-####
-        const BARCODE_REGEX = /^[A-Z]{2}-\d{4}-\d{2}-[A-Z0-9]{4}$/;
-        if (!BARCODE_REGEX.test(trimmedBarcode)) {
-            showToast('Invalid barcode format. Please scan a valid barcode (AA-####-##-####).', 'error');
+        if (trimmedBarcode.toUpperCase().startsWith('SN:')) {
+            trimmedBarcode = trimmedBarcode.substring(3).trim();
+        }
+
+        // Regex: (AY|AB|BD)-####-##-####
+        const BARCODE_REGEX = /^(AY|AB|BD)-[A-Z0-9]{4}-[A-Z0-9]{2}-[A-Z0-9]{4}$/;
+        if (!BARCODE_REGEX.test(trimmedBarcode.toUpperCase())) {
+            showToast('Invalid barcode format. Please scan a valid barcode (e.g. AY-XXXX-XX-XXXX).', 'error');
             return;
         }
 

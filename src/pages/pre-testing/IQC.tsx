@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './IQC.module.css';
 import { useToast } from '../../components/Toast';
@@ -45,6 +45,7 @@ export const IQC: React.FC = () => {
     // Scan State
     const [barcode, setBarcode] = useState('');
     const [scannerName, setScannerName] = useState('');
+    const scanLock = useRef(false); // Prevents double-submit from scanner trailing newline
 
     const { showToast } = useToast();
 
@@ -52,6 +53,8 @@ export const IQC: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResult, setSearchResult] = useState<any | null>(null);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+    const [barcodeFilter, setBarcodeFilter] = useState("");
+    const [showBarcodeFilter, setShowBarcodeFilter] = useState(false);
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) {
@@ -107,7 +110,7 @@ export const IQC: React.FC = () => {
             } catch (error) {
                 console.error('Polling error:', error);
             }
-        }, 3000); // Poll every 3 seconds
+        }, 15000); // Poll every 15 seconds
 
         return () => clearInterval(pollInterval);
     }, [activeBatch]);
@@ -207,11 +210,11 @@ export const IQC: React.FC = () => {
 
         // Auto-submit if it matches valid format (15 chars)
         if (validPrefixes.some(prefix => trimmed.startsWith(prefix)) && trimmed.length === 15) {
-            submitScan(trimmed, false);
+            if (!scanLock.current) submitScan(trimmed, false);
         }
         // Auto-submit if it matches SN: prefix format (18 chars)
         else if (trimmed.startsWith('SN:') && validPrefixes.some(prefix => trimmed.substring(3).startsWith(prefix)) && trimmed.length === 18) {
-            submitScan(trimmed.substring(3), false);
+            if (!scanLock.current) submitScan(trimmed.substring(3), false);
         }
     };
 
@@ -278,6 +281,10 @@ export const IQC: React.FC = () => {
             return;
         }
 
+        // Lock to prevent double-submit from scanner trailing newline
+        scanLock.current = true;
+        setTimeout(() => { scanLock.current = false; }, 2000);
+
         try {
             const newComponent = await apiFetch('/api/pretest/iqc/scan', {
                 method: 'POST',
@@ -302,9 +309,14 @@ export const IQC: React.FC = () => {
             fetchBatches();
         } catch (error: any) {
             console.error('Error scanning component:', error);
-            showToast(error.message || 'Scan failed', 'error');
-            if (error.message && (error.message.includes('duplicate') || error.message.includes('scrapped') || error.message.includes('Rework'))) {
+            // Silently clear barcode for duplicates (no toast shown)
+            if (error.message && error.message.toLowerCase().includes('duplicate')) {
                 setBarcode('');
+            } else {
+                showToast(error.message || 'Scan failed', 'error');
+                if (error.message && (error.message.includes('scrapped') || error.message.includes('Rework'))) {
+                    setBarcode('');
+                }
             }
         }
     };
@@ -365,10 +377,15 @@ export const IQC: React.FC = () => {
         return target === 0 || processed < target || b.rework_count > 0;
     });
 
+    // Filter Logic for Scanned Components
+    const filteredScannedComponents = scannedComponents.filter(item =>
+        item.barcode.toLowerCase().includes(barcodeFilter.trim().toLowerCase())
+    );
+
     // Pagination Logic
     const paginatedPendingBatches = pendingBatches.slice((pendingPage - 1) * ITEMS_PER_PAGE, pendingPage * ITEMS_PER_PAGE);
     const paginatedCompletedBatches = completedBatches.slice((completedPage - 1) * ITEMS_PER_PAGE, completedPage * ITEMS_PER_PAGE);
-    const paginatedScannedComponents = scannedComponents.slice((scannedPage - 1) * ITEMS_PER_PAGE, scannedPage * ITEMS_PER_PAGE);
+    const paginatedScannedComponents = filteredScannedComponents.slice((scannedPage - 1) * ITEMS_PER_PAGE, scannedPage * ITEMS_PER_PAGE);
 
     return (
         <div className={styles.container}>
@@ -726,7 +743,46 @@ export const IQC: React.FC = () => {
                         <table className={styles.table}>
                             <thead>
                                 <tr>
-                                    <th>Barcode</th>
+                                    <th style={{ position: 'relative' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            BARCODE
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowBarcodeFilter(!showBarcodeFilter)}
+                                                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '0.9rem' }}
+                                                title="Filter Barcode"
+                                            >
+                                                🔍
+                                            </button>
+                                        </div>
+                                        {showBarcodeFilter && (
+                                            <div style={{ marginTop: '0.5rem' }}>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search..."
+                                                    value={barcodeFilter}
+                                                    onChange={(e) => {
+                                                        setBarcodeFilter(e.target.value);
+                                                        setScannedPage(1); // Reset to first page
+                                                    }}
+                                                    autoFocus
+                                                    className={styles.input}
+                                                    style={{
+                                                        padding: '0.25rem 0.5rem',
+                                                        fontSize: '0.8rem',
+                                                        width: '100%',
+                                                        boxSizing: 'border-box'
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Escape') {
+                                                            setShowBarcodeFilter(false);
+                                                            setBarcodeFilter('');
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                    </th>
                                     <th>Scanned By</th>
                                     <th>Time</th>
                                     <th>Status</th>

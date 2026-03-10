@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './Impedance.module.css';
 import { useToast } from '../../components/Toast';
@@ -33,6 +33,7 @@ export const Impedance: React.FC = () => {
     const [currentBatchId, setCurrentBatchId] = useState<number | null>(null);
     const { showToast } = useToast();
     const { user } = useAuth();
+    const scanLock = useRef(false);
 
     // Pagination State
     const [pendingPage, setPendingPage] = useState(1);
@@ -62,6 +63,8 @@ export const Impedance: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResult, setSearchResult] = useState<any | null>(null);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+    const [barcodeFilter, setBarcodeFilter] = useState("");
+    const [showBarcodeFilter, setShowBarcodeFilter] = useState(false);
 
     // View Batch Details State
     const [viewBatch, setViewBatch] = useState<Batch | null>(null);
@@ -176,7 +179,7 @@ export const Impedance: React.FC = () => {
             if (isSessionActive && currentBatchId) {
                 fetchSessionScans(currentBatchId); // Keep scan list updated (handle rollbacks)
             }
-        }, 3000); // Poll every 3 seconds
+        }, 15000); // Poll every 15 seconds
 
         return () => clearInterval(intervalId);
     }, [isSessionActive, currentBatchId]);
@@ -265,6 +268,10 @@ export const Impedance: React.FC = () => {
     };
 
     const handleScan = (input: React.FormEvent | string) => {
+        if (scanLock.current) return;
+        scanLock.current = true;
+        setTimeout(() => { scanLock.current = false; }, 2000);
+
         let scannedBarcode = '';
         if (typeof input === 'string') {
             scannedBarcode = input;
@@ -329,7 +336,11 @@ export const Impedance: React.FC = () => {
             setScanModalOpen(false);
         } catch (error: any) {
             console.error('Error scanning PCB:', error);
-            showToast(error.message || 'Scan Failed', 'error');
+            if (error.message && error.message.toLowerCase().includes('duplicate')) {
+                // Silent
+            } else {
+                showToast(error.message || 'Scan Failed', 'error');
+            }
         }
     };
 
@@ -915,76 +926,123 @@ export const Impedance: React.FC = () => {
                             Session ID: {currentBatchId} | Scanned Items: {scannedItems.length}
                         </div>
 
-                        <table className={styles.table}>
-                            <thead>
-                                <tr>
-                                    <th>Barcode</th>
-                                    <th>Scanned By</th>
-                                    <th>PA_1(1V)</th>
-                                    <th>PA_2(1V)</th>
-                                    <th>PA_4(0.5V)</th>
-                                    <th>PA_5(0.5V)</th>
-                                    <th>R160(0.5V)</th>
-                                    <th>Status</th>
-                                    <th>Time</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {scannedItems.map((item) => (
-                                    <tr key={item.id}>
-                                        <td style={{ fontWeight: 'bold' }}>{item.barcode}</td>
-                                        <td>{item.tested_by || '-'}</td>
-                                        {['test_pa1', 'test_pa2', 'test_pa4', 'test_pa5', 'test_r160'].map((testKey) => (
-                                            <td key={testKey} style={{ textAlign: 'center' }}>
-                                                <div className={styles.dropdownContainer}>
-                                                    <span style={{ fontSize: '1.2rem' }}>
-                                                        {item[testKey] !== false ? '✅' : '❌'}
-                                                    </span>
-                                                    {['admin', 'super admin', 'manager'].includes(user?.role?.toLowerCase() || '') && !completedBatches.some(b => b.id === currentBatchId) && (
+                        {/* Filtered Scanned Items */}
+                        {(() => {
+                            const filteredScannedItems = scannedItems.filter(item =>
+                                item.barcode.toLowerCase().includes(barcodeFilter.trim().toLowerCase())
+                            );
+
+                            return (
+                                <>
+                                    <table className={styles.table}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ position: 'relative' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        BARCODE
                                                         <button
-                                                            className={styles.dropdownTrigger}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setOpenDropdown(openDropdown?.id === item.id && openDropdown?.test === testKey ? null : { id: item.id, test: testKey });
-                                                            }}
+                                                            type="button"
+                                                            onClick={() => setShowBarcodeFilter(!showBarcodeFilter)}
+                                                            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '0.9rem' }}
+                                                            title="Filter Barcode"
                                                         >
-                                                            ▼
+                                                            🔍
                                                         </button>
-                                                    )}
-                                                    {openDropdown?.id === item.id && openDropdown?.test === testKey && (
-                                                        <div className={styles.dropdownMenu}>
-                                                            <button
-                                                                className={`${styles.dropdownItem} ${styles.dropdownItemPass}`}
-                                                                onClick={() => handleTestUpdate(item, testKey, true)}
-                                                            >
-                                                                Pass ✅
-                                                            </button>
-                                                            <button
-                                                                className={`${styles.dropdownItem} ${styles.dropdownItemFail}`}
-                                                                onClick={() => handleTestUpdate(item, testKey, false)}
-                                                            >
-                                                                Fail ❌
-                                                            </button>
+                                                    </div>
+                                                    {showBarcodeFilter && (
+                                                        <div style={{ marginTop: '0.5rem' }}>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="Search..."
+                                                                value={barcodeFilter}
+                                                                onChange={(e) => setBarcodeFilter(e.target.value)}
+                                                                autoFocus
+                                                                className={styles.input}
+                                                                style={{
+                                                                    padding: '0.25rem 0.5rem',
+                                                                    fontSize: '0.8rem',
+                                                                    width: '100%',
+                                                                    boxSizing: 'border-box'
+                                                                }}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Escape') {
+                                                                        setShowBarcodeFilter(false);
+                                                                        setBarcodeFilter('');
+                                                                    }
+                                                                }}
+                                                            />
                                                         </div>
                                                     )}
-                                                </div>
-                                            </td>
-                                        ))}
-                                        <td style={{ fontWeight: 600, color: item.status === 'ACCEPTED' ? '#10b981' : '#ef4444' }}>
-                                            {item.status === 'ACCEPTED' ? 'PASS' : 'FAIL'}
-                                        </td>
-                                        <td>{new Date(item.scanned_at || Date.now()).toLocaleTimeString()}</td>
-                                    </tr>
-                                ))}
-                                {scannedItems.length === 0 && (
-                                    <tr>
-                                        <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                            Ready to scan. PCBs will be auto-assigned.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
+                                                </th>
+                                                <th>Scanned By</th>
+                                                <th>PA_1(1V)</th>
+                                                <th>PA_2(1V)</th>
+                                                <th>PA_4(0.5V)</th>
+                                                <th>PA_5(0.5V)</th>
+                                                <th>R160(0.5V)</th>
+                                                <th>Status</th>
+                                                <th>Time</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredScannedItems.map((item) => (
+                                                <tr key={item.id}>
+                                                    <td style={{ fontWeight: 'bold' }}>{item.barcode}</td>
+                                                    <td>{item.tested_by || '-'}</td>
+                                                    {['test_pa1', 'test_pa2', 'test_pa4', 'test_pa5', 'test_r160'].map((testKey) => (
+                                                        <td key={testKey} style={{ textAlign: 'center' }}>
+                                                            <div className={styles.dropdownContainer}>
+                                                                <span style={{ fontSize: '1.2rem' }}>
+                                                                    {item[testKey] !== false ? '✅' : '❌'}
+                                                                </span>
+                                                                {['admin', 'super admin', 'manager'].includes(user?.role?.toLowerCase() || '') && !completedBatches.some(b => b.id === currentBatchId) && (
+                                                                    <button
+                                                                        className={styles.dropdownTrigger}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setOpenDropdown(openDropdown?.id === item.id && openDropdown?.test === testKey ? null : { id: item.id, test: testKey });
+                                                                        }}
+                                                                    >
+                                                                        ▼
+                                                                    </button>
+                                                                )}
+                                                                {openDropdown?.id === item.id && openDropdown?.test === testKey && (
+                                                                    <div className={styles.dropdownMenu}>
+                                                                        <button
+                                                                            className={`${styles.dropdownItem} ${styles.dropdownItemPass}`}
+                                                                            onClick={() => handleTestUpdate(item, testKey, true)}
+                                                                        >
+                                                                            Pass ✅
+                                                                        </button>
+                                                                        <button
+                                                                            className={`${styles.dropdownItem} ${styles.dropdownItemFail}`}
+                                                                            onClick={() => handleTestUpdate(item, testKey, false)}
+                                                                        >
+                                                                            Fail ❌
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    ))}
+                                                    <td style={{ fontWeight: 600, color: item.status === 'ACCEPTED' ? '#10b981' : '#ef4444' }}>
+                                                        {item.status === 'ACCEPTED' ? 'PASS' : 'FAIL'}
+                                                    </td>
+                                                    <td>{new Date(item.scanned_at || Date.now()).toLocaleTimeString()}</td>
+                                                </tr>
+                                            ))}
+                                            {filteredScannedItems.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                        {barcodeFilter ? 'No items match your filter.' : 'Ready to scan. PCBs will be auto-assigned.'}
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </>
+                            );
+                        })()}
                     </div>
                 </>
             )}

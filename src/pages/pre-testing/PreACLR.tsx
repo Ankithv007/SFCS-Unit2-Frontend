@@ -62,11 +62,14 @@ export const PreACLR: React.FC = () => {
     const [completedScans, setCompletedScans] = useState<ScanRecord[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [barcodeFilter, setBarcodeFilter] = useState('');
+    const [showBarcodeFilter, setShowBarcodeFilter] = useState(false);
     const [testCases, setTestCases] = useState<TestCase[]>([]);
 
     const barcodeInputRef = useRef<HTMLInputElement>(null);
     const { showToast } = useToast();
     const { user } = useAuth();
+    const scanLock = useRef(false);
 
     // Fixed Values
     const TPN = '611-PCA000117-L';
@@ -93,6 +96,18 @@ export const PreACLR: React.FC = () => {
         }
     }, [isOperatorLocked, currentPage]);
 
+    // Refetch scans when barcode filter changes
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            if (currentPage !== 1) {
+                setCurrentPage(1);
+            } else {
+                fetchScans();
+            }
+        }, 500);
+        return () => clearTimeout(timeout);
+    }, [barcodeFilter]);
+
     const fetchTestCases = async () => {
         try {
             const data = await apiFetch('/api/pretest/pre-aclr/test-cases');
@@ -113,7 +128,7 @@ export const PreACLR: React.FC = () => {
 
     const fetchScans = async () => {
         try {
-            const data = await apiFetch(`/api/pretest/pre-aclr/scans?page=${currentPage}&limit=20`);
+            const data = await apiFetch(`/api/pretest/pre-aclr/scans?page=${currentPage}&limit=20&barcode=${encodeURIComponent(barcodeFilter)}`);
             setCompletedScans(data.data);
             setTotalPages(data.pagination.pages);
         } catch (error) {
@@ -174,14 +189,21 @@ export const PreACLR: React.FC = () => {
             setIsVerified(true);
             showToast('Barcode verified successfully.', 'success');
         } catch (error: any) {
-            showToast(error.message || 'Error verifying barcode.', 'error');
+            if (error.message && error.message.toLowerCase().includes('duplicate')) {
+                // Silent
+            } else {
+                showToast(error.message || 'Error verifying barcode.', 'error');
+            }
             setIsVerified(false);
         }
     };
 
     const handleSubmitScan = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!barcode.trim() || isSubmitDisabled) return;
+        if (!barcode.trim() || isSubmitDisabled || scanLock.current) return;
+
+        scanLock.current = true;
+        setTimeout(() => { scanLock.current = false; }, 2000);
 
         if (!operatorName) {
             showToast('Please enter Operator Name before scanning.', 'error');
@@ -216,7 +238,11 @@ export const PreACLR: React.FC = () => {
             fetchScans();
             barcodeInputRef.current?.focus();
         } catch (error: any) {
-            showToast(error.message || 'Error recording scan', 'error');
+            if (error.message && error.message.toLowerCase().includes('duplicate')) {
+                setBarcode('');
+            } else {
+                showToast(error.message || 'Error recording scan', 'error');
+            }
             barcodeInputRef.current?.focus();
         }
     };
@@ -428,7 +454,43 @@ export const PreACLR: React.FC = () => {
                                 <tr>
                                     <th>S.No</th>
                                     <th>Date & Time</th>
-                                    <th>Barcode</th>
+                                    <th style={{ position: 'relative' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            Barcode
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowBarcodeFilter(!showBarcodeFilter)}
+                                                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '0.9rem' }}
+                                                title="Filter Barcode"
+                                            >
+                                                🔍
+                                            </button>
+                                        </div>
+                                        {showBarcodeFilter && (
+                                            <div style={{ marginTop: '0.5rem' }}>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search..."
+                                                    value={barcodeFilter}
+                                                    onChange={(e) => setBarcodeFilter(e.target.value)}
+                                                    autoFocus
+                                                    className={styles.input}
+                                                    style={{
+                                                        padding: '0.25rem 0.5rem',
+                                                        fontSize: '0.8rem',
+                                                        width: '100%',
+                                                        boxSizing: 'border-box'
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Escape') {
+                                                            setShowBarcodeFilter(false);
+                                                            setBarcodeFilter('');
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                    </th>
                                     <th>Result</th>
                                     <th>Failed Case NO</th>
                                     <th>FAILURE CASE</th>

@@ -45,6 +45,8 @@ export const Warehouse: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResult, setSearchResult] = useState<any | null>(null);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+    const [barcodeFilter, setBarcodeFilter] = useState("");
+    const [showBarcodeFilter, setShowBarcodeFilter] = useState(false);
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) {
@@ -238,9 +240,10 @@ export const Warehouse: React.FC = () => {
             setBarcode('');
         } catch (error: any) {
             console.error('Error scanning item:', error);
-            showToast(error.message || 'Scan failed', 'error');
-            if (error.message && error.message.includes('duplicate')) { // Assuming error message contains 'duplicate' or we check status code if apiFetch threw specific error
+            if (error.message && error.message.toLowerCase().includes('duplicate')) {
                 setBarcode('');
+            } else {
+                showToast(error.message || 'Scan failed', 'error');
             }
         } finally {
             // Small delay to ensure the 'Enter' key event from scanner is fully processed
@@ -260,10 +263,15 @@ export const Warehouse: React.FC = () => {
     const pendingBatches = batches.filter(b => b.received_quantity < b.expected_quantity);
     const completedBatches = batches.filter(b => b.received_quantity >= b.expected_quantity);
 
+    // Filter Logic for Scanned Items
+    const filteredScannedItems = scannedItems.filter(item =>
+        item.barcode.toLowerCase().includes(barcodeFilter.trim().toLowerCase())
+    );
+
     // Pagination Logic
     const paginatedPendingBatches = pendingBatches.slice((pendingPage - 1) * ITEMS_PER_PAGE, pendingPage * ITEMS_PER_PAGE);
     const paginatedCompletedBatches = completedBatches.slice((completedPage - 1) * ITEMS_PER_PAGE, completedPage * ITEMS_PER_PAGE);
-    const paginatedScannedItems = scannedItems.slice((scansPage - 1) * ITEMS_PER_PAGE, scansPage * ITEMS_PER_PAGE);
+    const paginatedScannedItems = filteredScannedItems.slice((scansPage - 1) * ITEMS_PER_PAGE, scansPage * ITEMS_PER_PAGE);
 
     return (
         <div className={styles.container}>
@@ -681,7 +689,46 @@ export const Warehouse: React.FC = () => {
                         <table className={styles.table}>
                             <thead>
                                 <tr>
-                                    <th>Barcode</th>
+                                    <th style={{ position: 'relative' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            BARCODE
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowBarcodeFilter(!showBarcodeFilter)}
+                                                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '0.9rem' }}
+                                                title="Filter Barcode"
+                                            >
+                                                🔍
+                                            </button>
+                                        </div>
+                                        {showBarcodeFilter && (
+                                            <div style={{ marginTop: '0.5rem' }}>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search..."
+                                                    value={barcodeFilter}
+                                                    onChange={(e) => {
+                                                        setBarcodeFilter(e.target.value);
+                                                        setScansPage(1); // Reset to first page on filter
+                                                    }}
+                                                    autoFocus
+                                                    className={styles.input}
+                                                    style={{
+                                                        padding: '0.25rem 0.5rem',
+                                                        fontSize: '0.8rem',
+                                                        width: '100%',
+                                                        boxSizing: 'border-box'
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Escape') {
+                                                            setShowBarcodeFilter(false);
+                                                            setBarcodeFilter('');
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                    </th>
                                     <th>Scanned By</th>
                                     <th>Time</th>
                                     <th>Previous Batch</th>

@@ -162,10 +162,24 @@ export const Trace: React.FC = () => {
     const handleTrace = async (e?: React.FormEvent, type: 'unit' | 'batch' = 'unit') => {
         if (e) e.preventDefault();
 
-        const input = type === 'unit' ? barcode.trim() : batchInput.trim();
+        let input = type === 'unit' ? barcode.trim() : batchInput.trim();
         if (!input) {
             showToast(`Please enter a ${type === 'unit' ? 'barcode' : 'batch number'}`, 'error');
             return;
+        }
+
+        if (type === 'unit') {
+            let coreBarcode = input.toUpperCase();
+            if (coreBarcode.startsWith('SN:')) {
+                coreBarcode = coreBarcode.substring(3).trim();
+            }
+
+            const BARCODE_REGEX = /^[A-Z]{2}-[A-Z0-9]{4}-[A-Z0-9]{2}-[A-Z0-9]{4}$/;
+            if (!BARCODE_REGEX.test(coreBarcode)) {
+                showToast('Invalid Barcode format. Must be 15 characters (e.g. AO-4734-34-2344)', 'error');
+                return;
+            }
+            input = coreBarcode; // Use sanitized barcode
         }
 
         setLoading(true);

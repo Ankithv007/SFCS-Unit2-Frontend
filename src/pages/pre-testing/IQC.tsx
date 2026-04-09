@@ -192,29 +192,21 @@ export const IQC: React.FC = () => {
     };
 
     const handleBarcodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value;
+        const val = e.target.value.toUpperCase();
         setBarcode(val);
 
         if (!activeBatch || !scannerName) return;
 
-        const trimmed = val.trim().toUpperCase();
+        const trimmed = val.trim();
 
-        // Check for double scan (concatenated barcode)
-        if (trimmed.length > 18) {
-            showToast('Invalid Barcode: Too long. Please scan one item at a time.', 'error');
-            setBarcode('');
-            return;
+        let coreBarcode = trimmed;
+        if (coreBarcode.startsWith('SN:')) {
+            coreBarcode = coreBarcode.substring(3).trim();
         }
 
-        const validPrefixes = ['AY-', 'AB-', 'BD-'];
-
-        // Auto-submit if it matches valid format (15 chars)
-        if (validPrefixes.some(prefix => trimmed.startsWith(prefix)) && trimmed.length === 15) {
-            if (!scanLock.current) submitScan(trimmed, false);
-        }
-        // Auto-submit if it matches SN: prefix format (18 chars)
-        else if (trimmed.startsWith('SN:') && validPrefixes.some(prefix => trimmed.substring(3).startsWith(prefix)) && trimmed.length === 18) {
-            if (!scanLock.current) submitScan(trimmed.substring(3), false);
+        const BARCODE_REGEX = /^[A-Z]{2}-[A-Z0-9]{4}-[A-Z0-9]{2}-[A-Z0-9]{4}$/;
+        if (BARCODE_REGEX.test(coreBarcode)) {
+            if (!scanLock.current) submitScan(coreBarcode, false);
         }
     };
 
@@ -268,15 +260,14 @@ export const IQC: React.FC = () => {
     };
 
     const submitScan = async (code: string, forceMove: boolean) => {
-        const validPrefixes = ['AY-', 'AB-', 'BD-'];
-        // Validation: Must start with AY-, AB-, or BD- and be 15 chars
-        if (!validPrefixes.some(prefix => code.toUpperCase().startsWith(prefix))) {
-            showToast('Invalid Barcode. Serial Number must start with "AY-", "AB-", or "BD-".', 'error');
-            setBarcode('');
-            return;
+        let coreBarcode = code.trim().toUpperCase();
+        if (coreBarcode.startsWith('SN:')) {
+            coreBarcode = coreBarcode.substring(3).trim();
         }
-        if (code.length !== 15) {
-            showToast(`Invalid Barcode Length: ${code.length}. Expected 15 characters.`, 'error');
+
+        const BARCODE_REGEX = /^[A-Z]{2}-[A-Z0-9]{4}-[A-Z0-9]{2}-[A-Z0-9]{4}$/;
+        if (!BARCODE_REGEX.test(coreBarcode)) {
+            showToast('Invalid Barcode format. Must be 15 characters (e.g. AO-4734-34-2344)', 'error');
             setBarcode('');
             return;
         }

@@ -197,24 +197,14 @@ export const Warehouse: React.FC = () => {
     const submitScan = async (code: string) => {
         if (isSubmitting.current) return;
 
-        // 1. Check for Part Number (PN)
-        if (code.toUpperCase().startsWith('PN:')) {
-            showToast('Invalid Barcode. You scanned a Part Number (PN). Please scan the Serial Number (SN).', 'error');
-            setBarcode('');
-            return;
+        let coreBarcode = code.trim().toUpperCase();
+        if (coreBarcode.startsWith('SN:')) {
+            coreBarcode = coreBarcode.substring(3).trim();
         }
 
-        const validPrefixes = ['AY-', 'AB-', 'BD-'];
-        // 2. Validate it starts with AY-, AB-, or BD-
-        if (!validPrefixes.some(prefix => code.toUpperCase().startsWith(prefix))) {
-            showToast('Invalid Barcode. Serial Number must start with "AY-", "AB-", or "BD-".', 'error');
-            setBarcode('');
-            return;
-        }
-
-        // 3. Validate Length (Must be exactly 15 chars)
-        if (code.length !== 15) {
-            showToast(`Invalid Barcode Length: ${code.length}. Expected 15 characters.`, 'error');
+        const BARCODE_REGEX = /^[A-Z]{2}-[A-Z0-9]{4}-[A-Z0-9]{2}-[A-Z0-9]{4}$/;
+        if (!BARCODE_REGEX.test(coreBarcode)) {
+            showToast('Invalid Barcode format. Must be 15 characters (e.g. AO-4734-34-2344)', 'error');
             setBarcode('');
             return;
         }

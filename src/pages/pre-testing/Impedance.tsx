@@ -287,22 +287,14 @@ export const Impedance: React.FC = () => {
             return;
         }
 
-        // Check for Part Number (PN) explicitly
-        if (scannedBarcode.toUpperCase().startsWith('PN:')) {
-            showToast('Invalid Barcode. You scanned a Part Number (PN).', 'error');
-            setBarcode('');
-            return;
-        }
-
-        // Validate that the barcode starts with AY-, AB-, or BD- (ignoring 'SN:' prefix if present)
-        let coreBarcode = scannedBarcode.trim();
-        if (coreBarcode.toUpperCase().startsWith('SN:')) {
+        let coreBarcode = scannedBarcode.trim().toUpperCase();
+        if (coreBarcode.startsWith('SN:')) {
             coreBarcode = coreBarcode.substring(3).trim();
         }
 
-        const validPrefixes = ['AY-', 'AB-', 'BD-'];
-        if (!validPrefixes.some(prefix => coreBarcode.toUpperCase().startsWith(prefix))) {
-            showToast('Invalid Barcode. Serial Number must start with "AY-", "AB-", or "BD-".', 'error');
+        const BARCODE_REGEX = /^[A-Z]{2}-[A-Z0-9]{4}-[A-Z0-9]{2}-[A-Z0-9]{4}$/;
+        if (!BARCODE_REGEX.test(coreBarcode)) {
+            showToast('Invalid Barcode format. Must be 15 characters (e.g. AO-4734-34-2344)', 'error');
             setBarcode('');
             return;
         }

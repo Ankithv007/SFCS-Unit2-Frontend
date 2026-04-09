@@ -77,13 +77,22 @@ export const PreACLR: React.FC = () => {
 
     const isDownloadAllowed = user && ALLOWED_DOWNLOAD_ROLES.includes(user.role);
 
-    // Auto-Verify when barcode is scanned (15 characters)
+    // Auto-Verify when barcode is scanned
     useEffect(() => {
-        const trimmed = barcode.trim();
+        const trimmed = barcode.trim().toUpperCase();
         if (barcode === '') {
             setIsVerified(false);
-        } else if (trimmed.length === 15 && !isVerified) {
-            handleVerifyBarcode(trimmed);
+            return;
+        }
+
+        let coreBarcode = trimmed;
+        if (coreBarcode.startsWith('SN:')) {
+            coreBarcode = coreBarcode.substring(3).trim();
+        }
+
+        const BARCODE_REGEX = /^[A-Z]{2}-[A-Z0-9]{4}-[A-Z0-9]{2}-[A-Z0-9]{4}$/;
+        if (BARCODE_REGEX.test(coreBarcode) && !isVerified) {
+            handleVerifyBarcode(coreBarcode);
         }
     }, [barcode, isVerified]);
 
@@ -177,10 +186,9 @@ export const PreACLR: React.FC = () => {
             trimmedBarcode = trimmedBarcode.substring(3).trim();
         }
 
-        // Regex: (AY|AB|BD)-####-##-####
-        const BARCODE_REGEX = /^(AY|AB|BD)-[A-Z0-9]{4}-[A-Z0-9]{2}-[A-Z0-9]{4}$/;
+        const BARCODE_REGEX = /^[A-Z]{2}-[A-Z0-9]{4}-[A-Z0-9]{2}-[A-Z0-9]{4}$/;
         if (!BARCODE_REGEX.test(trimmedBarcode.toUpperCase())) {
-            showToast('Invalid barcode format. Please scan a valid barcode (e.g. AY-XXXX-XX-XXXX).', 'error');
+            showToast('Invalid barcode format. Must be 15 characters (e.g. AO-4734-34-2344)', 'error');
             return;
         }
 

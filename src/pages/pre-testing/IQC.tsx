@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { Pagination } from '../../components/Pagination';
 
+
 interface Batch {
     id: number;
     batch_number: string;
@@ -281,7 +282,7 @@ export const IQC: React.FC = () => {
                 method: 'POST',
                 body: JSON.stringify({
                     batch_id: activeBatch?.id,
-                    barcode: code,
+                    barcode: coreBarcode,
                     scanned_by: scannerName,
                     status: 'ACCEPTED', // Always default to ACCEPTED
                     remarks: '',
@@ -300,12 +301,29 @@ export const IQC: React.FC = () => {
             fetchBatches();
         } catch (error: any) {
             console.error('Error scanning component:', error);
+            const errorCode = error?.code;
+            const errorMessage = error?.message || '';
+            const isMoveRequired = errorCode === 'MOVE_REQUIRED' || errorMessage.includes('Move it?');
+
+            // Handle MOVE_REQUIRED: component belongs to another batch — ask user
+            if (isMoveRequired) {
+                const confirmMove = window.confirm(
+                    `${errorMessage}\n\nClick OK to move it to this batch, or Cancel to skip.`
+                );
+                if (confirmMove) {
+                    await submitScan(coreBarcode, true);
+                } else {
+                    setBarcode('');
+                }
+                return;
+            }
+
             // Silently clear barcode for duplicates (no toast shown)
-            if (error.message && error.message.toLowerCase().includes('duplicate')) {
+            if (errorMessage.toLowerCase().includes('duplicate')) {
                 setBarcode('');
             } else {
-                showToast(error.message || 'Scan failed', 'error');
-                if (error.message && (error.message.includes('scrapped') || error.message.includes('Rework'))) {
+                showToast(errorMessage || 'Scan failed', 'error');
+                if (errorMessage && (errorMessage.includes('scrapped') || errorMessage.includes('Rework'))) {
                     setBarcode('');
                 }
             }
@@ -774,11 +792,12 @@ export const IQC: React.FC = () => {
                                             </div>
                                         )}
                                     </th>
-                                    <th>Scanned By</th>
-                                    <th>Time</th>
-                                    <th>Status</th>
-                                    <th>Remarks</th>
-                                    <th>Action</th>
+                                    <th>SCANNED BY</th>
+                                    <th>TIME</th>
+                                    <th>STATUS</th>
+                                    <th>PREVIOUS BATCH</th>
+                                    <th>REMARKS</th>
+                                    <th>ACTION</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -789,6 +808,9 @@ export const IQC: React.FC = () => {
                                         <td>{new Date(comp.scanned_at).toLocaleTimeString()}</td>
                                         <td className={comp.status === 'ACCEPTED' ? styles.statusGreen : (comp.status === 'REWORK' ? styles.statusYellow : (comp.status === 'SCRAP' ? styles.statusRed : ''))}>
                                             {comp.status}
+                                        </td>
+                                        <td style={{ color: comp.previous_batch ? '#c2410c' : '#6b7280', fontWeight: comp.previous_batch ? 600 : 400 }}>
+                                            {comp.previous_batch || '-'}
                                         </td>
                                         <td>{comp.remarks || '-'}</td>
                                         <td>

@@ -45,13 +45,14 @@ export async function apiFetch(
     // 304 is NOT an error, it means the browser is using a valid cached response.
     if (!response.ok && response.status !== 304) {
         let errorMsg = `API Error (${response.status})`;
+        let errorCode: string | null = null;
+
         try {
             const text = await response.text();
             try {
                 const data = JSON.parse(text);
-                // Check all common error fields from various backend frameworks
                 errorMsg = data.error || data.message || data.msg || data.err || errorMsg;
-                // If it's a 409 and we still have the default msg, make it clearer
+                errorCode = data.code || null;
                 if (response.status === 409 && errorMsg.startsWith('API Error')) {
                     errorMsg = 'Duplicate scan detected';
                 }
@@ -66,7 +67,10 @@ export async function apiFetch(
             // Optional: Logout logic
         }
 
-        throw new Error(errorMsg);
+        // Attach backend error code so callers can branch on it (e.g. MOVE_REQUIRED)
+        const err = new Error(errorMsg) as any;
+        err.code = errorCode;
+        throw err;
     }
 
     if (response.status === 204) {

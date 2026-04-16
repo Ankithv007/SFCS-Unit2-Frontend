@@ -1,3 +1,4 @@
+/// <reference types="react" />
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './IQC.module.css';
@@ -6,12 +7,11 @@ import { useAuth } from '../../hooks/useAuth';
 import { Pagination } from '../../components/Pagination';
 
 
-interface Batch {
+interface IqcBatch {
     id: number;
     batch_number: string;
     created_by: string;
     created_at: string;
-
     expected_quantity: number;
     received_quantity: number;
     warehouse_received_quantity?: number;
@@ -22,7 +22,7 @@ interface Batch {
     scrap_count: number;
 }
 
-interface Component {
+interface ScannedComponent {
     id: number;
     barcode: string;
     scanned_by: string;
@@ -34,9 +34,9 @@ interface Component {
 
 export const IQC: React.FC = () => {
     const { user } = useAuth();
-    const [batches, setBatches] = useState<Batch[]>([]);
-    const [activeBatch, setActiveBatch] = useState<Batch | null>(null);
-    const [scannedComponents, setScannedComponents] = useState<Component[]>([]);
+    const [batches, setBatches] = useState<IqcBatch[]>([]);
+    const [activeBatch, setActiveBatch] = useState<IqcBatch | null>(null);
+    const [scannedComponents, setScannedComponents] = useState<ScannedComponent[]>([]);
 
     // Create Batch State
     const [createdBy, setCreatedBy] = useState('');
@@ -56,6 +56,9 @@ export const IQC: React.FC = () => {
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const [barcodeFilter, setBarcodeFilter] = useState("");
     const [showBarcodeFilter, setShowBarcodeFilter] = useState(false);
+
+    // Custom Modal State for moves
+    const [moveConfirmData, setMoveConfirmData] = useState<{ barcode: string; message: string } | null>(null);
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) {
@@ -96,7 +99,7 @@ export const IQC: React.FC = () => {
 
                     // Update active batch live counts dynamically from the main array
                     if (activeBatch) {
-                        const updatedBatch = iqcData.find((b: Batch) => b.id === activeBatch.id);
+                        const updatedBatch = iqcData.find((b: IqcBatch) => b.id === activeBatch.id);
                         if (updatedBatch) {
                             setActiveBatch(updatedBatch);
                         }
@@ -129,11 +132,9 @@ export const IQC: React.FC = () => {
         const selectedBatchNumber = e.target.value;
         setBatchNumber(selectedBatchNumber);
 
-        const selectedBatch = warehouseBatches.find(b => b.batch_number === selectedBatchNumber);
-        if (selectedBatch) {
-            console.log('Selected Warehouse Batch:', selectedBatch);
-            // User requested "Total Count" (Actual Scanned) to be auto-filled
-            setQuantity(selectedBatch.received_quantity);
+        const selectedBatch = warehouseBatches.find((b: any) => b.batch_number === selectedBatchNumber);
+        if (selectedBatch && selectedBatch.received_quantity !== undefined) {
+            setQuantity(selectedBatch.received_quantity.toString());
         }
     };
 
@@ -161,7 +162,7 @@ export const IQC: React.FC = () => {
                     created_by: createdBy,
                     quantity: quantity ? parseInt(quantity) : null
                 })
-            });
+            }) as IqcBatch;
 
             showToast(`Batch ${batchNumber} created!`, 'success');
             setBatchNumber('');
@@ -177,7 +178,7 @@ export const IQC: React.FC = () => {
         }
     };
 
-    const handleViewBatch = (batch: Batch) => {
+    const handleViewBatch = (batch: IqcBatch) => {
         setScannerName('');
         setActiveBatch(batch);
         fetchComponents(batch.id);
@@ -228,7 +229,7 @@ export const IQC: React.FC = () => {
         await submitScan(finalBarcode, false);
     };
 
-    const handleUpdateStatus = async (component: Component, newStatus: 'ACCEPTED' | 'REWORK' | 'SCRAP') => {
+    const handleUpdateStatus = async (component: ScannedComponent, newStatus: 'ACCEPTED' | 'REWORK' | 'SCRAP') => {
         let reason = '';
         if (newStatus === 'REWORK' || newStatus === 'SCRAP') {
             reason = prompt(`Enter mandatory remarks for ${newStatus}:`) || '';
@@ -245,12 +246,12 @@ export const IQC: React.FC = () => {
                     status: newStatus,
                     remarks: reason
                 })
-            });
+            }) as ScannedComponent;
 
             showToast(`Component marked as ${newStatus}`, newStatus === 'ACCEPTED' ? 'success' : 'error');
 
             // Update local state
-            setScannedComponents(prev => prev.map(c =>
+            setScannedComponents((prev: ScannedComponent[]) => prev.map((c: ScannedComponent) =>
                 c.id === component.id ? { ...c, status: updated.status, remarks: updated.remarks } : c
             ));
             fetchBatches(); // Update counts
@@ -288,11 +289,11 @@ export const IQC: React.FC = () => {
                     remarks: '',
                     force_move: forceMove
                 })
-            });
+            }) as ScannedComponent;
 
-            setScannedComponents(prev => {
-                if (prev.some(comp => comp.barcode === newComponent.barcode)) return prev;
-                return [newComponent, ...prev];
+            setScannedComponents((prev: ScannedComponent[]) => {
+                const filtered = prev.filter((comp: ScannedComponent) => comp.barcode !== newComponent.barcode);
+                return [newComponent, ...filtered];
             });
             showToast('Component Accepted', 'success');
             setBarcode('');
@@ -307,14 +308,10 @@ export const IQC: React.FC = () => {
 
             // Handle MOVE_REQUIRED: component belongs to another batch — ask user
             if (isMoveRequired) {
-                const confirmMove = window.confirm(
-                    `${errorMessage}\n\nClick OK to move it to this batch, or Cancel to skip.`
-                );
-                if (confirmMove) {
-                    await submitScan(coreBarcode, true);
-                } else {
-                    setBarcode('');
-                }
+                setMoveConfirmData({
+                    barcode: coreBarcode,
+                    message: `${errorMessage}\n\nDo you want to move it to this batch?`
+                });
                 return;
             }
 
@@ -369,17 +366,17 @@ export const IQC: React.FC = () => {
     // Strict Business Rule: 
     // Target is ALWAYS Warehouse Total Count (Expected Qty).
     // EXCEPTION: If Warehouse scans MORE than expected (Extras), then Target increases to match Received Qty.
-    const getTargetQty = (b: Batch) => {
+    const getTargetQty = (b: IqcBatch) => {
         return Number(b.warehouse_received_quantity) || 0;
     };
 
-    const completedBatches = batches.filter(b => {
+    const completedBatches = batches.filter((b: IqcBatch) => {
         const target = getTargetQty(b);
         const processed = b.passed_count + b.scrap_count;
         // Batch moves to Completed only if all Rework -> Pass or Scrap
         return processed >= target && target > 0 && b.rework_count === 0;
     });
-    const pendingBatches = batches.filter(b => {
+    const pendingBatches = batches.filter((b: IqcBatch) => {
         const target = getTargetQty(b);
         const processed = b.passed_count + b.scrap_count;
         // If any Rework exists, batch stays in Pending Batches
@@ -387,7 +384,7 @@ export const IQC: React.FC = () => {
     });
 
     // Filter Logic for Scanned Components
-    const filteredScannedComponents = scannedComponents.filter(item =>
+    const filteredScannedComponents = scannedComponents.filter((item: ScannedComponent) =>
         item.barcode.toLowerCase().includes(barcodeFilter.trim().toLowerCase())
     );
 
@@ -422,11 +419,11 @@ export const IQC: React.FC = () => {
                                     className={styles.expandedInput}
                                     placeholder="Scan or Type..."
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSearch()}
                                 />
                                 <button
-                                    onClick={() => { setIsSearchExpanded(false); setSearchQuery(''); }}
+                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setIsSearchExpanded(false); setSearchQuery(''); }}
                                     className={styles.closeBtn}
                                     title="Close Search"
                                 >
@@ -444,7 +441,7 @@ export const IQC: React.FC = () => {
             {/* Search Result Modal */}
             {searchResult && (
                 <div className={styles.modalOverlay} onClick={() => setSearchResult(null)}>
-                    <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+                    <div className={styles.modalContent} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                         <h3>Component Found!</h3>
                         <div className={styles.resultGrid}>
                             <p><strong>Barcode:</strong> {searchResult.barcode}</p>
@@ -478,8 +475,8 @@ export const IQC: React.FC = () => {
                                 >
                                     <option value="">-- Select Batch --</option>
                                     {warehouseBatches
-                                        .filter(wb => !batches.some(b => b.batch_number === wb.batch_number))
-                                        .map(wb => (
+                                        .filter((wb: any) => !batches.some((b: IqcBatch) => b.batch_number === wb.batch_number))
+                                        .map((wb: any) => (
                                             <option key={wb.id} value={wb.batch_number}>
                                                 {wb.batch_number}
                                             </option>
@@ -493,7 +490,7 @@ export const IQC: React.FC = () => {
                                     className={styles.input}
                                     placeholder="Quantity"
                                     value={quantity}
-                                    onChange={(e) => setQuantity(e.target.value)}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuantity(e.target.value)}
                                     readOnly
                                     style={{ backgroundColor: '#f3f4f6' }}
                                 />
@@ -505,7 +502,7 @@ export const IQC: React.FC = () => {
                                     className={styles.input}
                                     placeholder="Your Name"
                                     value={createdBy}
-                                    onChange={(e) => setCreatedBy(e.target.value)}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreatedBy(e.target.value.toUpperCase())}
                                 />
                             </div>
                         </div>
@@ -533,7 +530,7 @@ export const IQC: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {paginatedPendingBatches.map(batch => (
+                                    {paginatedPendingBatches.map((batch: IqcBatch) => (
                                         <tr key={batch.id}>
                                             <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
                                             <td>{batch.created_by}</td>
@@ -547,7 +544,7 @@ export const IQC: React.FC = () => {
                                                     className={styles.secondaryButton}
                                                     onClick={async () => {
                                                         try {
-                                                            const blob = await apiFetch(`/api/pretest/iqc/batches/${batch.id}/download`);
+                                                            const blob = await apiFetch(`/api/pretest/iqc/batches/${batch.id}/download`) as Blob;
                                                             const url = window.URL.createObjectURL(blob);
                                                             const link = document.createElement('a');
                                                             link.href = url;
@@ -625,7 +622,7 @@ export const IQC: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {paginatedCompletedBatches.map(batch => (
+                                    {paginatedCompletedBatches.map((batch: IqcBatch) => (
                                         <tr key={batch.id}>
                                             <td style={{ fontWeight: 600 }}>{batch.batch_number}</td>
                                             <td>{batch.created_by}</td>
@@ -641,7 +638,7 @@ export const IQC: React.FC = () => {
                                                         try {
                                                             const blob = await apiFetch(`/api/pretest/iqc/batches/${batch.id}/download`, {
                                                                 headers: { 'Accept': 'application/blob' }
-                                                            });
+                                                            }) as Blob;
                                                             const url = window.URL.createObjectURL(blob);
                                                             const link = document.createElement('a');
                                                             link.href = url;
@@ -706,9 +703,9 @@ export const IQC: React.FC = () => {
                             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', fontSize: '0.95rem', color: '#4b5563', marginTop: '0.5rem' }}>
                                 <span>Total Scanned: <strong>{scannedComponents.length}</strong> / {getTargetQty(activeBatch)}</span>
                                 <span style={{ color: '#2563eb', fontWeight: 600 }}>🏭 Available: {activeBatch.warehouse_received_quantity || 0}</span>
-                                <span style={{ color: '#10b981', fontWeight: 600 }}>✅ Passed: {scannedComponents.filter(c => c.status === 'ACCEPTED').length}</span>
-                                <span style={{ color: '#eab308', fontWeight: 600 }}>🔄 Rework: {scannedComponents.filter(c => c.status === 'REWORK').length}</span>
-                                <span style={{ color: '#ef4444', fontWeight: 600 }}>🗑 Scrap: {scannedComponents.filter(c => c.status === 'SCRAP').length}</span>
+                                <span style={{ color: '#10b981', fontWeight: 600 }}>✅ Passed: {scannedComponents.filter((c: ScannedComponent) => c.status === 'ACCEPTED').length}</span>
+                                <span style={{ color: '#eab308', fontWeight: 600 }}>🔄 Rework: {scannedComponents.filter((c: ScannedComponent) => c.status === 'REWORK').length}</span>
+                                <span style={{ color: '#ef4444', fontWeight: 600 }}>🗑 Scrap: {scannedComponents.filter((c: ScannedComponent) => c.status === 'SCRAP').length}</span>
                             </div>
                         </div>
                         <button
@@ -727,7 +724,7 @@ export const IQC: React.FC = () => {
                                 className={styles.input}
                                 placeholder="Enter Your Name"
                                 value={scannerName}
-                                onChange={(e) => setScannerName(e.target.value)}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScannerName(e.target.value.toUpperCase())}
                                 style={{ maxWidth: '300px' }}
                             />
                         </div>
@@ -770,7 +767,7 @@ export const IQC: React.FC = () => {
                                                     type="text"
                                                     placeholder="Search..."
                                                     value={barcodeFilter}
-                                                    onChange={(e) => {
+                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                                         setBarcodeFilter(e.target.value);
                                                         setScannedPage(1); // Reset to first page
                                                     }}
@@ -782,7 +779,7 @@ export const IQC: React.FC = () => {
                                                         width: '100%',
                                                         boxSizing: 'border-box'
                                                     }}
-                                                    onKeyDown={(e) => {
+                                                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                                                         if (e.key === 'Escape') {
                                                             setShowBarcodeFilter(false);
                                                             setBarcodeFilter('');
@@ -801,7 +798,7 @@ export const IQC: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {paginatedScannedComponents.map(comp => (
+                                {paginatedScannedComponents.map((comp: ScannedComponent) => (
                                     <tr key={comp.id}>
                                         <td style={{ fontWeight: 600 }}>{comp.barcode}</td>
                                         <td>{comp.scanned_by}</td>
@@ -859,6 +856,33 @@ export const IQC: React.FC = () => {
                 </>
             )
             }
+
+            {moveConfirmData && (
+                <div className={styles.modalOverlay} onClick={() => {setMoveConfirmData(null); setBarcode('');}}>
+                    <div className={styles.modalContent} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                        <h3>Move Component?</h3>
+                        <div className={styles.moveModalSeparator} />
+                        
+                        <div className={styles.moveModalMsgBox}>
+                            {moveConfirmData.message.split('\n').map((line, i) => (
+                                <p key={i} style={{ margin: i === 0 ? '0 0 1rem 0' : '0' }}>{line}</p>
+                            ))}
+                            <p style={{ marginTop: '1rem' }}>
+                                <span className={styles.moveModalLabel}>Barcode:</span> {moveConfirmData.barcode}
+                            </p>
+                        </div>
+
+                        <div className={styles.moveModalActions}>
+                            <button className={styles.btnOk} onClick={() => { 
+                                const code = moveConfirmData.barcode; 
+                                setMoveConfirmData(null); 
+                                submitScan(code, true); 
+                            }}>OK (Move)</button>
+                            <button className={styles.btnCancel} onClick={() => {setMoveConfirmData(null); setBarcode('');}}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 };

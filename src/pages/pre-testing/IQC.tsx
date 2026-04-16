@@ -58,7 +58,7 @@ export const IQC: React.FC = () => {
     const [showBarcodeFilter, setShowBarcodeFilter] = useState(false);
 
     // Custom Modal State for moves
-    const [moveConfirmData, setMoveConfirmData] = useState<{ barcode: string; message: string } | null>(null);
+
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) {
@@ -307,11 +307,12 @@ export const IQC: React.FC = () => {
             const isMoveRequired = errorCode === 'MOVE_REQUIRED' || errorMessage.includes('Move it?');
 
             // Handle MOVE_REQUIRED: component belongs to another batch — ask user
+            // Handle MOVE_REQUIRED: component belongs to another batch — ask user via standard confirm
             if (isMoveRequired) {
-                setMoveConfirmData({
-                    barcode: coreBarcode,
-                    message: `${errorMessage}\n\nDo you want to move it to this batch?`
-                });
+                if (window.confirm(`${errorMessage}\n\nDo you want to move it to this batch?\n\nBarcode: ${coreBarcode}`)) {
+                    submitScan(coreBarcode, true);
+                }
+                setBarcode('');
                 return;
             }
 
@@ -857,32 +858,7 @@ export const IQC: React.FC = () => {
             )
             }
 
-            {moveConfirmData && (
-                <div className={styles.modalOverlay} onClick={() => {setMoveConfirmData(null); setBarcode('');}}>
-                    <div className={styles.modalContent} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                        <h3>Move Component?</h3>
-                        <div className={styles.moveModalSeparator} />
-                        
-                        <div className={styles.moveModalMsgBox}>
-                            {moveConfirmData.message.split('\n').map((line, i) => (
-                                <p key={i} style={{ margin: i === 0 ? '0 0 1rem 0' : '0' }}>{line}</p>
-                            ))}
-                            <p style={{ marginTop: '1rem' }}>
-                                <span className={styles.moveModalLabel}>Barcode:</span> {moveConfirmData.barcode}
-                            </p>
-                        </div>
 
-                        <div className={styles.moveModalActions}>
-                            <button className={styles.btnOk} onClick={() => { 
-                                const code = moveConfirmData.barcode; 
-                                setMoveConfirmData(null); 
-                                submitScan(code, true); 
-                            }}>OK (Move)</button>
-                            <button className={styles.btnCancel} onClick={() => {setMoveConfirmData(null); setBarcode('');}}>Cancel</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div >
     );
 };

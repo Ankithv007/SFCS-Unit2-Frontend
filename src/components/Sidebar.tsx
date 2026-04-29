@@ -164,6 +164,42 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                     </div>
                 )}
             </div>
+            {/* SMT Module */}
+            <div className={styles.moduleWrapper}>
+                <div
+                    className={`${styles.menuItem} ${expandedModule === 'smt' ? styles.active : ''}`}
+                    onClick={() => toggleModule('smt')}
+                    onMouseEnter={() => setExpandedModule('smt')}
+                    title="SMT"
+                >
+                    <span className={styles.menuIcon}>⚙️</span>
+                    <span className={styles.menuText}>SMT</span>
+                    <span className={styles.arrow}>{expandedModule === 'smt' ? '▼' : '▶'}</span>
+                </div>
+
+                {expandedModule === 'smt' && (
+                    <div className={styles.submenu}>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/work-order') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/work-order')}
+                        >
+                            <span className={styles.menuIcon}>📝</span> Work Order
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/serial-number') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/serial-number')}
+                        >
+                            <span className={styles.menuIcon}>🔢</span> Serial Number
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/printing') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/printing')}
+                        >
+                            <span className={styles.menuIcon}>🖨️</span> Printing
+                        </div>
+                    </div>
+                )}
+            </div>
             <div className={styles.menuItem} title="Post testing">
                 <span className={styles.menuIcon}>✅</span>
                 <span className={styles.menuText}>Post testing</span>

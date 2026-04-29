@@ -17,6 +17,10 @@ import { Trace } from './pages/pre-testing/Trace';
 import { QCInspection } from './pages/qc-inspection/QCInspection';
 import { ShiftManagement } from './pages/qc-inspection/ShiftManagement';
 import { VacuumLeakTest } from './pages/vacuum-leak-test/VacuumLeakTest';
+import { WorkOrder } from './pages/smt/WorkOrder';
+import { SerialNumber } from './pages/smt/SerialNumber';
+import { Printing } from './pages/smt/Printing';
+import { SPI } from './pages/smt/SPI';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -157,6 +161,38 @@ export const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <VacuumLeakTest />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/smt/work-order',
+                element: (
+                    <ProtectedRoute>
+                        <WorkOrder />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/smt/serial-number',
+                element: (
+                    <ProtectedRoute>
+                        <SerialNumber />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/smt/printing',
+                element: (
+                    <ProtectedRoute>
+                        <Printing />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/smt/spi',
+                element: (
+                    <ProtectedRoute>
+                        <SPI />
                     </ProtectedRoute>
                 ),
             },

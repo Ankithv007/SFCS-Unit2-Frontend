@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styles from './SerialNumber.module.css';
+import QRCodeReact from 'react-qr-code';
+import QRCode from 'qrcode';
 
 interface ScannedComponent {
     id: string;
@@ -47,44 +49,80 @@ export const SerialNumber: React.FC = () => {
 
     const [batches, setBatches] = useState<SmtBatch[]>([]);
 
+    const fetchBatches = async (woId?: string) => {
+        try {
+            const url = woId ? `/api/smt/serial-numbers?work_order_id=${woId}` : '/api/smt/serial-numbers';
+            const serialRes = await fetch(url);
+            if (serialRes.ok) {
+                const serialData = await serialRes.json();
+                console.log("Serial Data from API:", serialData);
+                const grouped = serialData.reduce((acc: any, curr: any) => {
+                    const key = `${curr.work_order_id}-${curr.serial_format.replace(/-/g, "")}`;
+                    if (!acc[key]) {
+                        acc[key] = {
+                            id: curr.id,
+                            work_order_id: curr.work_order_id,
+                            product_name: curr.product_name || "Unknown Product",
+                            wo_qty: curr.wo_qty || 0,
+                            panel_qty: curr.panel_qty || 0,
+                            starting_number: parseInt(curr.serial_number.replace(/\D/g, '')),
+                            end_number: parseInt(curr.serial_number.replace(/\D/g, '')),
+                            serial_format: curr.serial_format.replace(/-/g, ""),
+                            created_by: curr.created_by || curr.wo_created_by || "System",
+                            created_at: curr.created_at,
+                            components: []
+                        };
+                    }
+                    
+                    const num = parseInt(curr.serial_number.replace(/\D/g, ''));
+                    if (num < acc[key].starting_number) acc[key].starting_number = num;
+                    if (num > acc[key].end_number) acc[key].end_number = num;
+                    
+                    acc[key].components.push({
+                        id: curr.id,
+                        barcode: curr.serial_number,
+                        scanned_by: curr.wo_created_by,
+                        scanned_at: curr.created_at,
+                        product_name: curr.product_name,
+                        wo_qty: curr.wo_qty,
+                        panel_qty: curr.panel_qty,
+                        wo_number: curr.work_order_id,
+                        status: curr.status || 'ACCEPTED'
+                    });
+                    
+                    return acc;
+                }, {});
+                setBatches(Object.values(grouped));
+            }
+        } catch (err) {
+            console.error("Failed to fetch batches:", err);
+        }
+    };
+
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Fetch Work Orders
-                const woRes = await fetch('/api/smt/work-orders');
+                // Fetch ONLY Pending Work Orders (Requirement 1)
+                const woRes = await fetch('/api/smt/workorders/pending');
                 if (woRes.ok) {
                     const data = await woRes.json();
                     setWorkOrders(data.map((wo: any) => ({
                         ...wo,
-                        work_order_id: wo.id // Map DB 'id' to UI 'work_order_id'
+                        work_order_id: wo.id
                     })));
                 }
 
-                // Fetch Serials and group into batches
-                const serialRes = await fetch('/api/smt/serial-numbers');
-                if (serialRes.ok) {
-                    const serialData = await serialRes.json();
-                    const grouped = serialData.reduce((acc: any, curr: any) => {
-                        const key = `${curr.work_order_id}-${curr.serial_format}`;
-                        if (!acc[key]) {
-                            acc[key] = {
-                                id: curr.id,
-                                work_order_id: curr.work_order_id,
-                                product_name: "Loading...", // In a real app, join with WO table
-                                starting_number: parseInt(curr.serial_number.replace(/\D/g, '')),
-                                end_number: parseInt(curr.serial_number.replace(/\D/g, '')),
-                                serial_format: curr.serial_format,
-                                created_by: "API",
-                                created_at: curr.created_at,
-                                components: []
-                            };
-                        }
-                        const num = parseInt(curr.serial_number.replace(/\D/g, ''));
-                        if (num < acc[key].starting_number) acc[key].starting_number = num;
-                        if (num > acc[key].end_number) acc[key].end_number = num;
-                        return acc;
-                    }, {});
-                    setBatches(Object.values(grouped));
+                fetchBatches();
+                
+                // Auto-fill Generated By from login info
+                const storedUser = localStorage.getItem("user_data");
+                if (storedUser) {
+                    try {
+                        const userObj = JSON.parse(storedUser);
+                        setCreatedBy(userObj.name || userObj.email || 'System');
+                    } catch (e) {
+                        console.error("Error parsing user data:", e);
+                    }
                 }
             } catch (err) {
                 console.error("Failed to fetch data:", err);
@@ -92,6 +130,85 @@ export const SerialNumber: React.FC = () => {
         };
         fetchData();
     }, []);
+
+    const handlePrint = async (components: ScannedComponent[]) => {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            try {
+                const labelsData = await Promise.all(components.map(async (c) => {
+                    const serial = c.barcode.replace(/-/g, "");
+                    const dataUrl = await QRCode.toDataURL(serial, { 
+                        width: 200, 
+                        margin: 2,
+                        errorCorrectionLevel: 'H'
+                    });
+                    return { serial, dataUrl };
+                }));
+
+                const labelsHtml = labelsData.map(d => `
+                    <div class="print-label">
+                        <img src="${d.dataUrl}" />
+                        <p class="serial-text">${d.serial}</p>
+                    </div>
+                `).join('');
+
+                printWindow.document.write(`
+                    <html>
+                        <head>
+                            <title>Print Labels</title>
+                            <style>
+                                @media print {
+                                    body { margin: 0; padding: 0; }
+                                    @page { margin: 0; }
+                                }
+                                body {
+                                    display: flex;
+                                    flex-direction: column;
+                                    align-items: center;
+                                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                                }
+                                .print-label {
+                                    display: flex;
+                                    flex-direction: column;
+                                    align-items: center;
+                                    justify-content: center;
+                                    page-break-after: always;
+                                    padding: 20px;
+                                    text-align: center;
+                                }
+                                .serial-text {
+                                    margin-top: 10px;
+                                    font-size: 18px;
+                                    font-weight: bold;
+                                    color: #000;
+                                }
+                                img {
+                                    width: 150px;
+                                    height: 150px;
+                                    display: block;
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            ${labelsHtml}
+                            <script>
+                                window.onload = () => {
+                                    setTimeout(() => {
+                                        window.print();
+                                        window.close();
+                                    }, 500);
+                                };
+                            </script>
+                        </body>
+                    </html>
+                `);
+                printWindow.document.close();
+            } catch (err) {
+                console.error("Print Error:", err);
+                alert("Failed to generate labels for printing.");
+            }
+        }
+    };
 
     // Removed local storage effect
     useEffect(() => {
@@ -112,6 +229,9 @@ export const SerialNumber: React.FC = () => {
             setWoQty('');
             setPanelQty('');
         }
+        
+        // Filter batches by selected WO
+        fetchBatches(woId);
     };
 
     const handleGenerateSerials = async () => {
@@ -139,12 +259,14 @@ export const SerialNumber: React.FC = () => {
             }
         }
 
-        const formatStr = serialFormat.toUpperCase();
+        const formatStr = serialFormat.replace(/-/g, "").toUpperCase();
         const newComponents: ScannedComponent[] = [];
         for (let i = start; i <= end; i++) {
+            // Requirement 2: Remove "-" (PREFIX + padded number)
+            const serialNumber = `${formatStr}${i.toString().padStart(6, '0')}`;
             newComponents.push({
                 id: Date.now().toString() + i,
-                barcode: `${formatStr}-${i.toString().padStart(6, '0')}`,
+                barcode: serialNumber,
                 scanned_by: createdBy,
                 scanned_at: new Date().toISOString(),
                 product_name: productName,
@@ -162,11 +284,15 @@ export const SerialNumber: React.FC = () => {
                 body: JSON.stringify({
                     work_order_id: selectedWoId,
                     format: formatStr,
-                    serials: newComponents.map(c => c.barcode)
+                    serials: newComponents.map(c => c.barcode),
+                    created_by: createdBy
                 })
             });
 
             if (res.ok) {
+                const apiResponse = await res.json();
+                console.log("DEBUG API RESPONSE:", apiResponse);
+                
                 const newBatch: SmtBatch = {
                     id: Date.now(),
                     work_order_id: selectedWoId,
@@ -295,7 +421,7 @@ export const SerialNumber: React.FC = () => {
                                     placeholder="e.g. QWERTYUIOP"
                                     maxLength={10}
                                     value={serialFormat}
-                                    onChange={(e) => setSerialFormat(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase())}
+                                    onChange={(e) => setSerialFormat(e.target.value.toUpperCase())}
                                 />
                             </div>
                             <div className={styles.inputGroup}>
@@ -323,9 +449,10 @@ export const SerialNumber: React.FC = () => {
                                 <input
                                     type="text"
                                     className={styles.input}
-                                    placeholder="Your Name"
+                                    placeholder="Logged in user"
                                     value={createdBy}
-                                    onChange={(e) => setCreatedBy(e.target.value.toUpperCase())}
+                                    style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}
+                                    readOnly
                                 />
                             </div>
                         </div>
@@ -359,7 +486,7 @@ export const SerialNumber: React.FC = () => {
                                             <td>{batch.wo_qty}</td>
                                             <td>{batch.panel_qty}</td>
                                             <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
-                                            <td>{batch.serial_format ? `${batch.serial_format}-${batch.starting_number.toString().padStart(6, '0')}` : batch.starting_number} to {batch.serial_format ? `${batch.serial_format}-${batch.end_number.toString().padStart(6, '0')}` : batch.end_number}</td>
+                                            <td>{batch.serial_format ? `${batch.serial_format.replace(/-/g, "")}${batch.starting_number.toString().padStart(6, '0')}` : batch.starting_number} to {batch.serial_format ? `${batch.serial_format.replace(/-/g, "")}${batch.end_number.toString().padStart(6, '0')}` : batch.end_number}</td>
                                             <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>{new Date(batch.created_at).toLocaleString()}</td>
                                             <td style={{ fontWeight: 500, color: '#374151' }}>{batch.created_by}</td>
                                             <td>
@@ -403,12 +530,22 @@ export const SerialNumber: React.FC = () => {
                                 <span>Total Generated: <strong>{activeBatch.components.length}</strong></span>
                             </div>
                         </div>
-                        <button
-                            className={styles.secondaryButton}
-                            onClick={() => setActiveBatch(null)}
-                        >
-                            Back to Batches
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.75rem' }}>
+                            <button
+                                className={styles.button}
+                                onClick={() => handlePrint(activeBatch.components)}
+                                style={{ backgroundColor: '#059669', padding: '0.5rem 1rem' }}
+                            >
+                                🖨️ Print All
+                            </button>
+                            <button
+                                className={styles.secondaryButton}
+                                onClick={() => setActiveBatch(null)}
+                                style={{ padding: '0.5rem 1rem' }}
+                            >
+                                Back to Batches
+                            </button>
+                        </div>
                     </div>
 
                     <div className={styles.scanSection}>
@@ -429,34 +566,40 @@ export const SerialNumber: React.FC = () => {
                                 <thead>
                                     <tr>
                                         <th>SERIAL NUMBER</th>
-                                        <th>STATUS</th>
+                                        <th>BARCODE</th>
                                         <th>GENERATED AT</th>
+                                        <th>ACTION</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {paginatedComponents.map((component) => (
-                                        <tr key={component.id}>
-                                            <td style={{ fontWeight: 'bold', fontSize: '1.1rem', letterSpacing: '2px' }}>
+                                        <tr key={component.id} style={{ height: '100px' }}>
+                                            <td style={{ fontWeight: 'bold', fontSize: '1rem', letterSpacing: '1px' }}>
                                                 {component.barcode}
                                             </td>
-                                            <td>
-                                                <span style={{
-                                                    padding: '0.25rem 0.75rem',
-                                                    borderRadius: '999px',
-                                                    fontSize: '0.875rem',
-                                                    fontWeight: 'bold',
-                                                    backgroundColor: component.status === 'ACCEPTED' ? '#d1fae5'
-                                                        : component.status === 'REWORK' ? '#fef3c7'
-                                                            : '#fee2e2',
-                                                    color: component.status === 'ACCEPTED' ? '#065f46'
-                                                        : component.status === 'REWORK' ? '#92400e'
-                                                            : '#991b1b'
-                                                }}>
-                                                    {component.status}
-                                                </span>
+                                            <td style={{ textAlign: 'center', padding: '0.5rem' }}>
+                                                <div className={styles.qrItem}>
+                                                    <QRCodeReact 
+                                                        value={component.barcode.replace(/-/g, "")} 
+                                                        size={80}
+                                                        level="H"
+                                                    />
+                                                    <p className={styles.serialText}>
+                                                        {component.barcode.replace(/-/g, "")}
+                                                    </p>
+                                                </div>
                                             </td>
-                                            <td style={{ color: '#6b7280' }}>
+                                            <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>
                                                 {new Date(component.scanned_at).toLocaleString()}
+                                            </td>
+                                            <td>
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    onClick={() => handlePrint([component])}
+                                                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                                                >
+                                                    🖨️ Print
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}

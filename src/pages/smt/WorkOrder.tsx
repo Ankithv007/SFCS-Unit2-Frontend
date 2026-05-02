@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styles from './WorkOrder.module.css';
 
 const DescriptionCell: React.FC<{ text: string }> = ({ text }) => {
@@ -38,6 +39,7 @@ const DescriptionCell: React.FC<{ text: string }> = ({ text }) => {
 };
 
 export const WorkOrder: React.FC = () => {
+    const navigate = useNavigate();
     const today = new Date();
     const datePrefix = `WO${today.getFullYear()}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
 
@@ -46,7 +48,9 @@ export const WorkOrder: React.FC = () => {
     const [productName, setProductName] = useState('');
     const [productDescription, setProductDescription] = useState('');
     const [quantity, setQuantity] = useState('');
+    const [pcbPerPanel, setPcbPerPanel] = useState('');
     const [panelQuantity, setPanelQuantity] = useState('');
+    const [createdBy, setCreatedBy] = useState('');
     const [priority, setPriority] = useState('medium');
     const [error, setError] = useState('');
 
@@ -54,7 +58,31 @@ export const WorkOrder: React.FC = () => {
 
     useEffect(() => {
         fetchWorkOrders();
+        
+        // Auto-fill Created By from login info
+        const storedUser = localStorage.getItem("user_data");
+        if (storedUser) {
+            try {
+                const userObj = JSON.parse(storedUser);
+                setCreatedBy(userObj.name || userObj.email || 'System');
+                console.log("Logged in user:", userObj);
+            } catch (e) {
+                console.error("Error parsing user data:", e);
+            }
+        }
     }, []);
+
+    // Auto-calculate Panel Quantity
+    useEffect(() => {
+        const qty = parseInt(quantity);
+        const ppp = parseInt(pcbPerPanel);
+        
+        if (!isNaN(qty) && !isNaN(ppp) && ppp > 0) {
+            setPanelQuantity(Math.ceil(qty / ppp).toString());
+        } else {
+            setPanelQuantity('');
+        }
+    }, [quantity, pcbPerPanel]);
 
     const fetchWorkOrders = async () => {
         try {
@@ -69,6 +97,7 @@ export const WorkOrder: React.FC = () => {
                     panel_quantity: wo.panel_quantity,
                     line_id: wo.line_id,
                     priority: wo.priority,
+                    created_by: wo.created_by,
                     created_at: wo.created_at
                 })));
             }
@@ -83,7 +112,7 @@ export const WorkOrder: React.FC = () => {
             setError('Sequence must be exactly 5 digits.');
             return;
         }
-        if (!productName || !productDescription || !quantity || !panelQuantity) {
+        if (!productName || !productDescription || !quantity || !panelQuantity || !createdBy) {
             setError('All fields are required.');
             return;
         }
@@ -108,6 +137,7 @@ export const WorkOrder: React.FC = () => {
             quantity: parseInt(quantity),
             panel_quantity: parseInt(panelQuantity),
             priority: priority,
+            created_by: createdBy,
             created_at: new Date().toISOString()
         };
 
@@ -128,6 +158,7 @@ export const WorkOrder: React.FC = () => {
                     panel_quantity: data.panel_quantity,
                     line_id: data.line_id,
                     priority: data.priority,
+                    created_by: data.created_by,
                     created_at: data.created_at
                 };
                 setWorkOrders([newWo, ...workOrders]);
@@ -145,15 +176,25 @@ export const WorkOrder: React.FC = () => {
         setProductName('');
         setProductDescription('');
         setQuantity('');
+        setPcbPerPanel('');
         setPanelQuantity('');
         setPriority('medium');
     };
 
     return (
         <div className={styles.container}>
-            <div className={styles.header}>
-                <h2>📝 Work Order</h2>
-                <p>Manage SMT Work Orders.</p>
+            <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h2>📝 Work Order</h2>
+                    <p>Manage SMT Work Orders.</p>
+                </div>
+                <button 
+                    className={styles.secondaryButton} 
+                    onClick={() => navigate('/smt/workorder-history', { state: { areaId: 'SMT' } })}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                    <span>📊</span> View History
+                </button>
             </div>
 
             <div className={styles.card}>
@@ -162,6 +203,7 @@ export const WorkOrder: React.FC = () => {
                 {error && <div style={{ color: 'var(--error-color)', marginBottom: '1rem', fontWeight: 'bold' }}>{error}</div>}
 
                 <div className={styles.formGrid} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+                    {/* --- ROW 1 --- */}
                     <div className={styles.inputGroup}>
                         <label>Work Order ID *</label>
                         <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
@@ -247,6 +289,7 @@ export const WorkOrder: React.FC = () => {
                         </select>
                     </div>
 
+                    {/* --- ROW 2 --- */}
                     <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
                         <label>Product Name *</label>
                         <input
@@ -270,6 +313,7 @@ export const WorkOrder: React.FC = () => {
                         />
                     </div>
 
+                    {/* --- ROW 3 --- */}
                     <div className={styles.inputGroup}>
                         <label>Quantity *</label>
                         <input
@@ -284,15 +328,52 @@ export const WorkOrder: React.FC = () => {
                     </div>
 
                     <div className={styles.inputGroup}>
-                        <label>Panel Quantity *</label>
+                        <label>PCB per Panel *</label>
                         <input
                             type="number"
-                            value={panelQuantity}
-                            onChange={(e) => setPanelQuantity(e.target.value)}
-                            placeholder="e.g. 25"
+                            value={pcbPerPanel}
+                            onChange={(e) => setPcbPerPanel(e.target.value)}
+                            placeholder="e.g. 2"
                             min="1"
                             className={styles.input}
                             style={{ boxSizing: 'border-box' }}
+                        />
+                    </div>
+
+                    <div className={styles.inputGroup}>
+                        <label>Panel Quantity (Auto)</label>
+                        <input
+                            type="number"
+                            value={panelQuantity}
+                            readOnly
+                            placeholder="Calculated"
+                            className={styles.input}
+                            style={{ 
+                                boxSizing: 'border-box', 
+                                backgroundColor: '#f3f4f6', 
+                                color: '#6b7280', 
+                                cursor: 'not-allowed',
+                                fontWeight: 'bold'
+                            }}
+                        />
+                    </div>
+
+                    <div className={styles.inputGroup}>
+                        <label>Created By *</label>
+                        <input
+                            type="text"
+                            value={createdBy}
+                            placeholder="Logged in user"
+                            className={styles.input}
+                            style={{ 
+                                height: '42px', 
+                                boxSizing: 'border-box',
+                                backgroundColor: '#f3f4f6',
+                                color: '#6b7280',
+                                cursor: 'not-allowed',
+                                fontWeight: 'bold'
+                            }}
+                            readOnly
                         />
                     </div>
                 </div>
@@ -317,6 +398,7 @@ export const WorkOrder: React.FC = () => {
                                 <th>PANEL QTY</th>
                                 <th>LINE ID</th>
                                 <th>PRIORITY</th>
+                                <th>CREATED BY</th>
                                 <th>DATE CREATED</th>
                             </tr>
                         </thead>
@@ -341,7 +423,13 @@ export const WorkOrder: React.FC = () => {
                                             {wo.priority.toUpperCase()}
                                         </span>
                                     </td>
-                                    <td>{new Date(wo.created_at).toLocaleDateString()}</td>
+                                    <td>{wo.created_by || 'System'}</td>
+                                    <td>
+                                        {new Date(wo.created_at).toLocaleDateString()} <br />
+                                        <small style={{ color: '#6b7280' }}>
+                                            {new Date(wo.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                        </small>
+                                    </td>
                                 </tr>
                             ))}
                             {workOrders.length === 0 && (

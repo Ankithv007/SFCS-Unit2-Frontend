@@ -272,3 +272,17 @@
     background-color: var(--error-color);
     color: white;
 }
+
+.qrItem {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.serialText {
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #111827;
+}

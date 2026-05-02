@@ -186,6 +186,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             <span className={styles.menuIcon}>📝</span> Work Order
                         </div>
                         <div
+                            className={`${styles.submenuItem} ${isActive('/smt/workorder-history') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/workorder-history', { state: { areaId: 'SMT' } })}
+                        >
+                            <span className={styles.menuIcon}>📊</span> Work Order History
+                        </div>
+                        <div
                             className={`${styles.submenuItem} ${isActive('/smt/serial-number') ? styles.activeSubmenu : ''}`}
                             onClick={() => navigate('/smt/serial-number')}
                         >

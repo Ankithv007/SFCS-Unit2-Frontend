@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
 import { Login } from './pages/auth/Login';
 import { Signup } from './pages/auth/Signup';
 import { Forgot } from './pages/auth/Forgot';
@@ -23,6 +23,9 @@ import { SerialNumber } from './pages/smt/SerialNumber';
 import { Printing } from './pages/smt/Printing';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+
+import { SmtProtectedRoute } from './components/SmtProtectedRoute';
+import { SmtLogin } from './pages/smt/SmtLogin';
 
 export const router = createBrowserRouter([
     {
@@ -165,36 +168,30 @@ export const router = createBrowserRouter([
                 ),
             },
             {
-                path: '/smt/work-order',
-                element: (
-                    <ProtectedRoute>
-                        <WorkOrder />
-                    </ProtectedRoute>
-                ),
+                path: '/smt/login',
+                element: <SmtLogin />,
             },
             {
-                path: '/smt/workorder-history',
-                element: (
-                    <ProtectedRoute>
-                        <WorkOrderHistory />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/smt/serial-number',
-                element: (
-                    <ProtectedRoute>
-                        <SerialNumber />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/smt/printing',
-                element: (
-                    <ProtectedRoute>
-                        <Printing />
-                    </ProtectedRoute>
-                ),
+                path: '/smt',
+                element: <SmtProtectedRoute children={<Outlet />} />,
+                children: [
+                    {
+                        path: 'work-order',
+                        element: <WorkOrder />,
+                    },
+                    {
+                        path: 'workorder-history',
+                        element: <WorkOrderHistory />,
+                    },
+                    {
+                        path: 'serial-number',
+                        element: <SerialNumber />,
+                    },
+                    {
+                        path: 'printing',
+                        element: <Printing />,
+                    },
+                ]
             },
         ],
     },

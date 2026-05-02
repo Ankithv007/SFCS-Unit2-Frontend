@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSmtAuth } from '../../context/SmtAuthContext';
 import styles from './WorkOrder.module.css';
 
 const DescriptionCell: React.FC<{ text: string }> = ({ text }) => {
@@ -39,6 +40,7 @@ const DescriptionCell: React.FC<{ text: string }> = ({ text }) => {
 };
 
 export const WorkOrder: React.FC = () => {
+    const { smtUser } = useSmtAuth();
     const navigate = useNavigate();
     const today = new Date();
     const datePrefix = `WO${today.getFullYear()}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
@@ -59,16 +61,9 @@ export const WorkOrder: React.FC = () => {
     useEffect(() => {
         fetchWorkOrders();
         
-        // Auto-fill Created By from login info
-        const storedUser = localStorage.getItem("user_data");
-        if (storedUser) {
-            try {
-                const userObj = JSON.parse(storedUser);
-                setCreatedBy(userObj.name || userObj.email || 'System');
-                console.log("Logged in user:", userObj);
-            } catch (e) {
-                console.error("Error parsing user data:", e);
-            }
+        // Auto-fill Created By from SMT login info
+        if (smtUser) {
+            setCreatedBy(smtUser.name || smtUser.userId || 'System');
         }
     }, []);
 

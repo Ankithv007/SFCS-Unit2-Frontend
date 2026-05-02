@@ -6,12 +6,15 @@ import { router } from './routes'
 
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './components/Toast'
+import { SmtAuthProvider } from './context/SmtAuthContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <ToastProvider>
-        <RouterProvider router={router} />
+        <SmtAuthProvider>
+          <RouterProvider router={router} />
+        </SmtAuthProvider>
       </ToastProvider>
     </ThemeProvider>
   </StrictMode>,

@@ -21,9 +21,12 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
     const menuRef = React.useRef<HTMLDivElement>(null);
 
     const handleLogout = async () => {
-        await logout();
-        showToast('Logged out successfully', 'success');
-        navigate('/login');
+        const confirmLogout = window.confirm('Are you sure you want to logout?');
+        if (confirmLogout) {
+            await logout();
+            showToast('Logged out successfully', 'success');
+            navigate('/login');
+        }
     };
 
     const handleAvatarClick = () => {

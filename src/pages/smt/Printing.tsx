@@ -83,7 +83,11 @@ export const Printing: React.FC = () => {
                     <p>Manage SMT Solder Paste Printing tasks. Logged in as: <strong>{smtUser?.name} ({smtUser?.userId})</strong> | Shift: <strong>{getShift()}</strong></p>
                 </div>
                 <button 
-                    onClick={smtLogout} 
+                    onClick={() => {
+                        if (window.confirm("Are you sure you want to logout from SMT?")) {
+                            smtLogout();
+                        }
+                    }} 
                     className={styles.secondaryButton}
                     style={{ borderColor: '#ef4444', color: '#ef4444' }}
                 >

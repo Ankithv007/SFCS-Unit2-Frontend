@@ -46,7 +46,7 @@ export const SmtLogin: React.FC = () => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!userId || !password) {
-            setError('Please enter both User ID and Password.');
+            setError('Please enter both Employee Code and Password.');
             return;
         }
 
@@ -79,9 +79,36 @@ export const SmtLogin: React.FC = () => {
                     });
                     navigate(from, { replace: true });
                 }
+                return;
+            }
+
+            // --- Step 3: Try Central Auth Login (Super Admin, Admin, Manager) ---
+            // We treat the "userId" field as the email for central accounts
+            const authRes = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: userId, password })
+            });
+
+            if (authRes.ok) {
+                const authData = await authRes.json();
+                const globalUser = authData.user;
+                
+                // Allow only authorized roles
+                const authorizedRoles = ['Super Admin', 'Admin', 'Manager'];
+                if (authorizedRoles.includes(globalUser.role)) {
+                    smtLogin({
+                        id: globalUser.id.toString(),
+                        name: globalUser.name,
+                        userId: globalUser.email
+                    });
+                    navigate(from, { replace: true });
+                } else {
+                    setError('Access Denied: Only Admins or Managers can access SMT tools.');
+                }
             } else {
-                const errData = await res.json();
-                setError(errData.error || 'Invalid credentials.');
+                const errData = await authRes.json();
+                setError(errData.message || 'Invalid credentials.');
             }
         } catch (err) {
             setError('Connection error. Please try again.');
@@ -168,8 +195,8 @@ export const SmtLogin: React.FC = () => {
                             <input type="text" className={styles.input} value={empName} onChange={e => setEmpName(e.target.value)} placeholder="e.g. John Doe" />
                         </div>
                         <div className={styles.inputGroup}>
-                            <label>User ID</label>
-                            <input type="text" className={styles.input} value={empUserId} onChange={e => setEmpUserId(e.target.value)} placeholder="e.g. smt001" />
+                            <label>Employee Code</label>
+                            <input type="text" className={styles.input} value={empUserId} onChange={e => setEmpUserId(e.target.value)} placeholder="e.g. EMP001" />
                         </div>
                         <div className={styles.inputGroup}>
                             <label>Password</label>
@@ -185,7 +212,7 @@ export const SmtLogin: React.FC = () => {
                             <thead>
                                 <tr>
                                     <th>Name</th>
-                                    <th>User ID</th>
+                                    <th>Employee Code</th>
                                     <th>Status</th>
                                     <th style={{ textAlign: 'center' }}>Actions</th>
                                 </tr>
@@ -259,12 +286,12 @@ export const SmtLogin: React.FC = () => {
 
                 <form onSubmit={handleLogin} className={styles.form}>
                     <div className={styles.inputGroup}>
-                        <label htmlFor="userId">User ID</label>
+                        <label htmlFor="userId">Employee Code</label>
                         <input
                             id="userId"
                             type="text"
                             className={styles.input}
-                            placeholder="Enter your User ID"
+                            placeholder="Enter your Employee Code"
                             value={userId}
                             onChange={(e) => setUserId(e.target.value)}
                             autoFocus

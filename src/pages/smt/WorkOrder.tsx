@@ -40,7 +40,7 @@ const DescriptionCell: React.FC<{ text: string }> = ({ text }) => {
 };
 
 export const WorkOrder: React.FC = () => {
-    const { smtUser } = useSmtAuth();
+    const { smtUser, smtLogout } = useSmtAuth();
     const navigate = useNavigate();
     const today = new Date();
     const datePrefix = `WO${today.getFullYear()}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
@@ -183,13 +183,26 @@ export const WorkOrder: React.FC = () => {
                     <h2>📝 Work Order</h2>
                     <p>Manage SMT Work Orders.</p>
                 </div>
-                <button 
-                    className={styles.secondaryButton} 
-                    onClick={() => navigate('/smt/workorder-history', { state: { areaId: 'SMT' } })}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                    <span>📊</span> View History
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                        className={styles.secondaryButton} 
+                        onClick={() => navigate('/smt/workorder-history', { state: { areaId: 'SMT' } })}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <span>📊</span> View History
+                    </button>
+                    <button 
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to logout from SMT?")) {
+                                smtLogout();
+                            }
+                        }} 
+                        className={styles.secondaryButton}
+                        style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <span>🔒</span> Logout SMT
+                    </button>
+                </div>
             </div>
 
             <div className={styles.card}>

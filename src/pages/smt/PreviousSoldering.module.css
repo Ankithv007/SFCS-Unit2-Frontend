@@ -122,3 +122,190 @@
 .deleteTextButton:hover {
     text-decoration: underline;
 }
+
+.detailPage {
+    padding: 1rem;
+}
+
+.detailHeaderCard {
+    background: linear-gradient(to right, #e0e7ff, #eff6ff);
+    border: 1px solid #c7d2fe;
+    border-radius: 1rem;
+    padding: 1.75rem;
+    margin-bottom: 2rem;
+}
+
+.detailHeaderRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.detailHeaderRow h3 {
+    margin: 0;
+    color: #111827;
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.detailStats {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    margin-top: 1rem;
+    color: #374151;
+    font-size: 1rem;
+    flex-wrap: wrap;
+}
+
+.detailBackButton {
+    padding: 0.6rem 1.1rem;
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    color: #1f2937;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.detailItemsSection {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 1rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08);
+    padding: 2rem;
+}
+
+.detailItemsHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.detailItemsHeader h3 {
+    margin: 0;
+    padding: 0;
+    border: none;
+    color: #111827;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.detailTableContainer {
+    max-height: 500px;
+    overflow: auto;
+}
+
+.detailDoneRow {
+    height: 100px;
+    background-color: #f0fdf4 !important;
+}
+
+.detailPendingRow {
+    height: 100px;
+    background-color: #fff7ed !important;
+}
+
+.detailSerialCell {
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 1px;
+}
+
+.detailSubtitle {
+    margin: 0.5rem 0 0;
+    color: #9a3412;
+    font-weight: 700;
+}
+
+.detailScanCard {
+    background: #f9fafb;
+    border: 1px dashed #d1d5db;
+    border-radius: 0.75rem;
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+.detailScanForm {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.detailOperatorGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 340px;
+}
+
+.detailOperatorGroup label {
+    color: #111827;
+    font-weight: 700;
+}
+
+.detailOperatorInput {
+    width: 100%;
+    height: 50px;
+    padding: 0 1.1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    color: #111827;
+    background: white;
+    font-size: 1rem;
+}
+
+.detailScanRow {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.detailScanInput {
+    flex: 1;
+    min-width: 0;
+    height: 56px;
+    padding: 0 1.1rem;
+    border: 2px solid #6366f1;
+    border-radius: 0.65rem;
+    color: #111827;
+    background: white;
+    font-size: 1.15rem;
+}
+
+.detailScanInput:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.14);
+}
+
+.detailScanButton {
+    height: 56px;
+    padding: 0 2.25rem;
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    color: white;
+    border: none;
+    border-radius: 0.65rem;
+    box-shadow: 0 8px 16px rgba(79, 70, 229, 0.22);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .detailHeaderRow {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .detailScanRow {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .detailScanButton {
+        width: 100%;
+    }
+}

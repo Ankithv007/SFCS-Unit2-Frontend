@@ -1,14 +1,214 @@
 import React, { useState, useEffect } from 'react';
+import QRCode from 'react-qr-code';
 import styles from './PostWorkSoldering.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
-import { BatchDetailView } from '../../components/BatchDetailView';
 
+// --- Detail View Component (Internal) ---
+interface PostWorkSolderingDetailProps {
+    woId: string;
+    onBack: () => void;
+    operatorName: string;
+}
+
+const PostWorkSolderingDetail: React.FC<PostWorkSolderingDetailProps> = ({ woId, onBack, operatorName }) => {
+    const [serials, setSerials] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [scanBarcode, setScanBarcode] = useState('');
+
+    useEffect(() => {
+        if (woId) fetchSerials();
+    }, [woId]);
+
+    const fetchSerials = async () => {
+        setLoading(true);
+        try {
+            const url = new URL('/api/smt/serial-numbers', window.location.origin);
+            url.searchParams.set('work_order_id', woId);
+            url.searchParams.set('filter_step', 'Rework');
+            url.searchParams.set('filter_status', 'PASS');
+            url.searchParams.set('current_step', 'Post-Work Soldering');
+
+            const res = await fetch(url.toString());
+            if (res.ok) {
+                const data = await res.json();
+                setSerials(data);
+            }
+        } catch (err) {
+            console.error("Error fetching serials:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePassFail = async (serialId: number, status: 'PASS' | 'FAIL') => {
+        try {
+            const res = await fetch('/api/smt/inspections', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    serial_id: serialId,
+                    process_step: 'Post-Work Soldering',
+                    scanned_by: operatorName || 'System',
+                    status: status
+                })
+            });
+
+            if (res.ok) {
+                fetchSerials();
+            } else {
+                alert(`Failed to save ${status} status.`);
+            }
+        } catch (err) {
+            console.error("Pass/Fail error:", err);
+        }
+    };
+
+    const processScan = async (barcodeInput: string) => {
+        const cleanInput = barcodeInput.trim().replace(/-/g, '').toUpperCase();
+        if (!cleanInput) return false;
+
+        const serialObj = serials.find((s: any) =>
+            [s.serial_number, s.barcode].some((value) =>
+                value?.toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+
+        if (!serialObj) {
+            alert(`Serial Number "${barcodeInput}" not found in this view.`);
+            setScanBarcode('');
+            return false;
+        }
+
+        if (serialObj.is_completed_here === true || String(serialObj.is_completed_here).toLowerCase() === 'true') {
+            alert(`Serial Number "${barcodeInput}" is already passed.`);
+            setScanBarcode('');
+            return false;
+        }
+
+        await handlePassFail(serialObj.id, 'PASS');
+        setScanBarcode('');
+        return true;
+    };
+
+    const handleScan = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await processScan(scanBarcode);
+    };
+
+    useEffect(() => {
+        const tryAutoScan = async () => {
+            const cleanInput = scanBarcode.trim().replace(/-/g, '').toUpperCase();
+            if (!cleanInput) return;
+
+            const match = serials.find((s: any) =>
+                [s.serial_number, s.barcode].some((value) =>
+                    value?.toString().replace(/-/g, '').toUpperCase() === cleanInput
+                )
+            );
+
+            if (match) {
+                await processScan(scanBarcode);
+            }
+        };
+
+        tryAutoScan();
+    }, [scanBarcode, serials]);
+
+    const completedSerials = serials.filter(s => s.is_completed_here === true || s.is_completed_here === 't' || s.is_completed_here === 1);
+
+    return (
+        <div className={styles.detailPage}>
+            <div className={styles.detailHeaderCard}>
+                <div className={styles.detailHeaderRow}>
+                    <h3>⚡ Post-Work Soldering Detail: {woId}</h3>
+                    <button onClick={onBack} className={styles.detailBackButton}>Back</button>
+                </div>
+            </div>
+            <div className={styles.detailScanCard}>
+                <form onSubmit={handleScan} className={styles.detailScanForm}>
+                    <div className={styles.detailOperatorGroup}>
+                        <label>Scanned By *</label>
+                        <input value={operatorName || 'System'} readOnly className={styles.detailOperatorInput} />
+                    </div>
+                    <div className={styles.detailScanRow}>
+                        <input
+                            type="text"
+                            value={scanBarcode}
+                            onChange={(e) => setScanBarcode(e.target.value)}
+                            placeholder="Scan Item Barcode..."
+                            className={styles.detailScanInput}
+                            autoFocus
+                        />
+                        <button type="submit" className={styles.detailScanButton}>SCAN</button>
+                    </div>
+                </form>
+            </div>
+            <div className={styles.detailItemsSection}>
+                <div className={styles.detailItemsHeader}>
+                    <h3>Items ({serials.length})</h3>
+                </div>
+                <div className={styles.detailTableContainer}>
+                <table className={styles.table}>
+                    <thead>
+                        <tr>
+                            <th>SERIAL NUMBER</th>
+                            <th>BARCODE</th>
+                            <th>STATUS</th>
+                            <th>ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                        ) : serials.map((s, idx) => {
+                            const isDone = completedSerials.some(cs => cs.id === s.id);
+                            return (
+                                <tr key={s.id || idx} className={isDone ? styles.detailDoneRow : styles.detailPendingRow}>
+                                    <td className={styles.detailSerialCell}>{s.serial_number}</td>
+                                    <td style={{ textAlign: 'center', padding: '0.75rem 0' }}>
+                                        <div style={{ display: 'grid', gap: '0.4rem', justifyItems: 'center' }}>
+                                            <QRCode value={(s.barcode || s.serial_number).replace(/-/g, '')} size={80} />
+                                            <span style={{ fontSize: '0.8rem', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }}>
+                                                {s.barcode || s.serial_number}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span style={{
+                                            padding: '4px 12px',
+                                            borderRadius: '999px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 'bold',
+                                            backgroundColor: isDone ? '#dcfce7' : '#fef3c7',
+                                            color: isDone ? '#166534' : '#92400e'
+                                        }}>
+                                            {isDone ? 'PASSED' : '🕒 PENDING'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div style={{ display: 'flex', gap: '10px' }}>
+                                            <button onClick={() => handlePassFail(s.id, 'PASS')} style={{ background: '#22c55e', color: 'white', border: 'none', padding: '5px 15px', cursor: 'pointer' }}>Pass</button>
+                                            <button onClick={() => handlePassFail(s.id, 'FAIL')} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 15px', cursor: 'pointer' }}>Fail</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Main Page Component ---
 export const PostWorkSoldering: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const [workOrders, setWorkOrders] = useState<any[]>([]);
-    
+
     // View mode state
-    const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
+    const [viewingWoId, setViewingWoId] = useState<string | null>(null);
 
     // Form state
     const [formWoId, setFormWoId] = useState('');
@@ -71,7 +271,7 @@ export const PostWorkSoldering: React.FC = () => {
             alert('Please select a Work Order.');
             return;
         }
-        
+
         try {
             const res = await fetch('/api/smt/process-setups', {
                 method: 'POST',
@@ -104,12 +304,12 @@ export const PostWorkSoldering: React.FC = () => {
                     <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>⚡ Post-Work Soldering</h2>
                     <p style={{ color: '#64748b' }}>Manage Post-Soldering tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
                 </div>
-                <button 
+                <button
                     onClick={() => {
                         if (window.confirm("Are you sure you want to logout from SMT?")) {
                             smtLogout();
                         }
-                    }} 
+                    }}
                     className={styles.secondaryButton}
                     style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                 >
@@ -117,16 +317,11 @@ export const PostWorkSoldering: React.FC = () => {
                 </button>
             </div>
 
-            {selectedWoId ? (
-                <BatchDetailView 
-                    woId={selectedWoId} 
-                    onBack={() => setSelectedWoId(null)} 
-                    title="Post-Soldering" 
-                    icon="⚡" 
-                    filterStep="Pre-Soldering"
-                    filterStatus="PASS"
-                    showOnlyCompleted={false}
-                    enablePassFail={true}
+            {viewingWoId ? (
+                <PostWorkSolderingDetail
+                    woId={viewingWoId}
+                    onBack={() => setViewingWoId(null)}
+                    operatorName={smtUser?.name || 'System'}
                 />
             ) : (
                 <>
@@ -134,7 +329,7 @@ export const PostWorkSoldering: React.FC = () => {
                         <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Inspection Setup Form</h3>
                         <div className={styles.formGrid}>
                             <div className={styles.inputGroup}>
-                                <label>Select Work Order (Registered Only) *</label>
+                                <label>Select Work Order (Serial Number Scanned Only) *</label>
                                 <select
                                     className={styles.input}
                                     value={formWoId}
@@ -225,14 +420,14 @@ export const PostWorkSoldering: React.FC = () => {
                                                 {new Date(entry.timestamp).toLocaleTimeString()}
                                             </td>
                                             <td style={{ display: 'flex', gap: '5px' }}>
-                                                <button 
+                                                <button
                                                     className={styles.secondaryButton}
                                                     style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                    onClick={() => setSelectedWoId(entry.work_order_id)}
+                                                    onClick={() => setViewingWoId(entry.work_order_id)}
                                                 >
                                                     View
                                                 </button>
-                                                <button 
+                                                <button
                                                     className={styles.secondaryButton}
                                                     style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                     onClick={async () => {

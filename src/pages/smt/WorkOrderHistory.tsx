@@ -17,13 +17,13 @@ interface WorkOrderHistoryData {
 
 export const WorkOrderHistory: React.FC = () => {
     const location = useLocation();
-    
+
     // Filters state
     const [areaId, setAreaId] = useState('SMT');
     const [lineId, setLineId] = useState('ALL');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
-    
+
     // Data state
     const [historyData, setHistoryData] = useState<WorkOrderHistoryData[]>([]);
     const [loading, setLoading] = useState(false);
@@ -34,12 +34,12 @@ export const WorkOrderHistory: React.FC = () => {
         if (location.state && location.state.areaId) {
             setAreaId(location.state.areaId);
         }
-        
+
         // Initial fetch
         const today = new Date().toISOString().split('T')[0];
         setFromDate(today);
         setToDate(today);
-        
+
         // fetchHistory(today, today, 'ALL', areaId); // We'll wait for state to settle
     }, [location.state]);
 
@@ -95,19 +95,19 @@ export const WorkOrderHistory: React.FC = () => {
                 <form onSubmit={handleSubmit} className={styles.formGrid}>
                     <div className={styles.inputGroup}>
                         <label>Area ID</label>
-                        <input 
-                            type="text" 
-                            value={areaId} 
-                            readOnly 
-                            className={styles.input} 
+                        <input
+                            type="text"
+                            value={areaId}
+                            readOnly
+                            className={styles.input}
                             style={{ backgroundColor: '#e9ecef', fontWeight: 'bold' }}
                         />
                     </div>
                     <div className={styles.inputGroup}>
                         <label>Line ID</label>
-                        <select 
-                            value={lineId} 
-                            onChange={(e) => setLineId(e.target.value)} 
+                        <select
+                            value={lineId}
+                            onChange={(e) => setLineId(e.target.value)}
                             className={styles.select}
                         >
                             <option value="ALL">ALL</option>
@@ -118,19 +118,19 @@ export const WorkOrderHistory: React.FC = () => {
                     </div>
                     <div className={styles.inputGroup}>
                         <label>From Date</label>
-                        <input 
-                            type="date" 
-                            value={fromDate} 
-                            onChange={(e) => setFromDate(e.target.value)} 
+                        <input
+                            type="date"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
                             className={styles.input}
                         />
                     </div>
                     <div className={styles.inputGroup}>
                         <label>To Date</label>
-                        <input 
-                            type="date" 
-                            value={toDate} 
-                            onChange={(e) => setToDate(e.target.value)} 
+                        <input
+                            type="date"
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
                             className={styles.input}
                         />
                     </div>
@@ -145,7 +145,7 @@ export const WorkOrderHistory: React.FC = () => {
             <div className={styles.card}>
                 <h3>History Details</h3>
                 {error && <div className={styles.error}>{error}</div>}
-                
+
                 <div className={styles.tableContainer}>
                     <table className={styles.table}>
                         <thead>

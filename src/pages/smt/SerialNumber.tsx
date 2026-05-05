@@ -32,7 +32,7 @@ interface SmtBatch {
 }
 
 export const SerialNumber: React.FC = () => {
-    const { smtUser } = useSmtAuth();
+    const { smtUser, smtLogout } = useSmtAuth();
     const [workOrders, setWorkOrders] = useState<any[]>([]);
 
     // Form state
@@ -392,7 +392,7 @@ export const SerialNumber: React.FC = () => {
         if (activeBatch && scanInput.trim()) {
             const cleanScan = scanInput.trim();
             const match = activeBatch.components.find(c => c.barcode === cleanScan);
-            
+
             // If we found a match that isn't scanned yet, trigger handleScan
             if (match && match.status !== 'SCANNED') {
                 handleScan();
@@ -400,18 +400,28 @@ export const SerialNumber: React.FC = () => {
         }
     }, [scanInput, activeBatch]);
 
+    const isScannedComponent = (component: ScannedComponent) =>
+        component.status?.toString().trim().toUpperCase() === 'SCANNED';
+
+    const getScannedComponents = (batch: SmtBatch) => batch.components.filter(isScannedComponent);
+
+    const activeScannedComponents = activeBatch ? getScannedComponents(activeBatch) : [];
+    const activeAvailableCount = viewMode === 'REGISTRATION_COMPLETED'
+        ? activeScannedComponents.length
+        : activeBatch?.components.length || 0;
+
     const filteredComponents = activeBatch?.components.filter(c => {
         const matchesFilter = c.barcode.toLowerCase().includes(barcodeFilter.toLowerCase());
-        
+
         if (viewMode === 'REGISTRATION_PENDING') {
             // Viewing from Pending: Show only items NOT yet scanned
-            return matchesFilter && c.status !== 'SCANNED';
+            return matchesFilter && !isScannedComponent(c);
         }
         if (viewMode === 'REGISTRATION_COMPLETED') {
             // Viewing from Completed: Show only items that ARE scanned
-            return matchesFilter && c.status === 'SCANNED';
+            return matchesFilter && isScannedComponent(c);
         }
-        
+
         return matchesFilter;
     }) || [];
 
@@ -422,9 +432,22 @@ export const SerialNumber: React.FC = () => {
 
     return (
         <div className={styles.container}>
-            <div className={styles.header}>
-                <h2>🔢 Serial Number</h2>
-                <p>Generate SMT Serial Numbers based on Work Orders.</p>
+            <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h2>🔢 Serial Number Scanning</h2>
+                    <p>Scan and manage unique PCB serial numbers for SMT production.</p>
+                </div>
+                <button
+                    onClick={() => {
+                        if (window.confirm("Are you sure you want to logout from SMT?")) {
+                            smtLogout();
+                        }
+                    }}
+                    className={styles.secondaryButton}
+                    style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                    <span>🔒</span> Logout SMT
+                </button>
             </div>
 
             {!activeBatch ? (
@@ -549,7 +572,7 @@ export const SerialNumber: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {batches.filter(b => b.components.some(c => c.status !== 'SCANNED')).map((batch) => (
+                                    {batches.filter(b => b.components.some(c => !isScannedComponent(c))).map((batch) => (
                                         <tr key={batch.id}>
                                             <td style={{ fontWeight: 600 }}>{batch.product_name}</td>
                                             <td>{batch.wo_qty}</td>
@@ -581,7 +604,7 @@ export const SerialNumber: React.FC = () => {
                                             </td>
                                         </tr>
                                     ))}
-                                    {batches.filter(b => b.components.some(c => c.status !== 'SCANNED')).length === 0 && (
+                                    {batches.filter(b => b.components.some(c => !isScannedComponent(c))).length === 0 && (
                                         <tr>
                                             <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                 No serials generated yet.
@@ -594,7 +617,7 @@ export const SerialNumber: React.FC = () => {
                     </div>
 
                     <div className={styles.card}>
-                        <h3 style={{ color: '#d97706' }}>Pending PCB Registration</h3>
+                        <h3 style={{ color: '#d97706' }}>Pending Serial Number Scanning</h3>
                         <div className={styles.tableContainer}>
                             <table className={styles.table}>
                                 <thead>
@@ -608,9 +631,9 @@ export const SerialNumber: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {batches.filter(b => b.components.some(c => c.status !== 'SCANNED')).map((batch) => {
+                                    {batches.filter(b => b.components.some(c => !isScannedComponent(c))).map((batch) => {
                                         const available = batch.components.length;
-                                        const completed = batch.components.filter(c => c.status === 'SCANNED').length;
+                                        const completed = getScannedComponents(batch).length;
                                         const pending = available - completed;
                                         return (
                                             <tr key={batch.id}>
@@ -628,7 +651,7 @@ export const SerialNumber: React.FC = () => {
                                                                 setCurrentPage(1);
                                                                 setBarcodeFilter('');
                                                                 setViewMode('REGISTRATION_PENDING');
-                                                                setActuallyScanned(batch.components.filter(c => c.status === 'SCANNED').map(c => c.barcode));
+                                                                setActuallyScanned(getScannedComponents(batch).map(c => c.barcode));
                                                             }}
                                                             style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
                                                         >
@@ -639,20 +662,20 @@ export const SerialNumber: React.FC = () => {
                                             </tr>
                                         );
                                     })}
-                                    {batches.filter(b => b.components.some(c => c.status !== 'SCANNED')).length === 0 && (
-                                            <tr>
-                                                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                    No pending registrations.
-                                                </td>
-                                            </tr>
-                                        )}
+                                    {batches.filter(b => b.components.some(c => !isScannedComponent(c))).length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                No pending registrations.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
                     <div className={styles.card}>
-                        <h3 style={{ color: '#059669' }}>Completed PCB Registration</h3>
+                        <h3 style={{ color: '#059669' }}>Completed Serial Number Scanning</h3>
                         <div className={styles.tableContainer}>
                             <table className={styles.table}>
                                 <thead>
@@ -666,10 +689,11 @@ export const SerialNumber: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {batches.filter(b => b.components.some(c => c.status === 'SCANNED')).map((batch) => {
-                                        const available = batch.components.length;
-                                        const completed = batch.components.filter(c => c.status === 'SCANNED').length;
-                                        const pending = available - completed;
+                                    {batches.filter(b => b.components.some(isScannedComponent)).map((batch) => {
+                                        const scannedComponents = getScannedComponents(batch);
+                                        const available = scannedComponents.length;
+                                        const completed = scannedComponents.length;
+                                        const pending = 0;
                                         return (
                                             <tr key={batch.id}>
                                                 <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
@@ -686,7 +710,7 @@ export const SerialNumber: React.FC = () => {
                                                                 setCurrentPage(1);
                                                                 setBarcodeFilter('');
                                                                 setViewMode('REGISTRATION_COMPLETED');
-                                                                setActuallyScanned(batch.components.filter(c => c.status === 'SCANNED').map(c => c.barcode));
+                                                                setActuallyScanned(scannedComponents.map(c => c.barcode));
                                                             }}
                                                             style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
                                                         >
@@ -699,20 +723,20 @@ export const SerialNumber: React.FC = () => {
                                                             display: 'flex',
                                                             alignItems: 'center'
                                                         }}>
-                                                            ✓ COMPLETED
+                                                            SCANNED
                                                         </span>
                                                     </div>
                                                 </td>
                                             </tr>
                                         );
                                     })}
-                                    {batches.filter(b => b.components.some(c => c.status === 'SCANNED')).length === 0 && (
-                                            <tr>
-                                                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                    No completed registrations.
-                                                </td>
-                                            </tr>
-                                        )}
+                                    {batches.filter(b => b.components.some(isScannedComponent)).length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                No completed registrations.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -726,15 +750,15 @@ export const SerialNumber: React.FC = () => {
                             <p style={{ margin: '4px 0', fontSize: '0.9rem', color: '#6b7280' }}>Created by: {activeBatch.created_by}</p>
 
                             <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', fontSize: '1rem', color: '#4b5563', marginTop: '1rem' }}>
-                                <span>Total Scanned: <strong>{actuallyScanned.length} / {activeBatch.components.length}</strong></span>
+                                <span>Total Scanned: <strong>{actuallyScanned.length} / {activeAvailableCount}</strong></span>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    🏭 Serial Number Available: <strong style={{ color: '#2563eb' }}>{activeBatch.components.length}</strong>
+                                    🏭 Serial Number Available: <strong style={{ color: '#2563eb' }}>{activeAvailableCount}</strong>
                                 </span>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     ✅ completed: <strong style={{ color: '#059669' }}>{actuallyScanned.length}</strong>
                                 </span>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    🔄 pending: <strong style={{ color: '#d97706' }}>{activeBatch.components.length - actuallyScanned.length}</strong>
+                                    🔄 pending: <strong style={{ color: '#d97706' }}>{Math.max(activeAvailableCount - actuallyScanned.length, 0)}</strong>
                                 </span>
                             </div>
                         </div>
@@ -819,7 +843,7 @@ export const SerialNumber: React.FC = () => {
                                 </thead>
                                 <tbody>
                                     {paginatedComponents.map((component) => {
-                                        const isScanned = actuallyScanned.includes(component.barcode);
+                                        const isScanned = actuallyScanned.includes(component.barcode) || isScannedComponent(component);
                                         return (
                                             <tr key={component.id} style={{ height: '100px', backgroundColor: isScanned ? '#f0fdf4' : '#fff7ed' }}>
                                                 <td style={{ fontWeight: 'bold', fontSize: '1rem', letterSpacing: '1px' }}>

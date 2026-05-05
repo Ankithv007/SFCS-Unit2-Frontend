@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSmtAuth } from '../../context/SmtAuthContext';
+import { useAuth } from '../../hooks/useAuth';
 import styles from './SmtLogin.module.css';
 
 export const SmtLogin: React.FC = () => {
     const { smtLogin } = useSmtAuth();
+    const { user: mainUser } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     
@@ -22,6 +24,11 @@ export const SmtLogin: React.FC = () => {
     const [empUserId, setEmpUserId] = useState('');
     const [empPassword, setEmpPassword] = useState('');
     const [editingEmpId, setEditingEmpId] = useState<string | null>(null);
+    
+    // Custom Admin Prompt State
+    const [showAdminModal, setShowAdminModal] = useState(false);
+    const [adminPassword, setAdminPassword] = useState('');
+    const [showAdminPassword, setShowAdminPassword] = useState(false);
 
     const from = location.state?.from?.pathname || '/smt/work-order';
 
@@ -167,11 +174,41 @@ export const SmtLogin: React.FC = () => {
     };
 
     const handleAdminIconClick = () => {
-        const pwd = prompt("Enter Admin Password:");
-        if (pwd === "admin123") {
-            setIsAdminMode(true);
-        } else if (pwd !== null) {
-            alert("Incorrect Password");
+        const authorizedRoles = ['Super Admin', 'Admin', 'Manager'];
+        if (mainUser && authorizedRoles.includes(mainUser.role)) {
+            setShowAdminModal(true);
+            setAdminPassword('');
+            setShowAdminPassword(false);
+        } else {
+            alert(`Access Denied: Only Admins or Managers can access the SMT Admin Panel. Your current role is: ${mainUser?.role || 'Unknown'}`);
+        }
+    };
+
+    const handleAdminSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        
+        if (!mainUser) {
+            alert("Session expired. Please login to the main web page again.");
+            return;
+        }
+
+        try {
+            // Verify password against the main auth system using the current user's email
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: mainUser.email, password: adminPassword })
+            });
+
+            if (res.ok) {
+                setIsAdminMode(true);
+                setShowAdminModal(false);
+            } else {
+                alert(`Incorrect Password for ${mainUser.name}. Please enter your main SFCS web login password.`);
+            }
+        } catch (err) {
+            console.error("Admin verification error:", err);
+            alert("Connection error. Please try again.");
         }
     };
 
@@ -329,6 +366,61 @@ export const SmtLogin: React.FC = () => {
                     </button>
                 </form>
             </div>
+
+            {/* Admin Password Modal */}
+            {showAdminModal && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 1000,
+                    backdropFilter: 'blur(4px)'
+                }}>
+                    <div className={styles.loginCard} style={{ maxWidth: '400px', width: '90%', padding: '2rem' }}>
+                        <div className={styles.header}>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Enter Admin Password:</h3>
+                        </div>
+                        <form onSubmit={handleAdminSubmit} style={{ marginTop: '1.5rem' }}>
+                            <div className={styles.inputWrapper}>
+                                <input 
+                                    type={showAdminPassword ? 'text' : 'password'}
+                                    className={styles.input}
+                                    style={{ borderColor: 'var(--primary-color)' }}
+                                    value={adminPassword}
+                                    onChange={(e) => setAdminPassword(e.target.value)}
+                                    autoFocus
+                                    placeholder="Enter Admin Password"
+                                />
+                                <button
+                                    type="button"
+                                    className={styles.passwordToggle}
+                                    onClick={() => setShowAdminPassword(!showAdminPassword)}
+                                    tabIndex={-1}
+                                >
+                                    {showAdminPassword ? (
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    ) : (
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                    )}
+                                </button>
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                                <button 
+                                    type="submit" 
+                                    className={styles.loginButton}
+                                    style={{ flex: 1 }}
+                                >OK</button>
+                                <button 
+                                    type="button" 
+                                    className={styles.secondaryButton}
+                                    style={{ flex: 1 }}
+                                    onClick={() => setShowAdminModal(false)}
+                                >Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

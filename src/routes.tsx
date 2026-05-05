@@ -21,6 +21,12 @@ import { WorkOrder } from './pages/smt/WorkOrder';
 import { WorkOrderHistory } from './pages/smt/WorkOrderHistory';
 import { SerialNumber } from './pages/smt/SerialNumber';
 import { Printing } from './pages/smt/Printing';
+import Spi from './pages/smt/Spi';
+import PostAoi from './pages/smt/PostAoi';
+import Rework from './pages/smt/Rework';
+import { PreviousSoldering } from './pages/smt/PreviousSoldering';
+import { PostWorkSoldering } from './pages/smt/PostWorkSoldering';
+import { ViTouchUp } from './pages/smt/ViTouchUp';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -190,6 +196,30 @@ export const router = createBrowserRouter([
                     {
                         path: 'printing',
                         element: <Printing />,
+                    },
+                    {
+                        path: 'spi',
+                        element: <Spi />,
+                    },
+                    {
+                        path: 'post-aoi',
+                        element: <PostAoi />,
+                    },
+                    {
+                        path: 'rework',
+                        element: <Rework />,
+                    },
+                    {
+                        path: 'previous-soldering',
+                        element: <PreviousSoldering />,
+                    },
+                    {
+                        path: 'post-work-soldering',
+                        element: <PostWorkSoldering />,
+                    },
+                    {
+                        path: 'vi-touch-up',
+                        element: <ViTouchUp />,
                     },
                 ]
             },

@@ -6,6 +6,7 @@ import styles from './Header.module.css';
 import logo from '../assets/logo.webp';
 
 import { useTheme } from '../context/ThemeContext';
+import { useSmtAuth } from '../context/SmtAuthContext';
 
 interface HeaderProps {
     onToggleSidebar?: () => void;
@@ -14,6 +15,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
     const { user, logout, updateUserAvatar, removeUserAvatar } = useAuth();
     const { theme, toggleTheme } = useTheme();
+    const { smtLogout } = useSmtAuth();
     const { showToast } = useToast();
     const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = React.useState(false);
@@ -23,6 +25,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
     const handleLogout = async () => {
         const confirmLogout = window.confirm('Are you sure you want to logout?');
         if (confirmLogout) {
+            // Logout from SMT session as well
+            smtLogout();
+            
             await logout();
             showToast('Logged out successfully', 'success');
             navigate('/login');

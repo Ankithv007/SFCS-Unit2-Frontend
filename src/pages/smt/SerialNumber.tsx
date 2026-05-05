@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styles from './SerialNumber.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import QRCodeReact from 'react-qr-code';
@@ -55,6 +55,14 @@ export const SerialNumber: React.FC = () => {
     const [viewMode, setViewMode] = useState<'GENERATED' | 'REGISTRATION_PENDING' | 'REGISTRATION_COMPLETED' | null>(null);
 
     const [batches, setBatches] = useState<SmtBatch[]>([]);
+    const scanInputRef = useRef<HTMLInputElement>(null);
+
+    // Auto-focus the input whenever we are in a scanning viewMode
+    useEffect(() => {
+        if ((viewMode === 'REGISTRATION_PENDING' || viewMode === 'REGISTRATION_COMPLETED') && scanInputRef.current) {
+            scanInputRef.current.focus();
+        }
+    }, [viewMode, activeBatch]);
 
     const fetchBatches = async (woId?: string) => {
         try {
@@ -65,14 +73,16 @@ export const SerialNumber: React.FC = () => {
                 const grouped = serialData.reduce((acc: any, curr: any) => {
                     const key = `${curr.work_order_id}-${curr.serial_format.replace(/-/g, "")}`;
                     if (!acc[key]) {
+                        const rawNum = curr.serial_number.replace(/\D/g, '');
+                        const num = rawNum ? parseInt(rawNum) : 0;
                         acc[key] = {
                             id: curr.id,
                             work_order_id: curr.work_order_id,
                             product_name: curr.product_name || "Unknown Product",
                             wo_qty: curr.wo_qty || 0,
                             panel_qty: curr.panel_qty || 0,
-                            starting_number: parseInt(curr.serial_number.replace(/\D/g, '')),
-                            end_number: parseInt(curr.serial_number.replace(/\D/g, '')),
+                            starting_number: num,
+                            end_number: num,
                             serial_format: curr.serial_format.replace(/-/g, ""),
                             created_by: curr.created_by || curr.wo_created_by || "System",
                             created_at: curr.created_at,
@@ -81,7 +91,8 @@ export const SerialNumber: React.FC = () => {
                         };
                     }
 
-                    const num = parseInt(curr.serial_number.replace(/\D/g, ''));
+                    const rawNum = curr.serial_number.replace(/\D/g, '');
+                    const num = rawNum ? parseInt(rawNum) : 0;
                     if (num < acc[key].starting_number) acc[key].starting_number = num;
                     if (num > acc[key].end_number) acc[key].end_number = num;
 
@@ -217,11 +228,9 @@ export const SerialNumber: React.FC = () => {
             setWoQty(wo.quantity.toString());
             setPanelQty(wo.panel_quantity.toString());
         } else {
-            setProductName('');
             setWoQty('');
             setPanelQty('');
         }
-        fetchBatches(woId);
     };
 
     const handleGenerateSerials = async () => {
@@ -268,21 +277,7 @@ export const SerialNumber: React.FC = () => {
             });
 
             if (res.ok) {
-                const newBatch: SmtBatch = {
-                    id: Date.now(),
-                    work_order_id: selectedWoId,
-                    product_name: productName,
-                    wo_qty: parseInt(woQty),
-                    panel_qty: parseInt(panelQty),
-                    serial_format: formatStr,
-                    starting_number: start,
-                    end_number: end,
-                    created_by: createdBy,
-                    created_at: new Date().toISOString(),
-                    is_registered: false,
-                    components: newComponents
-                };
-                setBatches([newBatch, ...batches]);
+                fetchBatches();
                 alert('Serials Generated Successfully!');
             } else {
                 alert('Failed to generate serials via API.');
@@ -324,22 +319,7 @@ export const SerialNumber: React.FC = () => {
         }
     };
 
-    const handleRegister = async (woId: string) => {
-        try {
-            const res = await fetch(`/api/smt/work-orders/${woId}/register`, {
-                method: 'POST'
-            });
-            if (res.ok) {
-                alert(`Work Order ${woId} registered successfully!`);
-            } else {
-                alert('Failed to register Work Order.');
-            }
-        } catch (err) {
-            console.error("Registration error:", err);
-            alert('Error connecting to backend API.');
-        }
-    };
-    const handleScan = async () => {
+    const handleScan = useCallback(async () => {
         const cleanScan = scanInput.trim();
         if (!cleanScan) return;
 
@@ -401,7 +381,25 @@ export const SerialNumber: React.FC = () => {
             alert(`Serial ${cleanScan} not found in any pending Work Order.`);
         }
         setScanInput('');
-    };
+        // Keep focus on the input after scan
+        if (scanInputRef.current) {
+            scanInputRef.current.focus();
+        }
+    }, [scanInput, activeBatch, batches, scannedBy]);
+
+    // Auto-scan logic: Trigger handleScan automatically when input matches a valid barcode
+    useEffect(() => {
+        if (activeBatch && scanInput.trim()) {
+            const cleanScan = scanInput.trim();
+            const match = activeBatch.components.find(c => c.barcode === cleanScan);
+            
+            // If we found a match that isn't scanned yet, trigger handleScan
+            if (match && match.status !== 'SCANNED') {
+                handleScan();
+            }
+        }
+    }, [scanInput, activeBatch]);
+
     const filteredComponents = activeBatch?.components.filter(c => {
         const matchesFilter = c.barcode.toLowerCase().includes(barcodeFilter.toLowerCase());
         
@@ -442,9 +440,12 @@ export const SerialNumber: React.FC = () => {
                                     onChange={(e) => handleSelectWo(e.target.value)}
                                 >
                                     <option value="">-- Select Work Order --</option>
-                                    {workOrders.map((wo, i) => (
-                                        <option key={i} value={wo.work_order_id}>{wo.work_order_id}</option>
-                                    ))}
+                                    {workOrders
+                                        .filter(wo => !batches.some(b => b.work_order_id === wo.work_order_id))
+                                        .map((wo, i) => (
+                                            <option key={i} value={wo.work_order_id}>{wo.work_order_id}</option>
+                                        ))
+                                    }
                                 </select>
                             </div>
                             <div className={styles.inputGroup}>
@@ -611,7 +612,6 @@ export const SerialNumber: React.FC = () => {
                                         const available = batch.components.length;
                                         const completed = batch.components.filter(c => c.status === 'SCANNED').length;
                                         const pending = available - completed;
-                                        const isFullyScanned = available > 0 && completed === available;
                                         return (
                                             <tr key={batch.id}>
                                                 <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
@@ -633,22 +633,6 @@ export const SerialNumber: React.FC = () => {
                                                             style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
                                                         >
                                                             View
-                                                        </button>
-                                                        <button
-                                                            className={styles.button}
-                                                            disabled={!isFullyScanned || batch.is_registered}
-                                                            onClick={() => {
-                                                                handleRegister(batch.work_order_id);
-                                                                setBatches(batches.map(b => b.id === batch.id ? { ...b, is_registered: true } : b));
-                                                            }}
-                                                            style={{
-                                                                padding: '0.4rem 1rem',
-                                                                fontSize: '0.85rem',
-                                                                opacity: (!isFullyScanned || batch.is_registered) ? 0.5 : 1,
-                                                                cursor: (!isFullyScanned || batch.is_registered) ? 'not-allowed' : 'pointer'
-                                                            }}
-                                                        >
-                                                            {batch.is_registered ? 'Registered' : 'Register'}
                                                         </button>
                                                     </div>
                                                 </td>
@@ -787,6 +771,7 @@ export const SerialNumber: React.FC = () => {
 
                             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                 <input
+                                    ref={scanInputRef}
                                     type="text"
                                     className={styles.input}
                                     style={{ flex: 1, height: '50px', fontSize: '1.2rem', borderColor: '#6366f1' }}

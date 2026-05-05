@@ -203,6 +203,42 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                         >
                             <span className={styles.menuIcon}>🖨️</span> Printing
                         </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/spi') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/spi')}
+                        >
+                            <span className={styles.menuIcon}>🔍</span> SPI
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/post-aoi') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/post-aoi')}
+                        >
+                            <span className={styles.menuIcon}>🤖</span> Post AOI
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/rework') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/rework')}
+                        >
+                            <span className={styles.menuIcon}>🛠️</span> Rework
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/previous-soldering') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/previous-soldering')}
+                        >
+                            <span className={styles.menuIcon}>🔥</span> Pre-Soldering
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/post-work-soldering') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/post-work-soldering')}
+                        >
+                            <span className={styles.menuIcon}>⚡</span> Post-Soldering
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/vi-touch-up') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/vi-touch-up')}
+                        >
+                            <span className={styles.menuIcon}>👁️</span> VI / Touch Up
+                        </div>
                     </div>
                 )}
             </div>

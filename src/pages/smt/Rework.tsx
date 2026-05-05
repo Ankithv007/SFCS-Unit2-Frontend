@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import QRCode from 'react-qr-code';
 import styles from './Rework.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 
@@ -11,10 +10,11 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
         {toasts.map(t => (
             <div key={t.id} onClick={() => onRemove(t.id)} style={{
                 padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
-                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#e0f2fe',
-                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#0c4a6e',
-                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#7dd3fc'}`,
-                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#fffbeb',
+                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#92400e',
+                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#fde68a'}`,
+                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                animation: 'slideIn 0.2s ease'
             }}>
                 {t.type === 'error' ? '❌ ' : t.type === 'success' ? '✅ ' : 'ℹ️ '}{t.message}
             </div>
@@ -179,128 +179,93 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
         if (match) processScan(scanBarcode);
     }, [scanBarcode]); // intentionally omit processScan / serials to avoid infinite loop
 
-    // ── Derived counts ───────────────────────────────────────────────────────
-    const passedCount  = serials.filter(s => s.rework_status === 'PASS').length;
-    const failedCount  = serials.filter(s => s.rework_status === 'FAIL').length;
-    const pendingCount = serials.length - passedCount - failedCount;
-
     return (
         <>
             <Toaster toasts={toasts} onRemove={removeToast} />
             <div className={styles.detailPage}>
-                {/* Header */}
-                <div className={styles.detailHeaderCard}>
+                <div className={styles.detailHeaderCard} style={{ background: 'linear-gradient(to right, #fffbeb, #fef3c7)', border: '1px solid #fde68a' }}>
                     <div className={styles.detailHeaderRow}>
                         <div>
-                            <h3>🛠️ Rework Detail: {woId}</h3>
-                            <div className={styles.detailStats}>
-                                <span>Total: <strong>{serials.length}</strong></span>
-                                <span style={{ color: '#059669' }}>Passed: <strong>{passedCount}</strong></span>
-                                <span style={{ color: '#d97706' }}>Pending: <strong>{pendingCount}</strong></span>
-                                {failedCount > 0 && (
-                                    <span style={{ color: '#dc2626' }}>Still Failed: <strong>{failedCount}</strong></span>
-                                )}
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#92400e', marginBottom: '0.5rem' }}>🛠️ Rework Detail: {woId}</h3>
+                            <div className={styles.detailStats} style={{ gap: '2rem' }}>
+                                <span style={{ color: '#b45309' }}>Total Scanned: <strong>{serials.length}</strong></span>
+                                <span style={{ color: '#b45309' }}>🏭 Available (Fail from SPI/AOI): <strong style={{ color: '#d97706' }}>{serials.length}</strong></span>
+                                <span style={{ color: '#b45309' }}>✅ completed: <strong style={{ color: '#059669' }}>{serials.filter(s => s.rework_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#b45309' }}>🔄 pending: <strong style={{ color: '#f59e0b' }}>{serials.length - serials.filter(s => s.rework_status === 'PASS').length}</strong></span>
                             </div>
                         </div>
-                        <button onClick={onBack} className={styles.detailBackButton}>Back</button>
+                        <button className={styles.secondaryButton} onClick={onBack}>Back</button>
                     </div>
                 </div>
 
-                {/* Scan Bar */}
-                <div className={styles.detailScanCard}>
-                    <form onSubmit={handleScan} className={styles.detailScanForm}>
-                        <div className={styles.detailOperatorGroup}>
+                <div className={styles.card} style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        <div className={styles.inputGroup} style={{ maxWidth: '300px' }}>
                             <label>Scanned By *</label>
-                            <input value={operatorName || 'System'} readOnly className={styles.detailOperatorInput} />
+                            <input type="text" className={styles.input} value={operatorName} readOnly style={{ backgroundColor: '#f9fafb', height: '42px' }} />
                         </div>
-                        <div className={styles.detailScanRow}>
-                            <input
-                                ref={scanInputRef}
-                                type="text"
-                                value={scanBarcode}
-                                onChange={e => setScanBarcode(e.target.value)}
-                                placeholder="Scan barcode to mark as PASS..."
-                                className={styles.detailScanInput}
-                                autoFocus
-                            />
-                            <button type="submit" className={styles.detailScanButton}>SCAN</button>
+                        <div className={styles.inputGroup}>
+                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must be FAILED)...</label>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <form onSubmit={handleScan} style={{ flex: 1 }}>
+                                    <input
+                                        ref={scanInputRef}
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Scan barcode..."
+                                        value={scanBarcode}
+                                        onChange={(e) => setScanBarcode(e.target.value)}
+                                        style={{ width: '100%', borderColor: '#f59e0b', borderWidth: '2px' }}
+                                    />
+                                </form>
+                                <button className={styles.button} style={{ width: '140px', background: '#d97706' }} onClick={() => processScan(scanBarcode)}>SCAN</button>
+                            </div>
                         </div>
-                    </form>
+                    </div>
                 </div>
 
-                {/* Table — all rework items always remain visible */}
-                <div className={styles.detailItemsSection}>
-                    <div className={styles.detailItemsHeader}>
-                        <h3>Rework Items ({serials.length})</h3>
+                <div className={styles.card}>
+                    <div className={styles.tableHeader}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Rework Items ({serials.length})</h3>
                     </div>
-                    <div className={styles.detailTableContainer}>
+                    <div className={styles.tableContainer}>
                         <table className={styles.table}>
                             <thead>
                                 <tr>
                                     <th>#</th>
                                     <th>SERIAL NUMBER</th>
-                                    <th>BARCODE</th>
-                                    <th>FAILURE REASON</th>
+                                    <th>FAIL REASON</th>
                                     <th>STATUS</th>
                                     <th>ACTION</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {loading ? (
-                                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
                                 ) : serials.length === 0 ? (
-                                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>No rework items found for this work order.</td></tr>
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 No failed items waiting for rework</td></tr>
                                 ) : serials.map((s, idx) => {
-                                    const isPassed = s.rework_status === 'PASS';
-                                    const isFailedAgain = s.rework_status === 'FAIL';
-                                    const isPending = !isPassed && !isFailedAgain;
-
+                                    const isPass = s.rework_status === 'PASS';
+                                    const isFail = s.rework_status === 'FAIL';
                                     return (
-                                        <tr
-                                            key={s.id || idx}
-                                            className={isPassed ? styles.detailDoneRow : isFailedAgain ? styles.detailPendingRow : ''}
-                                            style={isPassed ? { background: '#f0fdf4' } : isFailedAgain ? { background: '#fef2f2' } : {}}
-                                        >
-                                            <td style={{ color: '#9ca3af', fontWeight: 500 }}>{idx + 1}</td>
-                                            <td className={styles.detailSerialCell}>{s.serial_number}</td>
-                                            <td style={{ textAlign: 'center', padding: '0.75rem 0' }}>
-                                                <div style={{ display: 'grid', gap: '0.4rem', justifyItems: 'center' }}>
-                                                    <QRCode value={(s.barcode || s.serial_number).replace(/-/g, '')} size={72} />
-                                                    <span style={{ fontSize: '0.75rem', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }}>
-                                                        {s.barcode || s.serial_number}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td style={{ color: '#ef4444', fontSize: '0.85rem' }}>{s.rework_reason || 'N/A'}</td>
+                                        <tr key={s.id || idx}>
+                                            <td style={{ color: '#9ca3af', fontWeight: 500 }}>{serials.length - idx}</td>
+                                            <td style={{ fontWeight: 600 }}>{s.serial_number}</td>
+                                            <td style={{ color: '#64748b', fontSize: '0.9rem' }}>{s.rework_reason || 'N/A'}</td>
                                             <td>
                                                 <span style={{
-                                                    padding: '4px 12px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 'bold',
-                                                    backgroundColor: isPassed ? '#dcfce7' : isFailedAgain ? '#fee2e2' : '#fef3c7',
-                                                    color: isPassed ? '#166534' : isFailedAgain ? '#991b1b' : '#92400e'
+                                                    padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                                                    backgroundColor: isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7',
+                                                    color: isPass ? '#166534' : isFail ? '#991b1b' : '#92400e'
                                                 }}>
-                                                    {isPassed ? '✓ PASSED' : isFailedAgain ? '✗ FAILED' : '🕒 PENDING'}
+                                                    {isPass ? '✓ REWORKED' : isFail ? '● RE-FAIL' : '🕒 WAITING'}
                                                 </span>
                                             </td>
                                             <td>
-                                                {isPassed ? (
-                                                    <span style={{ color: '#166534', fontWeight: 700 }}>✓ Done</span>
-                                                ) : isPending ? (
-                                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                                        <button
-                                                            onClick={() => handleMarkPass(s.id)}
-                                                            style={{ background: '#22c55e', color: 'white', border: 'none', padding: '5px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
-                                                        >Pass</button>
-                                                        <FailButton serialId={s.id} onFail={handleMarkFail} />
-                                                    </div>
-                                                ) : (
-                                                    // isFailedAgain — allow retry
-                                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                                        <button
-                                                            onClick={() => handleMarkPass(s.id)}
-                                                            style={{ background: '#22c55e', color: 'white', border: 'none', padding: '5px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
-                                                        >Retry Pass</button>
-                                                    </div>
-                                                )}
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    {!isPass && <button onClick={() => handleMarkPass(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#059669' }}>PASS</button>}
+                                                    {!isPass && <FailButton serialId={s.id} onFail={handleMarkFail} />}
+                                                </div>
                                             </td>
                                         </tr>
                                     );

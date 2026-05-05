@@ -31,17 +31,15 @@ interface PostAoiDetailProps {
 }
 
 const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorName }) => {
-    // Table holds only serials that have been scanned in THIS session
     const [tableSerials, setTableSerials] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [totalSerials, setTotalSerials] = useState(0);
     const [reworkTarget, setReworkTarget] = useState<number | null>(null);
     const [reworkReason, setReworkReason] = useState('');
     const [scanBarcode, setScanBarcode] = useState('');
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
     const scanInputRef = useRef<HTMLInputElement>(null);
-
-    // Focus scan input on mount
-    useEffect(() => { scanInputRef.current?.focus(); }, []);
 
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastId.current;
@@ -51,32 +49,74 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
 
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            // Fetch total serials available for this WO
+            const totalUrl = new URL('/api/smt/serial-numbers', window.location.origin);
+            totalUrl.searchParams.set('work_order_id', woId);
+            const totalRes = await fetch(totalUrl.toString());
+            if (totalRes.ok) {
+                const totalData = await totalRes.json();
+                setTotalSerials(totalData.length);
+            }
+
+            // Fetch visited items
+            const inspUrl = new URL('/api/smt/inspections', window.location.origin);
+            inspUrl.searchParams.set('work_order_id', woId);
+            inspUrl.searchParams.set('process_step', 'Post AOI');
+            const res = await fetch(inspUrl.toString());
+            const data = res.ok ? await res.json() : [];
+            
+            const visited = data.map((i: any) => ({
+                id: i.serial_id,
+                serial_number: i.serial_number,
+                barcode: i.serial_number,
+                last_status: i.status,
+                last_step: i.process_step,
+                rework_reason: i.rework_reason,
+                scanned_at: i.scanned_at
+            }));
+            setTableSerials(visited);
+        } catch (err) {
+            console.error('Error fetching Post AOI history:', err);
+            addToast('Failed to load inspection history.', 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, [woId, addToast]);
+
+    useEffect(() => {
+        fetchData();
+        scanInputRef.current?.focus();
+    }, [fetchData]);
+
     // ── Scan Logic ──────────────────────────────────────────────────────────
     const processScan = async (barcodeInput: string) => {
         const cleanInput = barcodeInput.trim().replace(/-/g, '').toUpperCase();
         if (!cleanInput) return;
 
-        // Duplicate check
+        // Duplicate check in current list
         const alreadyInTable = tableSerials.find((s: any) =>
             [s.serial_number, s.barcode].some(v =>
                 v?.toString().replace(/-/g, '').toUpperCase() === cleanInput
             )
         );
         if (alreadyInTable) {
-            addToast(`Barcode ${barcodeInput} is already in the table.`, 'info');
+            addToast(`Barcode ${barcodeInput} is already in the list.`, 'info');
             setScanBarcode('');
             return;
         }
 
-        // Validate: must exist in SPI PASS records for this WO
         try {
+            // Validate: must exist in SPI PASS records for this WO
             const url = new URL('/api/smt/serial-numbers', window.location.origin);
             url.searchParams.set('work_order_id', woId);
             url.searchParams.set('filter_step', 'SPI');
             url.searchParams.set('filter_status', 'PASS');
 
             const res = await fetch(url.toString());
-            if (!res.ok) { addToast('Server error while validating barcode.', 'error'); setScanBarcode(''); return; }
+            if (!res.ok) { addToast('Server error during validation.', 'error'); return; }
 
             const spiPassed: any[] = await res.json();
             const match = spiPassed.find((s: any) =>
@@ -86,40 +126,29 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             );
 
             if (!match) {
-                addToast(`Barcode ${barcodeInput} has not passed SPI yet`, 'error');
+                addToast(`Barcode ${barcodeInput} not found or has not passed SPI.`, 'error');
                 setScanBarcode('');
                 return;
             }
 
-            // Add to table
-            setTableSerials(prev => [...prev, match]);
-            addToast(`${match.serial_number} added to inspection list.`, 'success');
+            // Successfully scanned - add to local list as PENDING
+            setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'Post AOI' }, ...prev]);
+            setScanBarcode('');
+            addToast(`${match.serial_number} scanned successfully.`, 'success');
         } catch {
-            addToast('Network error. Please try again.', 'error');
+            addToast('Connection error.', 'error');
         }
-
-        setScanBarcode('');
-        scanInputRef.current?.focus();
     };
-
-    const handleScan = (e: React.FormEvent) => { e.preventDefault(); processScan(scanBarcode); };
-
-    // Auto-scan when full barcode typed (optional keep)
-    useEffect(() => {
-        const clean = scanBarcode.trim().replace(/-/g, '').toUpperCase();
-        if (!clean) return;
-        const match = tableSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                v?.toString().replace(/-/g, '').toUpperCase() === clean
-            )
-        );
-        if (match) processScan(scanBarcode);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [scanBarcode]);
 
     // ── Pass / Fail ─────────────────────────────────────────────────────────
     const handleFailOnly = async (serialId: number) => {
-        if (!reworkReason) { setReworkTarget(serialId); return; }
+        const reason = window.prompt('Please enter the reason for failure (Remark):');
+        if (reason === null) return; // User cancelled
+        if (!reason.trim()) {
+            addToast('Failure reason is required.', 'error');
+            return;
+        }
+
         try {
             const res = await fetch('/api/smt/inspections', {
                 method: 'POST',
@@ -129,17 +158,14 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                     process_step: 'Post AOI',
                     scanned_by: operatorName || 'System',
                     status: 'FAIL',
-                    rework_reason: reworkReason
+                    rework_reason: reason.trim()
                 })
             });
             if (res.ok) {
-                setReworkTarget(null);
-                setReworkReason('');
-                // Update local row status
                 setTableSerials(prev => prev.map(s =>
-                    s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Post AOI', rework_reason: reworkReason } : s
+                    s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Post AOI', rework_reason: reason.trim() } : s
                 ));
-                addToast('Item marked as FAIL.', 'info');
+                addToast('Item marked as FAIL with remark.', 'info');
             } else {
                 addToast('Failed to save FAIL status.', 'error');
             }
@@ -169,54 +195,56 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
         } catch { addToast('Network error.', 'error'); }
     };
 
-    const failedCount = tableSerials.filter(s => s.last_status === 'FAIL' && s.last_step === 'Post AOI').length;
-
     return (
         <>
             <Toaster toasts={toasts} onRemove={removeToast} />
             <div className={styles.detailPage}>
-                {/* Header */}
                 <div className={styles.detailHeaderCard}>
                     <div className={styles.detailHeaderRow}>
                         <div>
-                            <h3>🔬 Post AOI Detail: {woId}</h3>
-                            <div className={styles.detailStats}>
-                                <span>Scanned: <strong>{tableSerials.length}</strong></span>
-                                <span style={{ color: '#b91c1c' }}>Failed: <strong>{failedCount}</strong></span>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🤖 Post AOI Detail: {woId}</h3>
+                            <div className={styles.detailStats} style={{ gap: '2rem' }}>
+                                <span style={{ color: '#475569' }}>Total Scanned: <strong>{tableSerials.length} / {totalSerials}</strong></span>
+                                <span style={{ color: '#475569' }}>🏭 Serial Number Available: <strong style={{ color: '#2563eb' }}>{totalSerials}</strong></span>
+                                <span style={{ color: '#475569' }}>✅ completed: <strong style={{ color: '#059669' }}>{tableSerials.length}</strong></span>
+                                <span style={{ color: '#475569' }}>🔄 pending: <strong style={{ color: '#f59e0b' }}>{totalSerials - tableSerials.length}</strong></span>
                             </div>
                         </div>
-                        <button onClick={onBack} className={styles.detailBackButton}>Back</button>
+                        <button className={styles.secondaryButton} onClick={onBack}>Back</button>
                     </div>
                 </div>
 
-                {/* Scan Bar */}
-                <div className={styles.detailScanCard}>
-                    <form onSubmit={handleScan} className={styles.detailScanForm}>
-                        <div className={styles.detailOperatorGroup}>
+                <div className={styles.card} style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        <div className={styles.inputGroup} style={{ maxWidth: '300px' }}>
                             <label>Scanned By *</label>
-                            <input value={operatorName || 'System'} readOnly className={styles.detailOperatorInput} />
+                            <input type="text" className={styles.input} value={operatorName} readOnly style={{ backgroundColor: '#f9fafb', height: '42px' }} />
                         </div>
-                        <div className={styles.detailScanRow}>
-                            <input
-                                ref={scanInputRef}
-                                type="text"
-                                value={scanBarcode}
-                                onChange={(e) => setScanBarcode(e.target.value)}
-                                placeholder="Scan Item Barcode (must have passed SPI)..."
-                                className={styles.detailScanInput}
-                                autoFocus
-                            />
-                            <button type="submit" className={styles.detailScanButton}>SCAN</button>
+                        <div className={styles.inputGroup}>
+                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must have passed SPI)...</label>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <form onSubmit={(e) => { e.preventDefault(); processScan(scanBarcode); }} style={{ flex: 1 }}>
+                                    <input
+                                        ref={scanInputRef}
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Scan barcode..."
+                                        value={scanBarcode}
+                                        onChange={(e) => setScanBarcode(e.target.value)}
+                                        style={{ width: '100%', borderColor: '#6366f1', borderWidth: '2px' }}
+                                    />
+                                </form>
+                                <button className={styles.button} style={{ width: '140px', background: '#4f46e5' }} onClick={() => processScan(scanBarcode)}>SCAN</button>
+                            </div>
                         </div>
-                    </form>
+                    </div>
                 </div>
 
-                {/* Table */}
-                <div className={styles.detailItemsSection}>
-                    <div className={styles.detailItemsHeader}>
-                        <h3>Items ({tableSerials.length})</h3>
+                <div className={styles.card}>
+                    <div className={styles.tableHeader}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Items ({tableSerials.length})</h3>
                     </div>
-                    <div className={styles.detailTableContainer}>
+                    <div className={styles.tableContainer}>
                         <table className={styles.table}>
                             <thead>
                                 <tr>
@@ -228,57 +256,51 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                                 </tr>
                             </thead>
                             <tbody>
-                                {tableSerials.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
-                                            📷 Scan a barcode above to begin inspection
-                                        </td>
-                                    </tr>
+                                {loading ? (
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Loading data...</td></tr>
+                                ) : tableSerials.length === 0 ? (
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin inspection</td></tr>
                                 ) : tableSerials.map((s, idx) => {
-                                    const isFail = s.last_status === 'FAIL' && s.last_step === 'Post AOI';
-                                    const isPass = s.last_status === 'PASS' && s.last_step === 'Post AOI';
+                                    const isPass = s.last_status === 'PASS';
+                                    const isFail = s.last_status === 'FAIL';
                                     return (
-                                        <tr key={s.id || idx} className={isFail ? styles.detailPendingRow : isPass ? styles.detailDoneRow : ''}>
-                                            <td style={{ color: '#9ca3af', fontWeight: 500 }}>{idx + 1}</td>
-                                            <td className={styles.detailSerialCell}>{s.serial_number}</td>
-                                            <td style={{ textAlign: 'center', padding: '0.75rem 0' }}>
-                                                <div style={{ display: 'grid', gap: '0.4rem', justifyItems: 'center' }}>
-                                                    <QRCode value={(s.barcode || s.serial_number).replace(/-/g, '')} size={72} />
-                                                    <span style={{ fontSize: '0.75rem', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }}>
-                                                        {s.barcode || s.serial_number}
-                                                    </span>
+                                        <tr key={s.id || idx}>
+                                            <td style={{ color: '#9ca3af', fontWeight: 500 }}>{tableSerials.length - idx}</td>
+                                            <td style={{ fontWeight: 600 }}>{s.serial_number}</td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <div style={{ display: 'grid', gap: '0.3rem', justifyItems: 'center' }}>
+                                                    <QRCode value={s.serial_number} size={60} />
+                                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{s.serial_number}</span>
                                                 </div>
                                             </td>
                                             <td>
                                                 <span style={{
-                                                    padding: '4px 12px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 'bold',
-                                                    backgroundColor: isFail ? '#fee2e2' : isPass ? '#dcfce7' : '#fef3c7',
-                                                    color: isFail ? '#991b1b' : isPass ? '#166534' : '#92400e'
+                                                    padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                                                    backgroundColor: isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7',
+                                                    color: isPass ? '#166534' : isFail ? '#991b1b' : '#92400e'
                                                 }}>
-                                                    {isFail ? '● FAIL' : isPass ? '✓ PASSED' : '🕒 PENDING'}
+                                                    {isPass ? '✓ PASSED' : isFail ? '● FAIL' : '🕒 PENDING'}
                                                 </span>
                                             </td>
                                             <td>
                                                 {reworkTarget === s.id ? (
-                                                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                                                    <div style={{ display: 'flex', gap: '5px' }}>
                                                         <input
+                                                            type="text"
+                                                            className={styles.input}
+                                                            style={{ height: '32px', fontSize: '0.8rem' }}
+                                                            placeholder="Reason..."
                                                             value={reworkReason}
                                                             onChange={e => setReworkReason(e.target.value)}
-                                                            placeholder="Rework reason..."
                                                             autoFocus
-                                                            style={{ padding: '0.65rem 1rem', border: '1px solid #cbd5e1', borderRadius: '0.65rem', minWidth: '200px' }}
                                                         />
-                                                        <button type="button" onClick={() => handleFailOnly(s.id)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '0.65rem', cursor: 'pointer', padding: '0.65rem 1rem' }}>Submit</button>
-                                                        <button type="button" onClick={() => setReworkTarget(null)} style={{ background: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '0.65rem', cursor: 'pointer', padding: '0.65rem 1rem' }}>Cancel</button>
+                                                        <button onClick={() => handleFailOnly(s.id)} className={styles.button} style={{ height: '32px', padding: '0 10px', fontSize: '0.8rem' }}>Save</button>
+                                                        <button onClick={() => setReworkTarget(null)} className={styles.secondaryButton} style={{ height: '32px', padding: '0 10px', fontSize: '0.8rem' }}>X</button>
                                                     </div>
-                                                ) : isFail ? (
-                                                    <span style={{ color: '#b91c1c', fontWeight: 700 }}>FAILED → Rework</span>
-                                                ) : isPass ? (
-                                                    <span style={{ color: '#166534', fontWeight: 700 }}>PASSED</span>
                                                 ) : (
-                                                    <div style={{ display: 'flex', gap: '10px' }}>
-                                                        <button type="button" onClick={() => handlePass(s.id)} style={{ background: '#22c55e', color: 'white', border: 'none', padding: '0.65rem 1.2rem', borderRadius: '0.65rem', cursor: 'pointer', fontWeight: 600 }}>Pass</button>
-                                                        <button type="button" onClick={() => setReworkTarget(s.id)} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '0.65rem 1.2rem', borderRadius: '0.65rem', cursor: 'pointer', fontWeight: 600 }}>Fail</button>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        {!isPass && <button onClick={() => handlePass(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#059669' }}>PASS</button>}
+                                                        {!isFail && <button onClick={() => setReworkTarget(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}>FAIL</button>}
                                                     </div>
                                                 )}
                                             </td>

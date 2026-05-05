@@ -277,10 +277,18 @@ export const SerialNumber: React.FC = () => {
             });
 
             if (res.ok) {
+                const data = await res.json();
                 fetchBatches();
-                alert('Serials Generated Successfully!');
+                if (data.inserted === 0) {
+                    alert('All these serial numbers already exist in the system.');
+                } else if (data.inserted < data.total) {
+                    alert(`Generated ${data.inserted} new serials. ${data.total - data.inserted} already existed.`);
+                } else {
+                    alert(`Successfully generated all ${data.inserted} serials!`);
+                }
             } else {
-                alert('Failed to generate serials via API.');
+                const errorData = await res.json().catch(() => ({}));
+                alert(`Failed to generate serials: ${errorData.error || 'Unknown API error'}`);
             }
         } catch (err) {
             console.error("API error:", err);

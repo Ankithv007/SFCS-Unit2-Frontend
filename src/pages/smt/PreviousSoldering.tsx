@@ -1,7 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'react-qr-code';
 import styles from './PreviousSoldering.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
+
+// ─── Toaster ─────────────────────────────────────────────────────────────────
+interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+
+const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
+    <div style={{ position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {toasts.map(t => (
+            <div key={t.id} onClick={() => onRemove(t.id)} style={{
+                padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
+                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#e0f2fe',
+                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#0c4a6e',
+                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#7dd3fc'}`,
+                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                animation: 'slideIn 0.2s ease'
+            }}>
+                {t.type === 'error' ? '❌ ' : t.type === 'success' ? '✅ ' : 'ℹ️ '}{t.message}
+            </div>
+        ))}
+    </div>
+);
 
 // --- Detail View Component (Internal) ---
 interface PreviousSolderingDetailProps {
@@ -11,35 +31,66 @@ interface PreviousSolderingDetailProps {
 }
 
 const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId, onBack, operatorName }) => {
-    const [serials, setSerials] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [tableSerials, setTableSerials] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [totalSerials, setTotalSerials] = useState(0);
     const [scanBarcode, setScanBarcode] = useState('');
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+    const scanInputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        if (woId) fetchSerials();
-    }, [woId]);
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
 
-    const fetchSerials = async () => {
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
+
+    const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const url = new URL('/api/smt/serial-numbers', window.location.origin);
-            url.searchParams.set('work_order_id', woId);
-            url.searchParams.set('current_step', 'Previous Soldering');
-            url.searchParams.set('last_status', 'PASS');
-
-            const res = await fetch(url.toString());
-            if (res.ok) {
-                const data = await res.json();
-                setSerials(data);
+            // Fetch items eligible for this station (passed SPI, AOI, or Rework)
+            const eligibleUrl = new URL('/api/smt/serial-numbers', window.location.origin);
+            eligibleUrl.searchParams.set('work_order_id', woId);
+            eligibleUrl.searchParams.set('filter_step', 'SPI,Post AOI,Rework');
+            eligibleUrl.searchParams.set('filter_status', 'PASS');
+            const eligibleRes = await fetch(eligibleUrl.toString());
+            if (eligibleRes.ok) {
+                const eligibleData = await eligibleRes.json();
+                setTotalSerials(eligibleData.length);
             }
+
+            // Fetch Previous Soldering history (already processed here)
+            const inspUrl = new URL('/api/smt/inspections', window.location.origin);
+            inspUrl.searchParams.set('work_order_id', woId);
+            inspUrl.searchParams.set('process_step', 'Previous Soldering');
+            const res = await fetch(inspUrl.toString());
+            const data = res.ok ? await res.json() : [];
+            
+            const visited = data.map((i: any) => ({
+                id: i.serial_id,
+                serial_number: i.serial_number,
+                barcode: i.serial_number,
+                last_status: i.status,
+                last_step: i.process_step,
+                scanned_at: i.scanned_at
+            }));
+            setTableSerials(visited);
         } catch (err) {
-            console.error("Error fetching serials:", err);
+            console.error('Error fetching data:', err);
+            addToast('Failed to load production data.', 'error');
         } finally {
             setLoading(false);
         }
-    };
+    }, [woId, addToast]);
 
-    const handlePassFail = async (serialId: number, status: 'PASS' | 'FAIL') => {
+    useEffect(() => {
+        fetchData();
+        scanInputRef.current?.focus();
+    }, [fetchData]);
+
+    const handlePass = async (serialId: number) => {
         try {
             const res = await fetch('/api/smt/inspections', {
                 method: 'POST',
@@ -48,180 +99,201 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
                     serial_id: serialId,
                     process_step: 'Previous Soldering',
                     scanned_by: operatorName || 'System',
-                    status: status
+                    status: 'PASS'
                 })
             });
-
             if (res.ok) {
-                fetchSerials();
+                setTableSerials(prev => prev.map(s => 
+                    s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'Previous Soldering' } : s
+                ));
+                addToast('Item marked as PASS.', 'success');
             } else {
-                alert(`Failed to save ${status} status.`);
+                addToast('Failed to save PASS status.', 'error');
             }
-        } catch (err) {
-            console.error("Pass/Fail error:", err);
+        } catch { addToast('Network error.', 'error'); }
+    };
+
+    const handleFailOnly = async (serialId: number) => {
+        const reason = window.prompt('Please enter the reason for failure (Remark):');
+        if (reason === null) return; // User cancelled
+        if (!reason.trim()) {
+            addToast('Failure reason is required.', 'error');
+            return;
         }
+
+        try {
+            const res = await fetch('/api/smt/inspections', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    serial_id: serialId,
+                    process_step: 'Previous Soldering',
+                    scanned_by: operatorName || 'System',
+                    status: 'FAIL',
+                    rework_reason: reason.trim()
+                })
+            });
+            if (res.ok) {
+                setTableSerials(prev => prev.map(s => 
+                    s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Previous Soldering', rework_reason: reason.trim() } : s
+                ));
+                addToast('Item marked as FAIL with remark.', 'info');
+            } else {
+                addToast('Failed to save FAIL status.', 'error');
+            }
+        } catch { addToast('Network error.', 'error'); }
     };
 
     const processScan = async (barcodeInput: string) => {
         const cleanInput = barcodeInput.trim().replace(/-/g, '').toUpperCase();
-        if (!cleanInput) return false;
+        if (!cleanInput) return;
 
-        const serialObj = serials.find((s: any) =>
-            [s.serial_number, s.barcode].some((value) =>
-                value?.toString().replace(/-/g, '').toUpperCase() === cleanInput
+        // Duplicate check
+        const alreadyInTable = tableSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                v?.toString().replace(/-/g, '').toUpperCase() === cleanInput
             )
         );
-
-        if (!serialObj) {
-            alert(`Serial Number "${barcodeInput}" not found in this view.`);
+        if (alreadyInTable) {
+            addToast(`Barcode ${barcodeInput} is already in the list.`, 'info');
             setScanBarcode('');
-            return false;
+            return;
         }
 
-        if (serialObj.is_completed_here === true || String(serialObj.is_completed_here).toLowerCase() === 'true') {
-            alert(`Serial Number "${barcodeInput}" is already passed.`);
-            setScanBarcode('');
-            return false;
-        }
+        try {
+            // Validate: must exist in SPI/AOI/Rework PASS records for this WO
+            const url = new URL('/api/smt/serial-numbers', window.location.origin);
+            url.searchParams.set('work_order_id', woId);
+            url.searchParams.set('filter_step', 'SPI,Post AOI,Rework');
+            url.searchParams.set('filter_status', 'PASS');
 
-        await handlePassFail(serialObj.id, 'PASS');
-        setScanBarcode('');
-        return true;
-    };
+            const res = await fetch(url.toString());
+            if (!res.ok) { addToast('Server error during validation.', 'error'); return; }
 
-    const handleScan = async (e: React.FormEvent) => {
-        e.preventDefault();
-        await processScan(scanBarcode);
-    };
-
-    useEffect(() => {
-        const tryAutoScan = async () => {
-            const cleanInput = scanBarcode.trim().replace(/-/g, '').toUpperCase();
-            if (!cleanInput) return;
-
-            const match = serials.find((s: any) =>
-                [s.serial_number, s.barcode].some((value) =>
-                    value?.toString().replace(/-/g, '').toUpperCase() === cleanInput
+            const passedItems: any[] = await res.json();
+            const match = passedItems.find((s: any) =>
+                [s.serial_number, s.barcode].some(v =>
+                    v?.toString().replace(/-/g, '').toUpperCase() === cleanInput
                 )
             );
 
-            if (match) {
-                await processScan(scanBarcode);
+            if (!match) {
+                addToast(`Barcode ${barcodeInput} has not passed previous inspection stages.`, 'error');
+                setScanBarcode('');
+                return;
             }
-        };
 
-        tryAutoScan();
-    }, [scanBarcode, serials]);
-
-    // Normalise is_completed_here — backend may return boolean true, string 'true', 1, or 't'
-    const completedSerials = serials.filter(s => {
-        const v = s.is_completed_here;
-        return v === true || v === 1 || String(v).toLowerCase() === 'true' || String(v) === 't';
-    });
+            // Successfully scanned - add to local list as PENDING
+            setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'Previous Soldering' }, ...prev]);
+            setScanBarcode('');
+            addToast(`${match.serial_number} scanned successfully.`, 'success');
+        } catch {
+            addToast('Connection error.', 'error');
+        }
+    };
 
     return (
-        <div className={styles.detailPage}>
-            <div className={styles.detailHeaderCard}>
-                <div className={styles.detailHeaderRow}>
-                    <h3>🔥 Previous Soldering Detail: {woId}</h3>
-                    <button onClick={onBack} className={styles.detailBackButton}>Back</button>
-                </div>
-            </div>
-            <div className={styles.detailScanCard}>
-                <form onSubmit={handleScan} className={styles.detailScanForm}>
-                    <div className={styles.detailOperatorGroup}>
-                        <label>Scanned By *</label>
-                        <input value={operatorName || 'System'} readOnly className={styles.detailOperatorInput} />
+        <>
+            <Toaster toasts={toasts} onRemove={removeToast} />
+            <div className={styles.detailPage}>
+                <div className={styles.detailHeaderCard}>
+                    <div className={styles.detailHeaderRow}>
+                        <div>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🔥 Previous Soldering Detail: {woId}</h3>
+                            <div className={styles.detailStats} style={{ gap: '2rem' }}>
+                                <span style={{ color: '#475569' }}>Total Scanned: <strong>{tableSerials.length} / {totalSerials}</strong></span>
+                                <span style={{ color: '#475569' }}>🏭 Serial Number Available: <strong style={{ color: '#2563eb' }}>{totalSerials}</strong></span>
+                                <span style={{ color: '#475569' }}>✅ completed: <strong style={{ color: '#059669' }}>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#475569' }}>🔄 pending: <strong style={{ color: '#f59e0b' }}>{totalSerials - tableSerials.length}</strong></span>
+                            </div>
+                        </div>
+                        <button className={styles.secondaryButton} onClick={onBack}>Back</button>
                     </div>
-                    <div className={styles.detailScanRow}>
-                        <input
-                            type="text"
-                            value={scanBarcode}
-                            onChange={(e) => setScanBarcode(e.target.value)}
-                            placeholder="Scan Item Barcode..."
-                            className={styles.detailScanInput}
-                            autoFocus
-                        />
-                        <button type="submit" className={styles.detailScanButton}>SCAN</button>
-                    </div>
-                </form>
-            </div>
-            <div className={styles.detailItemsSection}>
-                <div className={styles.detailItemsHeader}>
-                    <h3>Items ({serials.length})</h3>
                 </div>
-                <div className={styles.detailTableContainer}>
-                    <table className={styles.table}>
-                        <thead>
-                            <tr>
-                                <th>SERIAL NUMBER</th>
-                                <th>BARCODE</th>
-                                <th>STATUS</th>
-                                <th>ACTION</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
-                            ) : serials.map((s, idx) => {
-                                const isDone = completedSerials.some(cs => cs.id === s.id);
-                                return (
-                                    <tr key={s.id || idx} className={isDone ? styles.detailDoneRow : styles.detailPendingRow}>
-                                        <td className={styles.detailSerialCell}>{s.serial_number}</td>
-                                        <td style={{ textAlign: 'center', padding: '0.75rem 0' }}>
-                                            <div style={{ display: 'grid', gap: '0.4rem', justifyItems: 'center' }}>
-                                                <QRCode value={(s.barcode || s.serial_number).replace(/-/g, '')} size={80} />
-                                                <span style={{ fontSize: '0.8rem', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }}>
-                                                    {s.barcode || s.serial_number}
+
+                <div className={styles.card} style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        <div className={styles.inputGroup} style={{ maxWidth: '300px' }}>
+                            <label>Scanned By *</label>
+                            <input type="text" className={styles.input} value={operatorName} readOnly style={{ backgroundColor: '#f9fafb', height: '42px' }} />
+                        </div>
+                        <div className={styles.inputGroup}>
+                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must have passed SPI/AOI/Rework)...</label>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <form onSubmit={(e) => { e.preventDefault(); processScan(scanBarcode); }} style={{ flex: 1 }}>
+                                    <input
+                                        ref={scanInputRef}
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Scan barcode..."
+                                        value={scanBarcode}
+                                        onChange={(e) => setScanBarcode(e.target.value)}
+                                        style={{ width: '100%', borderColor: '#6366f1', borderWidth: '2px' }}
+                                    />
+                                </form>
+                                <button className={styles.button} style={{ width: '140px', background: '#4f46e5' }} onClick={() => processScan(scanBarcode)}>SCAN</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className={styles.card}>
+                    <div className={styles.tableHeader}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Items ({tableSerials.length})</h3>
+                    </div>
+                    <div className={styles.tableContainer}>
+                        <table className={styles.table}>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>SERIAL NUMBER</th>
+                                    <th>BARCODE</th>
+                                    <th>STATUS</th>
+                                    <th>ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Loading data...</td></tr>
+                                ) : tableSerials.length === 0 ? (
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin processing</td></tr>
+                                ) : tableSerials.map((s, idx) => {
+                                    const isPass = s.last_status === 'PASS';
+                                    const isFail = s.last_status === 'FAIL';
+                                    return (
+                                        <tr key={s.id || idx}>
+                                            <td style={{ color: '#9ca3af', fontWeight: 500 }}>{tableSerials.length - idx}</td>
+                                            <td style={{ fontWeight: 600 }}>{s.serial_number}</td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <div style={{ display: 'grid', gap: '0.3rem', justifyItems: 'center' }}>
+                                                    <QRCode value={s.serial_number} size={60} />
+                                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{s.serial_number}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span style={{
+                                                    padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                                                    backgroundColor: isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7',
+                                                    color: isPass ? '#166534' : isFail ? '#991b1b' : '#92400e'
+                                                }}>
+                                                    {isPass ? '✓ PASSED' : isFail ? '● FAIL' : '🕒 PENDING'}
                                                 </span>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span style={{
-                                                padding: '4px 12px',
-                                                borderRadius: '999px',
-                                                fontSize: '0.75rem',
-                                                fontWeight: 'bold',
-                                                backgroundColor: isDone ? '#dcfce7' : '#fef3c7',
-                                                color: isDone ? '#166534' : '#92400e'
-                                            }}>
-                                                {isDone ? 'PASSED' : '🕒 PENDING'}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                                <button
-                                                    onClick={() => handlePassFail(s.id, 'PASS')}
-                                                    disabled={isDone}
-                                                    style={{ background: isDone ? '#d1fae5' : '#22c55e', color: isDone ? '#166534' : 'white', border: 'none', padding: '5px 15px', cursor: isDone ? 'not-allowed' : 'pointer', borderRadius: '4px', fontWeight: 600 }}
-                                                >Pass</button>
-                                                <button
-                                                    onClick={() => handlePassFail(s.id, 'FAIL')}
-                                                    disabled={isDone}
-                                                    style={{ background: isDone ? '#fee2e2' : '#ef4444', color: isDone ? '#991b1b' : 'white', border: 'none', padding: '5px 15px', cursor: isDone ? 'not-allowed' : 'pointer', borderRadius: '4px', fontWeight: 600 }}
-                                                >Fail</button>
-                                                {isDone && (
-                                                    <button
-                                                        onClick={async () => {
-                                                            if (!window.confirm('Reset this item back to PENDING?')) return;
-                                                            const res = await fetch(`/api/smt/inspections?serial_id=${s.id}&process_step=Previous%20Soldering`, { method: 'DELETE' });
-                                                            if (res.ok) fetchSerials();
-                                                            else alert('Failed to reset item.');
-                                                        }}
-                                                        title="Reset back to Pending"
-                                                        style={{ background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', padding: '5px 12px', cursor: 'pointer', borderRadius: '4px', fontSize: '0.8rem' }}
-                                                    >🔄 Reset</button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                            </td>
+                                            <td>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    {!isPass && <button onClick={() => handlePass(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#059669' }}>PASS</button>}
+                                                    {!isFail && <button onClick={() => handleFailOnly(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}>FAIL</button>}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 

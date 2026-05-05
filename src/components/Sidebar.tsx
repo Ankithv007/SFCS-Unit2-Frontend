@@ -242,6 +242,79 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                     </div>
                 )}
             </div>
+
+            {/* Backend Module */}
+            <div className={styles.moduleWrapper}>
+                <div
+                    className={`${styles.menuItem} ${expandedModule === 'backend' ? styles.active : ''}`}
+                    onClick={() => toggleModule('backend')}
+                    onMouseEnter={() => setExpandedModule('backend')}
+                    title="Backend"
+                >
+                    <span className={styles.menuIcon}>⚙️</span>
+                    <span className={styles.menuText}>Backend</span>
+                    <span className={styles.arrow}>{expandedModule === 'backend' ? '▼' : '▶'}</span>
+                </div>
+
+                {expandedModule === 'backend' && (
+                    <div className={styles.submenu}>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/backend/work-order') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/work-order')}
+                        >
+                            <span className={styles.menuIcon}>📝</span> Work Order
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/backend/pth') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/pth')}
+                        >
+                            <span className={styles.menuIcon}>🔧</span> PTH
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/backend/vi') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/vi')}
+                        >
+                            <span className={styles.menuIcon}>👁️</span> VI
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/backend/qi') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/qi')}
+                        >
+                            <span className={styles.menuIcon}>🔍</span> QI
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/backend/flashing') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/flashing')}
+                        >
+                            <span className={styles.menuIcon}>⚡</span> Flashing
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/backend/pcba-fct') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/pcba-fct')}
+                        >
+                            <span className={styles.menuIcon}>🧪</span> PCBA-FCT
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/backend/assembly') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/assembly')}
+                        >
+                            <span className={styles.menuIcon}>🛠️</span> Assembly
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/backend/unit-testing') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/unit-testing')}
+                        >
+                            <span className={styles.menuIcon}>📋</span> Unit Testing
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/backend/packing') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/packing')}
+                        >
+                            <span className={styles.menuIcon}>📦</span> Packing
+                        </div>
+                    </div>
+                )}
+            </div>
             <div className={styles.menuItem} title="Post testing">
                 <span className={styles.menuIcon}>✅</span>
                 <span className={styles.menuText}>Post testing</span>

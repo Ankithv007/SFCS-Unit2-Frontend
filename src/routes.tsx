@@ -27,6 +27,15 @@ import Rework from './pages/smt/Rework';
 import { PreviousSoldering } from './pages/smt/PreviousSoldering';
 import { PostWorkSoldering } from './pages/smt/PostWorkSoldering';
 import { ViTouchUp } from './pages/smt/ViTouchUp';
+import WorkOrderBackend from './pages/backend/WorkOrder';
+import PTH from './pages/backend/PTH';
+import VI from './pages/backend/VI';
+import QI from './pages/backend/QI';
+import Flashing from './pages/backend/Flashing';
+import PCBAFCT from './pages/backend/PCBAFCT';
+import Assembly from './pages/backend/Assembly';
+import UnitTesting from './pages/backend/UnitTesting';
+import Packing from './pages/backend/Packing';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -170,6 +179,78 @@ export const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <VacuumLeakTest />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/work-order',
+                element: (
+                    <ProtectedRoute>
+                        <WorkOrderBackend />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/pth',
+                element: (
+                    <ProtectedRoute>
+                        <PTH />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/vi',
+                element: (
+                    <ProtectedRoute>
+                        <VI />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/qi',
+                element: (
+                    <ProtectedRoute>
+                        <QI />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/flashing',
+                element: (
+                    <ProtectedRoute>
+                        <Flashing />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/pcba-fct',
+                element: (
+                    <ProtectedRoute>
+                        <PCBAFCT />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/assembly',
+                element: (
+                    <ProtectedRoute>
+                        <Assembly />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/unit-testing',
+                element: (
+                    <ProtectedRoute>
+                        <UnitTesting />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/packing',
+                element: (
+                    <ProtectedRoute>
+                        <Packing />
                     </ProtectedRoute>
                 ),
             },

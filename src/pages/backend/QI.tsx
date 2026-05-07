@@ -60,11 +60,11 @@ const QI: React.FC = () => {
                 <div className={styles.formGrid}>
                     <div className={styles.inputGroup}>
                         <label>Item Name</label>
-                        <input 
-                            type="text" 
-                            className={styles.input} 
-                            value={name} 
-                            onChange={(e) => setName(e.target.value)} 
+                        <input
+                            type="text"
+                            className={styles.input}
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
                             placeholder="Enter name"
                         />
                     </div>

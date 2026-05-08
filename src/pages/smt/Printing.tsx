@@ -1,19 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSmtAuth } from '../../context/SmtAuthContext';
+import { useAuth } from '../../hooks/useAuth';
 import styles from './Printing.module.css';
 import QRCode from 'react-qr-code';
+import { apiFetch } from '../../utils/api';
+
+// ─── Toaster ─────────────────────────────────────────────────────────────────
+interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+
+const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
+    <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column-reverse', gap: '0.5rem' }}>
+        {toasts.map(t => (
+            <div key={t.id} onClick={() => onRemove(t.id)} style={{
+                padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
+                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#fffbeb',
+                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#92400e',
+                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#fde68a'}`,
+                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                animation: 'slideIn 0.2s ease'
+            }}>
+                {t.type === 'error' ? '❌ ' : t.type === 'success' ? '✅ ' : 'ℹ️ '}{t.message}
+            </div>
+        ))}
+    </div>
+);
 
 // --- Detail View Component (Internal) ---
 interface PrintingDetailProps {
     woId: string;
     onBack: () => void;
+    operatorName: string;
 }
 
-const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack }) => {
+const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorName }) => {
     const [serials, setSerials] = useState<any[]>([]);
+    const [totalAvailable, setTotalAvailable] = useState(0);
     const [loading, setLoading] = useState(true);
     const [scanBarcode, setScanBarcode] = useState('');
-    const [scannedBy, setScannedBy] = useState('');
+    const [scannedBy, setScannedBy] = useState(operatorName);
+
+    useEffect(() => {
+        setScannedBy(operatorName);
+    }, [operatorName]);
 
     useEffect(() => {
         if (woId) fetchSerials();
@@ -25,6 +53,7 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack }) => {
             const res = await fetch(`/api/smt/serial-numbers?work_order_id=${encodeURIComponent(woId)}&current_step=Printing`);
             if (res.ok) {
                 const data = await res.json();
+                setTotalAvailable(data.length);
 
                 // Printing should show serials that completed Serial Number Scanning,
                 // plus any serial already completed in Printing.
@@ -111,7 +140,6 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack }) => {
         s.is_completed_here === true ||
         String(s.is_completed_here).toLowerCase() === 'true'
     );
-    const pendingSerials = serials.filter(s => !completedSerials.includes(s));
 
     return (
         <div className={styles.detailPage}>
@@ -119,10 +147,11 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack }) => {
                 <div className={styles.detailHeaderRow}>
                     <div>
                         <h3>🖨️ Printing Batch Detail: {woId}</h3>
-                        <div className={styles.detailStats}>
-                            <span>Total: <strong>{serials.length}</strong></span>
-                            <span style={{ color: '#059669' }}>Completed: <strong>{completedSerials.length}</strong></span>
-                            <span style={{ color: '#d97706' }}>Pending: <strong>{pendingSerials.length}</strong></span>
+                        <div className={styles.detailStats} style={{ gap: '1.5rem' }}>
+                            <span style={{ color: '#475569' }}>Total Serial Number Available: <strong style={{ color: '#2563eb' }}>{totalAvailable}</strong></span>
+                            <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#059669' }}>{serials.length}</strong></span>
+                            <span style={{ color: '#059669' }}>Passed: <strong>{completedSerials.length}</strong></span>
+                            <span style={{ color: '#d97706' }}>Pending: <strong>{serials.length - completedSerials.length}</strong></span>
                         </div>
                     </div>
                     <button onClick={onBack} className={styles.detailBackButton}>Back</button>
@@ -139,6 +168,7 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack }) => {
                             onChange={e => setScannedBy(e.target.value)}
                             placeholder="Operator name"
                             className={styles.detailOperatorInput}
+                            readOnly
                         />
                     </div>
                     <div className={styles.detailScanRow}>
@@ -167,7 +197,8 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack }) => {
                                 <th>SERIAL NUMBER</th>
                                 <th>BARCODE</th>
                                 <th>STATUS</th>
-                                <th>GENERATED AT</th>
+                                <th>SCANNED BY</th>
+                                <th>SCANNED AT</th>
                                 <th>ACTION</th>
                             </tr>
                         </thead>
@@ -190,8 +221,9 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack }) => {
                                                 {isDone ? 'PASSED' : 'PENDING'}
                                             </span>
                                         </td>
-                                        <td className={styles.detailDateCell}>
-                                            {new Date(s.created_at).toLocaleString()}
+                                        <td style={{ fontWeight: 600, color: '#475569' }}>{s.step_scanned_by || '-'}</td>
+                                        <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                            {s.step_scanned_at ? new Date(s.step_scanned_at).toLocaleString() : '-'}
                                         </td>
                                         <td>
                                             <button
@@ -207,7 +239,7 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack }) => {
                             })}
                             {!loading && serials.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
                                         No items found.
                                     </td>
                                 </tr>
@@ -223,7 +255,21 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack }) => {
 // --- Main Page Component ---
 export const Printing: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
+    const { user } = useAuth();
+    const isSuperAdmin = user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
+
+    // Toast state
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
+
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
     const [viewingWoId, setViewingWoId] = useState<string | null>(null);
 
     // Form state
@@ -319,196 +365,207 @@ export const Printing: React.FC = () => {
     };
 
     return (
-        <div className={styles.container}>
-            <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🖨️ SMT Printing</h2>
-                    <p style={{ color: '#64748b' }}>Manage SMT Stencil Printing tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
+        <>
+            <Toaster toasts={toasts} onRemove={removeToast} />
+            <div className={styles.container}>
+                <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🖨️ SMT Printing</h2>
+                        <p style={{ color: '#64748b' }}>Manage SMT Stencil Printing tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to logout from SMT?")) {
+                                smtLogout();
+                            }
+                        }}
+                        className={styles.secondaryButton}
+                        style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <span>🔒</span> Logout SMT
+                    </button>
                 </div>
-                <button
-                    onClick={() => {
-                        if (window.confirm("Are you sure you want to logout from SMT?")) {
-                            smtLogout();
-                        }
-                    }}
-                    className={styles.secondaryButton}
-                    style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                    <span>🔒</span> Logout SMT
-                </button>
-            </div>
 
-            {viewingWoId ? (
-                <PrintingDetail
-                    woId={viewingWoId}
-                    onBack={() => setViewingWoId(null)}
-                />
-            ) : (
-                <>
-                    <div className={styles.card}>
-                        <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Printing Setup Form</h3>
-                        <div className={styles.formGrid}>
-                            <div className={styles.inputGroup}>
-                                <label>Select Work Order (Serial Number Scanned Only) *</label>
-                                <select
-                                    className={styles.input}
-                                    value={formWoId}
-                                    onChange={(e) => handleSelectWo(e.target.value)}
-                                >
-                                    <option value="">-- Select Work Order --</option>
-                                    {workOrders.map((wo) => (
-                                        <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
-                                            {wo.id || wo.work_order_id} - {wo.product_name}
-                                        </option>
-                                    ))}
-                                </select>
+                {viewingWoId ? (
+                    <PrintingDetail
+                        woId={viewingWoId}
+                        onBack={() => setViewingWoId(null)}
+                        operatorName={smtUser?.name || 'System'}
+                    />
+                ) : (
+                    <>
+                        <div className={styles.card}>
+                            <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Printing Setup Form</h3>
+                            <div className={styles.formGrid}>
+                                <div className={styles.inputGroup}>
+                                    <label>Select Work Order *</label>
+                                    <select
+                                        className={styles.input}
+                                        value={formWoId}
+                                        onChange={(e) => handleSelectWo(e.target.value)}
+                                    >
+                                        <option value="">-- Select Work Order --</option>
+                                        {workOrders.map((wo) => (
+                                            <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
+                                                {wo.id || wo.work_order_id} - {wo.product_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Product Name (Auto-filled)</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={productName}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>WO Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        value={woQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Panel Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        value={panelQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Stencil Name *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={stencilName}
+                                        onChange={(e) => setStencilName(e.target.value)}
+                                        placeholder="Enter Stencil Name"
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Squeegee Number *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={squeezeNumber}
+                                        onChange={(e) => setSqueezeNumber(e.target.value)}
+                                        placeholder="Enter Squeegee Number"
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Solder Paste *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={solderPaste}
+                                        onChange={(e) => setSolderPaste(e.target.value)}
+                                        placeholder="Enter Solder Paste"
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Side Selection *</label>
+                                    <select
+                                        className={styles.input}
+                                        value={side}
+                                        onChange={(e) => setSide(e.target.value)}
+                                    >
+                                        <option value="TOP">TOP</option>
+                                        <option value="BOTTOM">BOTTOM</option>
+                                    </select>
+                                </div>
                             </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Product Name (Auto-filled)</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={productName}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>WO Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    value={woQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Panel Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    value={panelQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Stencil Name *</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={stencilName}
-                                    onChange={(e) => setStencilName(e.target.value)}
-                                    placeholder="Enter Stencil Name"
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Squeegee Number *</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={squeezeNumber}
-                                    onChange={(e) => setSqueezeNumber(e.target.value)}
-                                    placeholder="Enter Squeegee Number"
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Solder Paste *</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={solderPaste}
-                                    onChange={(e) => setSolderPaste(e.target.value)}
-                                    placeholder="Enter Solder Paste"
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Side Selection *</label>
-                                <select
-                                    className={styles.input}
-                                    value={side}
-                                    onChange={(e) => setSide(e.target.value)}
-                                >
-                                    <option value="TOP">TOP</option>
-                                    <option value="BOTTOM">BOTTOM</option>
-                                </select>
+                            <div style={{ marginTop: '30px' }}>
+                                <button className={styles.button} onClick={handleStartProcess}>
+                                    Start Printing Process
+                                </button>
                             </div>
                         </div>
-                        <div style={{ marginTop: '30px' }}>
-                            <button className={styles.button} onClick={handleStartProcess}>
-                                Start Printing Process
-                            </button>
-                        </div>
-                    </div>
 
-                    <div className={styles.card}>
-                        <h3>Recent Printing Entries</h3>
-                        <div className={styles.tableContainer}>
-                            <table className={styles.table}>
-                                <thead>
-                                    <tr>
-                                        <th>WO NUMBER</th>
-                                        <th>PRODUCT NAME</th>
-                                        <th>WO QTY</th>
-                                        <th>PANEL QTY</th>
-                                        <th>TIME</th>
-                                        <th>ACTION</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {savedEntries.map((entry) => (
-                                        <tr key={entry.id}>
-                                            <td style={{ color: '#2563eb', fontWeight: 600 }}>{entry.work_order_id}</td>
-                                            <td>{entry.product_name}</td>
-                                            <td>{entry.quantity || entry.wo_qty}</td>
-                                            <td>{entry.panel_qty || 'N/A'}</td>
-                                            <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                                {new Date(entry.timestamp).toLocaleTimeString()}
-                                            </td>
-                                            <td style={{ display: 'flex', gap: '5px' }}>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                    onClick={() => setViewingWoId(entry.work_order_id)}
-                                                >
-                                                    View
-                                                </button>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                    onClick={async () => {
-                                                        if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                            const res = await fetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                            if (res.ok) setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                                                        }
-                                                    }}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {savedEntries.length === 0 && (
+                        <div className={styles.card}>
+                            <h3>Recent Printing Entries</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
                                         <tr>
-                                            <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                No recent entries found.
-                                            </td>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>TIME</th>
+                                            <th>ACTION</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {savedEntries.map((entry) => (
+                                            <tr key={entry.id}>
+                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{entry.work_order_id}</td>
+                                                <td>{entry.product_name}</td>
+                                                <td>{entry.quantity || entry.wo_qty}</td>
+                                                <td>{entry.panel_qty || 'N/A'}</td>
+                                                <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                    {new Date(entry.timestamp).toLocaleTimeString()}
+                                                </td>
+                                                <td style={{ display: 'flex', gap: '5px' }}>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                                        onClick={() => setViewingWoId(entry.work_order_id)}
+                                                    >
+                                                        View
+                                                    </button>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                        onClick={async () => {
+                                                            if (!isSuperAdmin) {
+                                                                addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                                return;
+                                                            }
+                                                            if (window.confirm("Are you sure you want to delete this entry?")) {
+                                                                const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                if (res.ok) {
+                                                                    setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                                    addToast("Entry deleted successfully.", "success");
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {savedEntries.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No recent entries found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
-                </>
-            )}
-        </div>
+                    </>
+                )}
+            </div>
+        </>
     );
 };

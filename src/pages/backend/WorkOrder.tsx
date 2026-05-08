@@ -11,7 +11,7 @@ import {
     Building2, 
     Eye, 
     Trash2, 
-    X 
+    X
 } from 'lucide-react';
 
 interface WorkOrderRecord {
@@ -160,6 +160,8 @@ const WorkOrder: React.FC = () => {
         }
     };
 
+
+
     const isAdmin = ['Admin', 'Super Admin'].includes(user?.role || '');
 
     return (
@@ -293,6 +295,7 @@ const WorkOrder: React.FC = () => {
                                                 >
                                                     <Eye size={14} /> View
                                                 </button>
+
                                                 {isAdmin && (
                                                     <button 
                                                         type="button"

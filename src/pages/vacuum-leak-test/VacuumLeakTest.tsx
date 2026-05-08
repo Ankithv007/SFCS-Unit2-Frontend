@@ -21,7 +21,7 @@ export const VacuumLeakTest: React.FC = () => {
     const [unitSerial, setUnitSerial] = useState('');
     const [band, setBand] = useState('');
     const [measuredValue, setMeasuredValue] = useState('');
-    const [finalStatus, setFinalStatus] = useState<'PASS' | 'FAIL' | 'REWORK' | null>(null);
+    const [finalStatus, setFinalStatus] = useState<'PASS' | 'FAIL' | 'rework' | null>(null);
     const [failureReason, setFailureReason] = useState('');
 
     // Data from API
@@ -192,7 +192,7 @@ export const VacuumLeakTest: React.FC = () => {
         if (!shift) return showToast('Shift is required', 'error');
         if (!unitSerial) return showToast('Unit Serial Number is required', 'error');
         if (!finalStatus) return showToast('Final Status is required', 'error');
-        if ((finalStatus === 'FAIL' || finalStatus === 'REWORK') && !failureReason.trim()) {
+        if ((finalStatus === 'FAIL' || finalStatus === 'rework') && !failureReason.trim()) {
             return showToast('Reason for failure is mandatory', 'error');
         }
 
@@ -461,10 +461,10 @@ export const VacuumLeakTest: React.FC = () => {
                                 FAIL
                             </button>
                             <button
-                                className={`${styles.finalBtn} ${finalStatus === 'REWORK' ? styles.reworkActive : ''}`}
-                                onClick={() => setFinalStatus('REWORK')}
+                                className={`${styles.finalBtn} ${finalStatus === 'rework' ? styles.reworkActive : ''}`}
+                                onClick={() => setFinalStatus('rework')}
                             >
-                                REWORK
+                                rework
                             </button>
                         </div>
                     </div>
@@ -479,13 +479,13 @@ export const VacuumLeakTest: React.FC = () => {
                     )}
                 </div>
 
-                {(finalStatus === 'FAIL' || finalStatus === 'REWORK') && (
-                    <div className={styles.remarkBox}>
+                {(finalStatus === 'FAIL' || finalStatus === 'rework') && (
+                    <div className={styles.reworkBox}>
                         <label>Reason for {finalStatus} *</label>
                         <textarea
                             value={failureReason}
                             onChange={e => setFailureReason(e.target.value)}
-                            placeholder={`Mandatory remark for ${finalStatus.toLowerCase()}`}
+                            placeholder={`Mandatory rework for ${finalStatus.toLowerCase()}`}
                             className={styles.textarea}
                         />
                     </div>

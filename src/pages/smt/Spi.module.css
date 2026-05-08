@@ -263,7 +263,7 @@
     align-items: center;
 }
 
-.detailRemarkInput,
+.detailreworkInput,
 .detailScanInput {
     flex: 1;
     min-width: 0;
@@ -276,12 +276,12 @@
     font-size: 1.15rem;
 }
 
-.detailRemarkInput {
+.detailreworkInput {
     max-width: 260px;
 }
 
 .detailScanInput:focus,
-.detailRemarkInput:focus {
+.detailreworkInput:focus {
     outline: none;
     border-color: #4f46e5;
     box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.14);
@@ -293,10 +293,10 @@
     flex-wrap: wrap;
 }
 
-.detailRemarkSubmit,
+.detailreworkSubmit,
 .detailActionPass,
 .detailActionFail,
-.detailRemarkCancel {
+.detailreworkCancel {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -308,13 +308,13 @@
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.detailRemarkSubmit,
+.detailreworkSubmit,
 .detailActionPass {
     background: #22c55e;
     color: white;
 }
 
-.detailRemarkCancel {
+.detailreworkCancel {
     background: #f8fafc;
     color: #334155;
     border: 1px solid #cbd5e1;
@@ -325,10 +325,10 @@
     color: white;
 }
 
-.detailRemarkSubmit:hover,
+.detailreworkSubmit:hover,
 .detailActionPass:hover,
 .detailActionFail:hover,
-.detailRemarkCancel:hover {
+.detailreworkCancel:hover {
     transform: translateY(-1px);
     box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
 }

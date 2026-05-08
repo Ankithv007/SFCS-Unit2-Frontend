@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'react-qr-code';
 import styles from './PreviousSoldering.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
+import { useAuth } from '../../hooks/useAuth';
+import { apiFetch } from '../../utils/api';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
@@ -50,10 +52,9 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // Fetch items eligible for this station (passed SPI, AOI, or Rework)
             const eligibleUrl = new URL('/api/smt/serial-numbers', window.location.origin);
             eligibleUrl.searchParams.set('work_order_id', woId);
-            eligibleUrl.searchParams.set('filter_step', 'SPI,Post AOI,Rework');
+            eligibleUrl.searchParams.set('filter_step', 'SPI,Post AOI,rework');
             eligibleUrl.searchParams.set('filter_status', 'PASS');
             const eligibleRes = await fetch(eligibleUrl.toString());
             if (eligibleRes.ok) {
@@ -61,7 +62,6 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
                 setTotalSerials(eligibleData.length);
             }
 
-            // Fetch Previous Soldering history (already processed here)
             const inspUrl = new URL('/api/smt/inspections', window.location.origin);
             inspUrl.searchParams.set('work_order_id', woId);
             inspUrl.searchParams.set('process_step', 'Previous Soldering');
@@ -114,8 +114,8 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
     };
 
     const handleFailOnly = async (serialId: number) => {
-        const reason = window.prompt('Please enter the reason for failure (Remark):');
-        if (reason === null) return; // User cancelled
+        const reason = window.prompt('Please enter the reason for failure (rework):');
+        if (reason === null) return;
         if (!reason.trim()) {
             addToast('Failure reason is required.', 'error');
             return;
@@ -137,7 +137,7 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
                 setTableSerials(prev => prev.map(s => 
                     s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Previous Soldering', rework_reason: reason.trim() } : s
                 ));
-                addToast('Item marked as FAIL with remark.', 'info');
+                addToast('Item marked as FAIL with rework.', 'info');
             } else {
                 addToast('Failed to save FAIL status.', 'error');
             }
@@ -148,7 +148,6 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
         const cleanInput = barcodeInput.trim().replace(/-/g, '').toUpperCase();
         if (!cleanInput) return;
 
-        // Duplicate check
         const alreadyInTable = tableSerials.find((s: any) =>
             [s.serial_number, s.barcode].some(v =>
                 v?.toString().replace(/-/g, '').toUpperCase() === cleanInput
@@ -161,10 +160,9 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
         }
 
         try {
-            // Validate: must exist in SPI/AOI/Rework PASS records for this WO
             const url = new URL('/api/smt/serial-numbers', window.location.origin);
             url.searchParams.set('work_order_id', woId);
-            url.searchParams.set('filter_step', 'SPI,Post AOI,Rework');
+            url.searchParams.set('filter_step', 'SPI,Post AOI,rework');
             url.searchParams.set('filter_status', 'PASS');
 
             const res = await fetch(url.toString());
@@ -183,7 +181,6 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
                 return;
             }
 
-            // Successfully scanned - add to local list as PENDING
             setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'Previous Soldering' }, ...prev]);
             setScanBarcode('');
             addToast(`${match.serial_number} scanned successfully.`, 'success');
@@ -218,7 +215,7 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
                             <input type="text" className={styles.input} value={operatorName} readOnly style={{ backgroundColor: '#f9fafb', height: '42px' }} />
                         </div>
                         <div className={styles.inputGroup}>
-                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must have passed SPI/AOI/Rework)...</label>
+                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must have passed SPI/AOI/rework)...</label>
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <form onSubmit={(e) => { e.preventDefault(); processScan(scanBarcode); }} style={{ flex: 1 }}>
                                     <input
@@ -297,15 +294,25 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
     );
 };
 
-// --- Main Page Component ---
 export const PreviousSoldering: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
+    const { user } = useAuth();
+    const isSuperAdmin = user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
 
-    // View mode state
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
+
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
+
     const [viewingWoId, setViewingWoId] = useState<string | null>(null);
 
-    // Form state
     const [formWoId, setFormWoId] = useState('');
     const [productName, setProductName] = useState('');
     const [woQty, setWoQty] = useState('');
@@ -393,7 +400,9 @@ export const PreviousSoldering: React.FC = () => {
     };
 
     return (
-        <div className={styles.container}>
+        <>
+            <Toaster toasts={toasts} onRemove={removeToast} />
+            <div className={styles.container}>
             <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                     <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🔥 Previous Soldering</h2>
@@ -424,7 +433,7 @@ export const PreviousSoldering: React.FC = () => {
                         <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Soldering Setup Form</h3>
                         <div className={styles.formGrid}>
                             <div className={styles.inputGroup}>
-                                <label>Select Work Order (Serial Number Scanned Only) *</label>
+                                <label>Select Work Order *</label>
                                 <select
                                     className={styles.input}
                                     value={formWoId}
@@ -526,9 +535,16 @@ export const PreviousSoldering: React.FC = () => {
                                                     className={styles.secondaryButton}
                                                     style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                     onClick={async () => {
+                                                        if (!isSuperAdmin) {
+                                                            addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                            return;
+                                                        }
                                                         if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                            const res = await fetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                            if (res.ok) setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                            const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                            if (res.ok) {
+                                                                setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                                addToast("Entry deleted successfully.", "success");
+                                                            }
                                                         }
                                                     }}
                                                 >
@@ -551,5 +567,6 @@ export const PreviousSoldering: React.FC = () => {
                 </>
             )}
         </div>
+        </>
     );
 };

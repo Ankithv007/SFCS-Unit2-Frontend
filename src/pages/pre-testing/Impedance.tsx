@@ -43,7 +43,7 @@ export const Impedance: React.FC = () => {
     // Fail Modal State
     const [failModalOpen, setFailModalOpen] = useState(false);
     const [selectedScan] = useState<any>(null);
-    const [failRemark, setFailRemark] = useState('');
+    const [failrework, setFailrework] = useState('');
 
     // Dropdown State
     const [openDropdown, setOpenDropdown] = useState<{ id: number, test: string } | null>(null);
@@ -130,8 +130,8 @@ export const Impedance: React.FC = () => {
 
     const handleFailConfirm = async () => {
         if (!selectedScan) return;
-        if (!failRemark.trim()) {
-            showToast('Please enter a remark for failure', 'error');
+        if (!failrework.trim()) {
+            showToast('Please enter a rework for failure', 'error');
             return;
         }
 
@@ -140,7 +140,7 @@ export const Impedance: React.FC = () => {
                 method: 'PUT',
                 body: JSON.stringify({
                     status: 'FAILED',
-                    remarks: failRemark
+                    reworks: failrework
                 })
             });
 
@@ -150,7 +150,7 @@ export const Impedance: React.FC = () => {
             // Update local state
             setScannedItems(prev => prev.map(item =>
                 item.id === selectedScan.id
-                    ? { ...item, status: 'FAILED', remarks: failRemark }
+                    ? { ...item, status: 'FAILED', reworks: failrework }
                     : item
             ));
             fetchBatches(); // Update batch counts
@@ -1049,13 +1049,13 @@ export const Impedance: React.FC = () => {
                         </p>
 
                         <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Remark / Failure Reason *</label>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>rework / Failure Reason *</label>
                             <textarea
                                 className={styles.textarea}
                                 style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #d1d5db' }}
                                 rows={4}
-                                value={failRemark}
-                                onChange={(e) => setFailRemark(e.target.value)}
+                                value={failrework}
+                                onChange={(e) => setFailrework(e.target.value)}
                                 placeholder="Enter failure details..."
                                 autoFocus
                             />

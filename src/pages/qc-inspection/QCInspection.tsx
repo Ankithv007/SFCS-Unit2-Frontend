@@ -10,7 +10,7 @@ import { formatIST } from '../../utils/dateUtils';
 
 interface ChecklistHistory {
     status: 'PASS' | 'FAIL' | 'REJECTED';
-    remark: string;
+    rework: string;
     timestamp: string;
     attempt: number;
 }
@@ -20,23 +20,23 @@ interface ChecklistItem {
     text: string;
     level: 'FIRST_LEVEL' | 'FINAL_LEVEL';
     status: 'PASS' | 'FAIL' | 'REJECTED' | null;
-    remarks: string;
-    temp_remark: string;
+    reworks: string;
+    temp_rework: string;
     rework_count: number;
     is_confirmed: boolean;
     history: ChecklistHistory[];
 }
 
 const INITIAL_CHECKLIST: ChecklistItem[] = [
-    { id: 1, text: "Check the Solderability of the C441 & C442 (No Solderability issues, solder splashes issue & solder balls issues near C441 & C442)", level: 'FIRST_LEVEL', status: null, remarks: '', temp_remark: '', rework_count: 0, is_confirmed: false, history: [] },
-    { id: 2, text: "Check the Bullet 8no's Presence & Damage", level: 'FIRST_LEVEL', status: null, remarks: '', temp_remark: '', rework_count: 0, is_confirmed: false, history: [] },
-    { id: 3, text: "Check and scan the Unit Slno, PAM Slno with RAN Bar code (Week code)", level: 'FIRST_LEVEL', status: null, remarks: '', temp_remark: '', rework_count: 0, is_confirmed: false, history: [] },
-    { id: 4, text: "Ensure all Labels and Stickers are free from Damage, Misalignment, Print cut, Barcode erased", level: 'FIRST_LEVEL', status: null, remarks: '', temp_remark: '', rework_count: 0, is_confirmed: false, history: [] },
-    { id: 5, text: "Check Enclosure / PAM Gasket Orientation as per WI and no Damage / Missing", level: 'FIRST_LEVEL', status: null, remarks: '', temp_remark: '', rework_count: 0, is_confirmed: false, history: [] },
-    { id: 6, text: "PAM Shield with 8 (Screw) × 4 PAM Shield – No Damage", level: 'FIRST_LEVEL', status: null, remarks: '', temp_remark: '', rework_count: 0, is_confirmed: false, history: [] },
-    { id: 7, text: "Check J39 Connectors Orientation are properly connected, no Misalignment / Missing / Damage", level: 'FIRST_LEVEL', status: null, remarks: '', temp_remark: '', rework_count: 0, is_confirmed: false, history: [] },
-    { id: 8, text: "Check the Unit Level Screw (14 no's)", level: 'FINAL_LEVEL', status: null, remarks: '', temp_remark: '', rework_count: 0, is_confirmed: false, history: [] },
-    { id: 9, text: "Check the RAN Number Located in Enclosure (RAN-000222)", level: 'FINAL_LEVEL', status: null, remarks: '', temp_remark: '', rework_count: 0, is_confirmed: false, history: [] }
+    { id: 1, text: "Check the Solderability of the C441 & C442 (No Solderability issues, solder splashes issue & solder balls issues near C441 & C442)", level: 'FIRST_LEVEL', status: null, reworks: '', temp_rework: '', rework_count: 0, is_confirmed: false, history: [] },
+    { id: 2, text: "Check the Bullet 8no's Presence & Damage", level: 'FIRST_LEVEL', status: null, reworks: '', temp_rework: '', rework_count: 0, is_confirmed: false, history: [] },
+    { id: 3, text: "Check and scan the Unit Slno, PAM Slno with RAN Bar code (Week code)", level: 'FIRST_LEVEL', status: null, reworks: '', temp_rework: '', rework_count: 0, is_confirmed: false, history: [] },
+    { id: 4, text: "Ensure all Labels and Stickers are free from Damage, Misalignment, Print cut, Barcode erased", level: 'FIRST_LEVEL', status: null, reworks: '', temp_rework: '', rework_count: 0, is_confirmed: false, history: [] },
+    { id: 5, text: "Check Enclosure / PAM Gasket Orientation as per WI and no Damage / Missing", level: 'FIRST_LEVEL', status: null, reworks: '', temp_rework: '', rework_count: 0, is_confirmed: false, history: [] },
+    { id: 6, text: "PAM Shield with 8 (Screw) × 4 PAM Shield – No Damage", level: 'FIRST_LEVEL', status: null, reworks: '', temp_rework: '', rework_count: 0, is_confirmed: false, history: [] },
+    { id: 7, text: "Check J39 Connectors Orientation are properly connected, no Misalignment / Missing / Damage", level: 'FIRST_LEVEL', status: null, reworks: '', temp_rework: '', rework_count: 0, is_confirmed: false, history: [] },
+    { id: 8, text: "Check the Unit Level Screw (14 no's)", level: 'FINAL_LEVEL', status: null, reworks: '', temp_rework: '', rework_count: 0, is_confirmed: false, history: [] },
+    { id: 9, text: "Check the RAN Number Located in Enclosure (RAN-000222)", level: 'FINAL_LEVEL', status: null, reworks: '', temp_rework: '', rework_count: 0, is_confirmed: false, history: [] }
 ];
 
 export const QCInspection: React.FC = () => {
@@ -59,13 +59,13 @@ export const QCInspection: React.FC = () => {
     const [band, setBand] = useState('');
 
     const [checklist, setChecklist] = useState<ChecklistItem[]>(INITIAL_CHECKLIST);
-    const [finalStatus, setFinalStatus] = useState<'PASS' | 'FAIL' | 'WAITING_FOR_REWORK' | 'REJECTED' | null>(null);
+    const [finalStatus, setFinalStatus] = useState<'PASS' | 'FAIL' | 'WAITING_FOR_rework' | 'REJECTED' | null>(null);
 
     // De-Assembly State
     const [deAssemblyStatus, setDeAssemblyStatus] = useState<'PASS' | 'FAIL' | 'REJECTED' | null>(null);
-    const [reworkCount, setReworkCount] = useState<0 | 1 | 2>(0);
-    const [combinedRemarks, setCombinedRemarks] = useState('');
-    const [currentDeAssemblyRemark, setCurrentDeAssemblyRemark] = useState('');
+    const [reworkCount, setreworkCount] = useState<0 | 1 | 2>(0);
+    const [combinedreworks, setCombinedreworks] = useState('');
+    const [currentDeAssemblyrework, setCurrentDeAssemblyrework] = useState('');
     const [isDeAssemblyConfirmed, setIsDeAssemblyConfirmed] = useState(false);
 
     // Data from API
@@ -170,32 +170,32 @@ export const QCInspection: React.FC = () => {
             const newChecklist = prev.map(item => {
                 if (item.id === id) {
                     const now = new Date().toISOString();
-                    const label = item.rework_count === 0 ? 'Initial' : `Rework ${item.rework_count}`;
+                    const label = item.rework_count === 0 ? 'Initial' : `rework ${item.rework_count}`;
 
                     if (item.status === 'PASS') {
                         return {
                             ...item,
                             is_confirmed: true,
-                            history: [...item.history, { status: 'PASS' as const, remark: '', timestamp: now, attempt: item.rework_count }]
+                            history: [...item.history, { status: 'PASS' as const, rework: '', timestamp: now, attempt: item.rework_count }]
                         };
                     }
 
                     if (item.status === 'FAIL') {
-                        if (!item.temp_remark.trim()) {
-                            showToast('Remark is mandatory for failure', 'error');
+                        if (!item.temp_rework.trim()) {
+                            showToast('rework is mandatory for failure', 'error');
                             return item;
                         }
 
-                        const newRemarks = item.remarks + (item.remarks ? '\n' : '') + `${label} Fail: ${item.temp_remark.trim()}`;
-                        const newHistory = [...item.history, { status: 'FAIL' as const, remark: item.temp_remark.trim(), timestamp: now, attempt: item.rework_count }];
+                        const newreworks = item.reworks + (item.reworks ? '\n' : '') + `${label} Fail: ${item.temp_rework.trim()}`;
+                        const newHistory = [...item.history, { status: 'FAIL' as const, rework: item.temp_rework.trim(), timestamp: now, attempt: item.rework_count }];
 
                         if (item.rework_count < 2) {
                             return {
                                 ...item,
                                 status: 'FAIL' as const,
                                 is_confirmed: true,
-                                remarks: newRemarks,
-                                temp_remark: '',
+                                reworks: newreworks,
+                                temp_rework: '',
                                 rework_count: item.rework_count + 1,
                                 history: newHistory
                             };
@@ -204,26 +204,26 @@ export const QCInspection: React.FC = () => {
                                 ...item,
                                 status: 'REJECTED' as const,
                                 is_confirmed: true,
-                                remarks: newRemarks,
-                                temp_remark: '',
+                                reworks: newreworks,
+                                temp_rework: '',
                                 history: newHistory
                             };
                         }
                     }
 
                     if (item.status === 'REJECTED') {
-                        if (!item.temp_remark.trim()) {
-                            showToast('Remark is mandatory for rejection', 'error');
+                        if (!item.temp_rework.trim()) {
+                            showToast('rework is mandatory for rejection', 'error');
                             return item;
                         }
-                        const newRemarks = item.remarks + (item.remarks ? '\n' : '') + `${label} Reject: ${item.temp_remark.trim()}`;
+                        const newreworks = item.reworks + (item.reworks ? '\n' : '') + `${label} Reject: ${item.temp_rework.trim()}`;
                         return {
                             ...item,
                             status: 'REJECTED' as const,
                             is_confirmed: true,
-                            remarks: newRemarks,
-                            temp_remark: '',
-                            history: [...item.history, { status: 'REJECTED' as const, remark: item.temp_remark.trim(), timestamp: now, attempt: item.rework_count }]
+                            reworks: newreworks,
+                            temp_rework: '',
+                            history: [...item.history, { status: 'REJECTED' as const, rework: item.temp_rework.trim(), timestamp: now, attempt: item.rework_count }]
                         };
                     }
                 }
@@ -238,9 +238,9 @@ export const QCInspection: React.FC = () => {
                 if (allPassed) {
                     setFinalStatus('PASS');
                 } else if (newChecklist.some(item => item.status === 'FAIL' && item.is_confirmed)) {
-                    setFinalStatus('WAITING_FOR_REWORK');
+                    setFinalStatus('WAITING_FOR_rework');
                 } else if (newChecklist.some(item => item.rework_count > 0)) {
-                    setFinalStatus('WAITING_FOR_REWORK');
+                    setFinalStatus('WAITING_FOR_rework');
                 } else {
                     setFinalStatus(null);
                 }
@@ -255,7 +255,7 @@ export const QCInspection: React.FC = () => {
      * This is the status that will be submitted to the backend.
      * It also implements toggle behavior for the final status buttons.
      */
-    const handleFinalStatusUpdate = (status: 'PASS' | 'FAIL' | 'WAITING_FOR_REWORK') => {
+    const handleFinalStatusUpdate = (status: 'PASS' | 'FAIL' | 'WAITING_FOR_rework') => {
         // Prevent setting PASS if any checklist item has failed or is rejected, or if De-Assembly failed
         const hasChecklistFailures = checklist.some(item => item.status === 'FAIL' || item.status === 'REJECTED');
         const hasDeAssemblyFailure = deAssemblyStatus === 'FAIL' || deAssemblyStatus === 'REJECTED';
@@ -390,8 +390,8 @@ export const QCInspection: React.FC = () => {
                     setPam4(ed.pam_4 || '');
                     setRanBarcode(ed.ran_barcode || '');
                     setBand(ed.band || '');
-                    setReworkCount(ed.rework_count || 0);
-                    setCombinedRemarks(ed.combined_remarks || '');
+                    setreworkCount(ed.rework_count || 0);
+                    setCombinedreworks(ed.combined_reworks || '');
                     setDeAssemblyStatus(ed.de_assembly_status || null);
 
                     // ✅ Mark De-Assembly confirmed if already passed
@@ -410,7 +410,7 @@ export const QCInspection: React.FC = () => {
                                     status: match.result,
                                     // Only auto-confirm PASS items
                                     is_confirmed: match.result === 'PASS',
-                                    remarks: match.remark,
+                                    reworks: match.rework,
                                     rework_count: match.rework_count,
                                     history: match.history || []
                                 };
@@ -491,26 +491,26 @@ export const QCInspection: React.FC = () => {
 
     const handleDeAssemblyConfirm = () => {
         if (deAssemblyStatus === 'FAIL' || deAssemblyStatus === 'REJECTED') {
-            if (!currentDeAssemblyRemark.trim()) {
-                return showToast('Remark is mandatory for Fail/Reject', 'error');
+            if (!currentDeAssemblyrework.trim()) {
+                return showToast('rework is mandatory for Fail/Reject', 'error');
             }
 
             let label = '';
             if (reworkCount === 0) label = '1st Fail – De-Assembly';
-            else if (reworkCount === 1) label = '2nd Fail – Rework 1';
-            else if (deAssemblyStatus === 'REJECTED') label = 'Rejected – Rework 2';
+            else if (reworkCount === 1) label = '2nd Fail – rework 1';
+            else if (deAssemblyStatus === 'REJECTED') label = 'Rejected – rework 2';
 
             const now = new Date().toLocaleString();
-            const newRemark = `[De-Assembly] [${label}] [${now}]: ${currentDeAssemblyRemark.trim()}`;
-            setCombinedRemarks(prev => prev ? `${prev}\n${newRemark}` : newRemark);
-            setCurrentDeAssemblyRemark('');
+            const newrework = `[De-Assembly] [${label}] [${now}]: ${currentDeAssemblyrework.trim()}`;
+            setCombinedreworks(prev => prev ? `${prev}\n${newrework}` : newrework);
+            setCurrentDeAssemblyrework('');
 
             if (deAssemblyStatus === 'FAIL') {
                 if (reworkCount < 2) {
-                    setReworkCount(prev => (prev + 1) as 0 | 1 | 2);
+                    setreworkCount(prev => (prev + 1) as 0 | 1 | 2);
                     setDeAssemblyStatus(null);
                     setChecklist(INITIAL_CHECKLIST);
-                    setFinalStatus('WAITING_FOR_REWORK');
+                    setFinalStatus('WAITING_FOR_rework');
                 } else {
                     setDeAssemblyStatus('REJECTED');
                     setFinalStatus('REJECTED');
@@ -562,7 +562,7 @@ export const QCInspection: React.FC = () => {
             process_confirmation: true,
             de_assembly_status: deAssemblyStatus,
             rework_count: reworkCount,
-            combined_remarks: combinedRemarks
+            combined_reworks: combinedreworks
         };
 
         try {
@@ -588,9 +588,9 @@ export const QCInspection: React.FC = () => {
             setChecklist(INITIAL_CHECKLIST);
             setFinalStatus(null);
             setDeAssemblyStatus(null);
-            setReworkCount(0);
-            setCombinedRemarks('');
-            setCurrentDeAssemblyRemark('');
+            setreworkCount(0);
+            setCombinedreworks('');
+            setCurrentDeAssemblyrework('');
             setIsDeAssemblyConfirmed(false);
         } catch (error: any) {
             console.error('Error submitting inspection:', error);
@@ -994,7 +994,7 @@ export const QCInspection: React.FC = () => {
                         <strong>Status:</strong>{' '}
                         {reworkCount === 0
                             ? 'Initial De-Assembly'
-                            : `Rework Attempt ${reworkCount}`}
+                            : `rework Attempt ${reworkCount}`}
                     </div>
 
                     <div className={styles.statusButtons} style={{ marginTop: '1rem' }}>
@@ -1044,10 +1044,10 @@ export const QCInspection: React.FC = () => {
 
                     {(deAssemblyStatus === 'FAIL' || deAssemblyStatus === 'REJECTED') && !isDeAssemblyConfirmed && (
                         <div className={styles.inputGroup} style={{ marginTop: '1rem' }}>
-                            <label>Remark *</label>
+                            <label>rework *</label>
                             <textarea
-                                value={currentDeAssemblyRemark}
-                                onChange={e => setCurrentDeAssemblyRemark(e.target.value)}
+                                value={currentDeAssemblyrework}
+                                onChange={e => setCurrentDeAssemblyrework(e.target.value)}
                                 placeholder="Explain why De-Assembly failed..."
                                 className={styles.textarea}
                                 rows={3}
@@ -1065,9 +1065,9 @@ export const QCInspection: React.FC = () => {
                         </button>
                     )}
 
-                    {combinedRemarks && (
+                    {combinedreworks && (
                         <div
-                            className={styles.remarksDisplay}
+                            className={styles.reworksDisplay}
                             style={{
                                 marginTop: '1rem',
                                 padding: '1rem',
@@ -1077,7 +1077,7 @@ export const QCInspection: React.FC = () => {
                             }}
                         >
                             <h4 style={{ margin: '0 0 0.5rem 0', color: '#991b1b' }}>
-                                Remarks History
+                                reworks History
                             </h4>
                             <pre
                                 style={{
@@ -1087,7 +1087,7 @@ export const QCInspection: React.FC = () => {
                                     color: '#b91c1c',
                                 }}
                             >
-                                {combinedRemarks}
+                                {combinedreworks}
                             </pre>
                         </div>
                     )}
@@ -1123,7 +1123,7 @@ export const QCInspection: React.FC = () => {
                                     (prevItem && (!prevItem.is_confirmed || prevItem.status !== 'PASS')) ||
                                     item.is_confirmed;
 
-                                const currentAttemptLabel = item.rework_count === 0 ? 'Initial' : `Rework ${item.rework_count}`;
+                                const currentAttemptLabel = item.rework_count === 0 ? 'Initial' : `rework ${item.rework_count}`;
 
                                 return (
                                     <div key={item.id} className={`${styles.checklistItem} ${item.is_confirmed ? styles.confirmedItem : ''}`} style={{ marginBottom: '1rem', padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
@@ -1157,16 +1157,16 @@ export const QCInspection: React.FC = () => {
                                             )}
                                         </div>
 
-                                        {/* Remark Input: Appears only when FAIL or REJECTED is selected but not yet confirmed */}
+                                        {/* rework Input: Appears only when FAIL or REJECTED is selected but not yet confirmed */}
                                         {(item.status === 'FAIL' || item.status === 'REJECTED') && !item.is_confirmed && (
                                             <div className={styles.inputGroup} style={{ marginTop: '0.5rem' }}>
                                                 <textarea
-                                                    value={item.temp_remark}
+                                                    value={item.temp_rework}
                                                     onChange={e => {
                                                         const val = e.target.value;
-                                                        setChecklist(prev => prev.map(i => i.id === item.id ? { ...i, temp_remark: val } : i));
+                                                        setChecklist(prev => prev.map(i => i.id === item.id ? { ...i, temp_rework: val } : i));
                                                     }}
-                                                    placeholder={`Enter remark for ${currentAttemptLabel} ${item.status === 'FAIL' ? 'failure' : 'rejection'}...`}
+                                                    placeholder={`Enter rework for ${currentAttemptLabel} ${item.status === 'FAIL' ? 'failure' : 'rejection'}...`}
                                                     className={styles.textarea}
                                                     rows={2}
                                                     style={{ fontSize: '0.85rem' }}
@@ -1185,10 +1185,10 @@ export const QCInspection: React.FC = () => {
                                             </button>
                                         )}
 
-                                        {item.remarks && (
+                                        {item.reworks && (
                                             <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#b91c1c', background: '#fef2f2', padding: '0.5rem', borderRadius: '4px' }}>
-                                                <strong>Remarks:</strong>
-                                                <pre style={{ margin: '0.25rem 0 0', whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{item.remarks}</pre>
+                                                <strong>reworks:</strong>
+                                                <pre style={{ margin: '0.25rem 0 0', whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{item.reworks}</pre>
                                             </div>
                                         )}
                                     </div>
@@ -1229,9 +1229,9 @@ export const QCInspection: React.FC = () => {
                                     }}
                                 >PASS</button>
                                 <button
-                                    className={`${styles.finalBtn} ${finalStatus === 'WAITING_FOR_REWORK' ? styles.reworkActive : ''}`}
-                                    onClick={() => handleFinalStatusUpdate('WAITING_FOR_REWORK')}
-                                >REWORK</button>
+                                    className={`${styles.finalBtn} ${finalStatus === 'WAITING_FOR_rework' ? styles.reworkActive : ''}`}
+                                    onClick={() => handleFinalStatusUpdate('WAITING_FOR_rework')}
+                                >rework</button>
                             </>
                         )}
                     </div>

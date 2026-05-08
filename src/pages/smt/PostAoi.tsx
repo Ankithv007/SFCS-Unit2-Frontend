@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'react-qr-code';
 import styles from './PostAoi.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
+import { useAuth } from '../../hooks/useAuth';
+import { apiFetch } from '../../utils/api';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
 
 const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
-    <div style={{ position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column-reverse', gap: '0.5rem' }}>
         {toasts.map(t => (
             <div key={t.id} onClick={() => onRemove(t.id)} style={{
                 padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
@@ -34,8 +36,8 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
     const [tableSerials, setTableSerials] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [totalSerials, setTotalSerials] = useState(0);
-    const [reworkTarget, setReworkTarget] = useState<number | null>(null);
-    const [reworkReason, setReworkReason] = useState('');
+    const [reworkTarget, setreworkTarget] = useState<number | null>(null);
+    const [reworkReason, setreworkReason] = useState('');
     const [scanBarcode, setScanBarcode] = useState('');
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
@@ -67,7 +69,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             inspUrl.searchParams.set('process_step', 'Post AOI');
             const res = await fetch(inspUrl.toString());
             const data = res.ok ? await res.json() : [];
-            
+
             const visited = data.map((i: any) => ({
                 id: i.serial_id,
                 serial_number: i.serial_number,
@@ -142,7 +144,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
 
     // ── Pass / Fail ─────────────────────────────────────────────────────────
     const handleFailOnly = async (serialId: number) => {
-        const reason = window.prompt('Please enter the reason for failure (Remark):');
+        const reason = window.prompt('Please enter the reason for failure (rework):');
         if (reason === null) return; // User cancelled
         if (!reason.trim()) {
             addToast('Failure reason is required.', 'error');
@@ -165,7 +167,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                 setTableSerials(prev => prev.map(s =>
                     s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Post AOI', rework_reason: reason.trim() } : s
                 ));
-                addToast('Item marked as FAIL with remark.', 'info');
+                addToast('Item marked as FAIL with rework.', 'info');
             } else {
                 addToast('Failed to save FAIL status.', 'error');
             }
@@ -291,16 +293,16 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                                                             style={{ height: '32px', fontSize: '0.8rem' }}
                                                             placeholder="Reason..."
                                                             value={reworkReason}
-                                                            onChange={e => setReworkReason(e.target.value)}
+                                                            onChange={e => setreworkReason(e.target.value)}
                                                             autoFocus
                                                         />
                                                         <button onClick={() => handleFailOnly(s.id)} className={styles.button} style={{ height: '32px', padding: '0 10px', fontSize: '0.8rem' }}>Save</button>
-                                                        <button onClick={() => setReworkTarget(null)} className={styles.secondaryButton} style={{ height: '32px', padding: '0 10px', fontSize: '0.8rem' }}>X</button>
+                                                        <button onClick={() => setreworkTarget(null)} className={styles.secondaryButton} style={{ height: '32px', padding: '0 10px', fontSize: '0.8rem' }}>X</button>
                                                     </div>
                                                 ) : (
                                                     <div style={{ display: 'flex', gap: '8px' }}>
                                                         {!isPass && <button onClick={() => handlePass(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#059669' }}>PASS</button>}
-                                                        {!isFail && <button onClick={() => setReworkTarget(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}>FAIL</button>}
+                                                        {!isFail && <button onClick={() => setreworkTarget(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}>FAIL</button>}
                                                     </div>
                                                 )}
                                             </td>
@@ -319,7 +321,21 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const PostAoi: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
+    const { user } = useAuth();
+    const isSuperAdmin = user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
+
+    // Toast state
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
+
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
     const [viewingWoId, setViewingWoId] = useState<string | null>(null);
 
     // Form state
@@ -373,8 +389,8 @@ const PostAoi: React.FC = () => {
         const h = new Date().getHours();
         if (h >= 23 || h < 7) return 'C (11PM – 07AM)';
         if (h >= 15 && h < 23) return 'B (03PM – 11PM)';
-        if (h >= 8  && h < 17) return 'G (08AM – 05PM)';
-        if (h >= 6  && h < 15) return 'A (06AM – 03PM)';
+        if (h >= 8 && h < 17) return 'G (08AM – 05PM)';
+        if (h >= 6 && h < 15) return 'A (06AM – 03PM)';
         return 'N/A';
     };
 
@@ -426,127 +442,137 @@ const PostAoi: React.FC = () => {
     }
 
     return (
-        <div className={styles.container}>
-            {/* Header */}
-            <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🤖 Post AOI Inspection</h2>
-                    <p style={{ color: '#64748b' }}>
-                        Manage SMT Automated Optical Inspection tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong>
-                    </p>
-                </div>
-                <button
-                    onClick={() => { if (window.confirm('Are you sure you want to logout from SMT?')) smtLogout(); }}
-                    className={styles.secondaryButton}
-                    style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                    <span>🔒</span> Logout SMT
-                </button>
-            </div>
-
-            {/* Setup Form */}
-            <div className={styles.card}>
-                <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Post AOI Setup Form</h3>
-                <div className={styles.formGrid}>
-                    <div className={styles.inputGroup}>
-                        <label>Select Work Order (Serial Number Scanned Only) *</label>
-                        <select className={styles.input} value={formWoId} onChange={(e) => handleSelectWo(e.target.value)}>
-                            <option value="">-- Select Work Order --</option>
-                            {workOrders.map((wo) => (
-                                <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
-                                    {wo.id || wo.work_order_id} - {wo.product_name}
-                                </option>
-                            ))}
-                        </select>
+        <>
+            <Toaster toasts={toasts} onRemove={removeToast} />
+            <div className={styles.container}>
+                {/* Header */}
+                <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🤖 Post AOI Inspection</h2>
+                        <p style={{ color: '#64748b' }}>
+                            Manage SMT Automated Optical Inspection tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong>
+                        </p>
                     </div>
-
-                    <div className={styles.inputGroup}>
-                        <label>Product Name (Auto-filled)</label>
-                        <input type="text" className={styles.input} value={productName} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
-                    </div>
-
-                    <div className={styles.inputGroup}>
-                        <label>WO Qty (Auto-filled)</label>
-                        <input type="number" className={styles.input} value={woQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
-                    </div>
-
-                    <div className={styles.inputGroup}>
-                        <label>Panel Qty (Auto-filled)</label>
-                        <input type="number" className={styles.input} value={panelQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
-                    </div>
-
-                    <div className={styles.inputGroup}>
-                        <label>Generated By *</label>
-                        <input type="text" className={styles.input} value={createdBy} readOnly style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }} />
-                    </div>
-                </div>
-                <div style={{ marginTop: '30px' }}>
-                    <button className={styles.button} onClick={handleStartProcess}>
-                        Start Post AOI Inspection
+                    <button
+                        onClick={() => { if (window.confirm('Are you sure you want to logout from SMT?')) smtLogout(); }}
+                        className={styles.secondaryButton}
+                        style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <span>🔒</span> Logout SMT
                     </button>
                 </div>
-            </div>
 
-            {/* Recent Entries */}
-            <div className={styles.card}>
-                <h3>Recent Post AOI Entries</h3>
-                <div className={styles.tableContainer}>
-                    <table className={styles.table}>
-                        <thead>
-                            <tr>
-                                <th>WO NUMBER</th>
-                                <th>PRODUCT NAME</th>
-                                <th>WO QTY</th>
-                                <th>PANEL QTY</th>
-                                <th>TIME</th>
-                                <th>ACTION</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {savedEntries.map((entry) => (
-                                <tr key={entry.id}>
-                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{entry.work_order_id}</td>
-                                    <td>{entry.product_name}</td>
-                                    <td>{entry.quantity || entry.wo_qty}</td>
-                                    <td>{entry.panel_qty || 'N/A'}</td>
-                                    <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                        {new Date(entry.timestamp).toLocaleTimeString()}
-                                    </td>
-                                    <td style={{ display: 'flex', gap: '5px' }}>
-                                        <button
-                                            className={styles.secondaryButton}
-                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                            onClick={() => setViewingWoId(entry.work_order_id || entry.wo_id || entry.work_order)}
-                                        >
-                                            View
-                                        </button>
-                                        <button
-                                            className={styles.secondaryButton}
-                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                            onClick={async () => {
-                                                if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                    const res = await fetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                    if (res.ok) setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
-                                                }
-                                            }}
-                                        >
-                                            Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {savedEntries.length === 0 && (
+                {/* Setup Form */}
+                <div className={styles.card}>
+                    <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Post AOI Setup Form</h3>
+                    <div className={styles.formGrid}>
+                        <div className={styles.inputGroup}>
+                            <label>Select Work Order *</label>
+                            <select className={styles.input} value={formWoId} onChange={(e) => handleSelectWo(e.target.value)}>
+                                <option value="">-- Select Work Order --</option>
+                                {workOrders.map((wo) => (
+                                    <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
+                                        {wo.id || wo.work_order_id} - {wo.product_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className={styles.inputGroup}>
+                            <label>Product Name (Auto-filled)</label>
+                            <input type="text" className={styles.input} value={productName} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
+                        </div>
+
+                        <div className={styles.inputGroup}>
+                            <label>WO Qty (Auto-filled)</label>
+                            <input type="number" className={styles.input} value={woQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
+                        </div>
+
+                        <div className={styles.inputGroup}>
+                            <label>Panel Qty (Auto-filled)</label>
+                            <input type="number" className={styles.input} value={panelQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
+                        </div>
+
+                        <div className={styles.inputGroup}>
+                            <label>Generated By *</label>
+                            <input type="text" className={styles.input} value={createdBy} readOnly style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }} />
+                        </div>
+                    </div>
+                    <div style={{ marginTop: '30px' }}>
+                        <button className={styles.button} onClick={handleStartProcess}>
+                            Start Post AOI Inspection
+                        </button>
+                    </div>
+                </div>
+
+                {/* Recent Entries */}
+                <div className={styles.card}>
+                    <h3>Recent Post AOI Entries</h3>
+                    <div className={styles.tableContainer}>
+                        <table className={styles.table}>
+                            <thead>
                                 <tr>
-                                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                        No recent entries found.
-                                    </td>
+                                    <th>WO NUMBER</th>
+                                    <th>PRODUCT NAME</th>
+                                    <th>WO QTY</th>
+                                    <th>PANEL QTY</th>
+                                    <th>TIME</th>
+                                    <th>ACTION</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {savedEntries.map((entry) => (
+                                    <tr key={entry.id}>
+                                        <td style={{ color: '#2563eb', fontWeight: 600 }}>{entry.work_order_id}</td>
+                                        <td>{entry.product_name}</td>
+                                        <td>{entry.quantity || entry.wo_qty}</td>
+                                        <td>{entry.panel_qty || 'N/A'}</td>
+                                        <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                            {new Date(entry.timestamp).toLocaleTimeString()}
+                                        </td>
+                                        <td style={{ display: 'flex', gap: '5px' }}>
+                                            <button
+                                                className={styles.secondaryButton}
+                                                style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                                onClick={() => setViewingWoId(entry.work_order_id || entry.wo_id || entry.work_order)}
+                                            >
+                                                View
+                                            </button>
+                                            <button
+                                                className={styles.secondaryButton}
+                                                style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                onClick={async () => {
+                                                    if (!isSuperAdmin) {
+                                                        addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                        return;
+                                                    }
+                                                    if (window.confirm('Are you sure you want to delete this entry?')) {
+                                                        const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                        if (res.ok) {
+                                                            setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                            addToast("Entry deleted successfully.", "success");
+                                                        }
+                                                    }
+                                                }}
+                                            >
+                                                Delete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {savedEntries.length === 0 && (
+                                    <tr>
+                                        <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                            No recent entries found.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './Rework.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
+import { useAuth } from '../../hooks/useAuth';
+import { apiFetch } from '../../utils/api';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
 
 const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
-    <div style={{ position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column-reverse', gap: '0.5rem' }}>
         {toasts.map(t => (
             <div key={t.id} onClick={() => onRemove(t.id)} style={{
                 padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
@@ -58,7 +60,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
             const url = new URL('/api/smt/serial-numbers', window.location.origin);
             url.searchParams.set('work_order_id', woId);
             url.searchParams.set('filter_status', 'FAIL');
-            url.searchParams.set('current_step', 'Rework');
+            url.searchParams.set('current_step', 'rework');
 
             const res = await fetch(url.toString());
             if (res.ok) {
@@ -85,7 +87,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     serial_id: serialId,
-                    process_step: 'Rework',
+                    process_step: 'rework',
                     scanned_by: operatorName || 'System',
                     status: 'PASS'
                 })
@@ -97,7 +99,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                         ? { ...s, rework_status: 'PASS' }
                         : s
                 ));
-                addToast('Item marked as PASSED in Rework.', 'success');
+                addToast('Item marked as PASSED in rework.', 'success');
             } else {
                 addToast('Failed to save PASS status.', 'error');
             }
@@ -111,7 +113,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     serial_id: serialId,
-                    process_step: 'Rework',
+                    process_step: 'rework',
                     scanned_by: operatorName || 'System',
                     status: 'FAIL',
                     rework_reason: reason
@@ -123,7 +125,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                         ? { ...s, rework_status: 'FAIL', rework_fail_reason: reason }
                         : s
                 ));
-                addToast('Item marked as FAILED in Rework.', 'info');
+                addToast('Item marked as FAILED in rework.', 'info');
             } else {
                 addToast('Failed to save FAIL status.', 'error');
             }
@@ -147,14 +149,14 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
         );
 
         if (!serialObj) {
-            addToast(`Barcode "${barcodeInput}" not found in Rework list.`, 'error');
+            addToast(`Barcode "${barcodeInput}" not found in rework list.`, 'error');
             processingRef.current = false;
             scanInputRef.current?.focus();
             return;
         }
 
         if (serialObj.rework_status === 'PASS') {
-            addToast(`"${barcodeInput}" is already passed in Rework.`, 'info');
+            addToast(`"${barcodeInput}" is already passed in rework.`, 'info');
             processingRef.current = false;
             scanInputRef.current?.focus();
             return;
@@ -186,7 +188,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                 <div className={styles.detailHeaderCard} style={{ background: 'linear-gradient(to right, #fffbeb, #fef3c7)', border: '1px solid #fde68a' }}>
                     <div className={styles.detailHeaderRow}>
                         <div>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#92400e', marginBottom: '0.5rem' }}>🛠️ Rework Detail: {woId}</h3>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#92400e', marginBottom: '0.5rem' }}>🛠️ rework Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
                                 <span style={{ color: '#b45309' }}>Total Scanned: <strong>{serials.length}</strong></span>
                                 <span style={{ color: '#b45309' }}>🏭 Available (Fail from SPI/AOI): <strong style={{ color: '#d97706' }}>{serials.length}</strong></span>
@@ -226,7 +228,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
 
                 <div className={styles.card}>
                     <div className={styles.tableHeader}>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Rework Items ({serials.length})</h3>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>rework Items ({serials.length})</h3>
                     </div>
                     <div className={styles.tableContainer}>
                         <table className={styles.table}>
@@ -258,7 +260,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                                                     backgroundColor: isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7',
                                                     color: isPass ? '#166534' : isFail ? '#991b1b' : '#92400e'
                                                 }}>
-                                                    {isPass ? '✓ REWORKED' : isFail ? '● RE-FAIL' : '🕒 WAITING'}
+                                                    {isPass ? '✓ reworkED' : isFail ? '● RE-FAIL' : '🕒 WAITING'}
                                                 </span>
                                             </td>
                                             <td>
@@ -312,7 +314,21 @@ const FailButton: React.FC<{ serialId: number; onFail: (id: number, reason: stri
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const Rework: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
+    const { user } = useAuth();
+    const isSuperAdmin = user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
+
+    // Toast state
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
+
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
     const [viewingWoId, setViewingWoId] = useState<string | null>(null);
 
     const [formWoId, setFormWoId] = useState('');
@@ -328,7 +344,7 @@ const Rework: React.FC = () => {
                 const woRes = await fetch('/api/smt/work-orders/registered');
                 if (woRes.ok) setWorkOrders(await woRes.json());
 
-                const setupRes = await fetch('/api/smt/process-setups?process_name=REWORK');
+                const setupRes = await fetch('/api/smt/process-setups?process_name=rework');
                 if (setupRes.ok) setSavedEntries(await setupRes.json());
 
                 if (smtUser) setCreatedBy(smtUser.name || smtUser.userId || 'System');
@@ -366,14 +382,14 @@ const Rework: React.FC = () => {
             const res = await fetch('/api/smt/process-setups', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ work_order_id: formWoId, process_name: 'REWORK', product_name: productName, quantity: parseInt(woQty) })
+                body: JSON.stringify({ work_order_id: formWoId, process_name: 'rework', product_name: productName, quantity: parseInt(woQty) })
             });
             if (res.ok) {
                 const newEntry = await res.json();
                 setSavedEntries(prev => [newEntry, ...prev]);
                 setViewingWoId(formWoId);
             } else {
-                alert('Failed to save Rework setup');
+                alert('Failed to save rework setup');
             }
         } catch (err) {
             console.error('Error saving setup:', err);
@@ -384,7 +400,7 @@ const Rework: React.FC = () => {
     if (viewingWoId) {
         return (
             <ReworkDetail
-                woId={viewingWoId}
+                woId={viewingWoId!}
                 onBack={() => setViewingWoId(null)}
                 operatorName={smtUser?.name || 'System'}
             />
@@ -392,12 +408,14 @@ const Rework: React.FC = () => {
     }
 
     return (
-        <div className={styles.container}>
+        <>
+            <Toaster toasts={toasts} onRemove={removeToast} />
+            <div className={styles.container}>
             <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                    <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🛠️ SMT Rework</h2>
+                    <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🛠️ SMT rework</h2>
                     <p style={{ color: '#64748b' }}>
-                        Manage SMT Rework &amp; Correction tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong>
+                        Manage SMT rework &amp; Correction tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong>
                     </p>
                 </div>
                 <button
@@ -411,7 +429,7 @@ const Rework: React.FC = () => {
 
             {/* Setup Form */}
             <div className={styles.card}>
-                <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Rework Setup Form</h3>
+                <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>rework Setup Form</h3>
                 <div className={styles.formGrid}>
                     <div className={styles.inputGroup}>
                         <label>Select Work Order *</label>
@@ -442,13 +460,13 @@ const Rework: React.FC = () => {
                     </div>
                 </div>
                 <div style={{ marginTop: '30px' }}>
-                    <button className={styles.button} onClick={handleStartProcess}>Start Rework Process</button>
+                    <button className={styles.button} onClick={handleStartProcess}>Start rework Process</button>
                 </div>
             </div>
 
             {/* Recent Entries */}
             <div className={styles.card}>
-                <h3>Recent Rework Entries</h3>
+                <h3>Recent rework Entries</h3>
                 <div className={styles.tableContainer}>
                     <table className={styles.table}>
                         <thead>
@@ -477,9 +495,16 @@ const Rework: React.FC = () => {
                                             className={styles.secondaryButton}
                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                             onClick={async () => {
+                                                if (!isSuperAdmin) {
+                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                    return;
+                                                }
                                                 if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                    const res = await fetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                    if (res.ok) setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                    const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                    if (res.ok) {
+                                                        setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                        addToast("Entry deleted successfully.", "success");
+                                                    }
                                                 }
                                             }}
                                         >
@@ -498,6 +523,7 @@ const Rework: React.FC = () => {
                 </div>
             </div>
         </div>
+        </>
     );
 };
 

@@ -18,7 +18,7 @@ interface TimelineItem {
     operator: string;
     timestamp: string;
     source: string;
-    remarks: string;
+    reworks: string;
 }
 
 interface TraceData {
@@ -71,10 +71,10 @@ const StageFlow: React.FC<{ timeline: TimelineItem[] }> = ({ timeline }) => {
             const latest = stageEntries[stageEntries.length - 1];
             status = latest.status.toUpperCase();
 
-            // Detect REWORK_PASSED: Had failure/rework earlier, then Passed
-            const hadFailure = stageEntries.some(e => e.status.toUpperCase() === 'FAILED' || e.status.toUpperCase() === 'REWORK');
+            // Detect rework_PASSED: Had failure/rework earlier, then Passed
+            const hadFailure = stageEntries.some(e => e.status.toUpperCase() === 'FAILED' || e.status.toUpperCase() === 'rework');
             if (hadFailure && status === 'PASSED') {
-                status = 'REWORK_PASSED';
+                status = 'rework_PASSED';
             }
         }
 
@@ -95,7 +95,7 @@ const StageFlow: React.FC<{ timeline: TimelineItem[] }> = ({ timeline }) => {
     const getIcon = (status: string) => {
         switch (status) {
             case 'PASSED': return '✅';
-            case 'REWORK_PASSED': return '🔁✅';
+            case 'rework_PASSED': return '🔁✅';
             case 'FAILED': return '❌';
             case 'IN_PROGRESS': return '⚙️';
             default: return '';
@@ -108,7 +108,7 @@ const StageFlow: React.FC<{ timeline: TimelineItem[] }> = ({ timeline }) => {
 
         switch (status) {
             case 'PASSED': return `${baseClass} ${styles.nodePassed}`;
-            case 'REWORK_PASSED': return `${baseClass} ${styles.nodePassed}`;
+            case 'rework_PASSED': return `${baseClass} ${styles.nodePassed}`;
             case 'FAILED': return `${baseClass} ${styles.nodeFailed}`;
             case 'INACTIVE': return `${baseClass} ${styles.nodeInactive}`;
             default: return `${baseClass} ${styles.nodeInactive}`;
@@ -130,7 +130,7 @@ const StageFlow: React.FC<{ timeline: TimelineItem[] }> = ({ timeline }) => {
                         </div>
                     </div>
                     {idx < stages.length - 1 && (
-                        <div className={`${styles.connector} ${stages[idx].status === 'PASSED' || stages[idx].status === 'REWORK_PASSED'
+                        <div className={`${styles.connector} ${stages[idx].status === 'PASSED' || stages[idx].status === 'rework_PASSED'
                             ? styles.connectorActive
                             : stages[idx].status === 'FAILED'
                                 ? styles.connectorStop
@@ -304,7 +304,7 @@ export const Trace: React.FC = () => {
                                         <div className={styles.stageMetrics}>
                                             <div className={styles.metricRow}><span>Scanned:</span> <strong>{batchData.pre_iqc.scanned}</strong></div>
                                             <div className={styles.metricRow}><span className={styles.labelGreen}>Passed:</span> <strong className={styles.textGreen}>{batchData.pre_iqc.passed}</strong></div>
-                                            <div className={styles.metricRow}><span className={styles.labelGreen}>Rework Pass:</span> <strong className={styles.textGreen}>{batchData.pre_iqc.rework_passed}</strong></div>
+                                            <div className={styles.metricRow}><span className={styles.labelGreen}>rework Pass:</span> <strong className={styles.textGreen}>{batchData.pre_iqc.rework_passed}</strong></div>
                                             <div className={styles.metricRow}><span className={styles.labelRed}>Failed:</span> <strong className={styles.textRed}>{batchData.pre_iqc.failed}</strong></div>
                                             <div className={styles.metricRow}><span className={styles.labelRed}>Scrap:</span> <strong className={styles.textRed}>{batchData.pre_iqc.scrap}</strong></div>
                                         </div>
@@ -319,7 +319,7 @@ export const Trace: React.FC = () => {
                                         <div className={styles.stageMetrics}>
                                             <div className={styles.metricRow}><span>Scanned:</span> <strong>{batchData.pre_impedance.scanned}</strong></div>
                                             <div className={styles.metricRow}><span className={styles.labelGreen}>Passed:</span> <strong className={styles.textGreen}>{batchData.pre_impedance.passed}</strong></div>
-                                            <div className={styles.metricRow}><span className={styles.labelGreen}>Rework Pass:</span> <strong className={styles.textGreen}>{batchData.pre_impedance.rework_passed}</strong></div>
+                                            <div className={styles.metricRow}><span className={styles.labelGreen}>rework Pass:</span> <strong className={styles.textGreen}>{batchData.pre_impedance.rework_passed}</strong></div>
                                             <div className={styles.metricRow}><span className={styles.labelRed}>Failed:</span> <strong className={styles.textRed}>{batchData.pre_impedance.failed}</strong></div>
                                         </div>
                                         <div className={styles.movementHighlight}>
@@ -333,7 +333,7 @@ export const Trace: React.FC = () => {
                                         <div className={styles.stageMetrics}>
                                             <div className={styles.metricRow}><span>Scanned:</span> <strong>{batchData.pre_calibration.scanned}</strong></div>
                                             <div className={styles.metricRow}><span className={styles.labelGreen}>Passed:</span> <strong className={styles.textGreen}>{batchData.pre_calibration.passed}</strong></div>
-                                            <div className={styles.metricRow}><span className={styles.labelGreen}>Rework Pass:</span> <strong className={styles.textGreen}>{batchData.pre_calibration.rework_passed}</strong></div>
+                                            <div className={styles.metricRow}><span className={styles.labelGreen}>rework Pass:</span> <strong className={styles.textGreen}>{batchData.pre_calibration.rework_passed}</strong></div>
                                             <div className={styles.metricRow}><span className={styles.labelRed}>Failed:</span> <strong className={styles.textRed}>{batchData.pre_calibration.failed}</strong></div>
                                         </div>
                                         <div className={styles.movementHighlight}>
@@ -347,7 +347,7 @@ export const Trace: React.FC = () => {
                                         <div className={styles.stageMetrics}>
                                             <div className={styles.metricRow}><span>Scanned:</span> <strong>{batchData.pre_aclr.scanned}</strong></div>
                                             <div className={styles.metricRow}><span className={styles.labelGreen}>Passed:</span> <strong className={styles.textGreen}>{batchData.pre_aclr.passed}</strong></div>
-                                            <div className={styles.metricRow}><span className={styles.labelGreen}>Rework Pass:</span> <strong className={styles.textGreen}>{batchData.pre_aclr.rework_passed}</strong></div>
+                                            <div className={styles.metricRow}><span className={styles.labelGreen}>rework Pass:</span> <strong className={styles.textGreen}>{batchData.pre_aclr.rework_passed}</strong></div>
                                             <div className={styles.metricRow}><span className={styles.labelRed}>Failed:</span> <strong className={styles.textRed}>{batchData.pre_aclr.failed}</strong></div>
                                         </div>
                                         <div className={styles.finalOutputCard}>
@@ -417,8 +417,8 @@ export const Trace: React.FC = () => {
                                                         <div className={styles.timelineTimestamp}>
                                                             {new Date(item.timestamp).toLocaleString()}
                                                         </div>
-                                                        {item.remarks && item.remarks !== '-' && (
-                                                            <div className={styles.remarks}>{item.remarks}</div>
+                                                        {item.reworks && item.reworks !== '-' && (
+                                                            <div className={styles.reworks}>{item.reworks}</div>
                                                         )}
                                                     </div>
                                                     <div className={styles.timelineRight}>

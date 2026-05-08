@@ -30,12 +30,16 @@ import { ViTouchUp } from './pages/smt/ViTouchUp';
 import WorkOrderBackend from './pages/backend/WorkOrder';
 import PTH from './pages/backend/PTH';
 import VI from './pages/backend/VI';
-import QI from './pages/backend/QI';
+import QA from './pages/backend/QA';
 import Flashing from './pages/backend/Flashing';
 import PCBAFCT from './pages/backend/PCBAFCT';
 import Assembly from './pages/backend/Assembly';
 import UnitTesting from './pages/backend/UnitTesting';
+import QI from './pages/backend/QI';
 import Packing from './pages/backend/Packing';
+import RemarkBackend from './pages/backend/Remark';
+import DebugBackend from './pages/backend/Debug';
+import TrackItems from './pages/backend/TrackItems';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -207,10 +211,10 @@ export const router = createBrowserRouter([
                 ),
             },
             {
-                path: '/backend/qi',
+                path: '/backend/qa',
                 element: (
                     <ProtectedRoute>
-                        <QI />
+                        <QA />
                     </ProtectedRoute>
                 ),
             },
@@ -247,10 +251,42 @@ export const router = createBrowserRouter([
                 ),
             },
             {
+                path: '/backend/qi',
+                element: (
+                    <ProtectedRoute>
+                        <QI />
+                    </ProtectedRoute>
+                ),
+            },
+            {
                 path: '/backend/packing',
                 element: (
                     <ProtectedRoute>
                         <Packing />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/remark',
+                element: (
+                    <ProtectedRoute>
+                        <RemarkBackend />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/debug',
+                element: (
+                    <ProtectedRoute>
+                        <DebugBackend />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/backend/track-items',
+                element: (
+                    <ProtectedRoute>
+                        <TrackItems />
                     </ProtectedRoute>
                 ),
             },

@@ -1,5 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { apiFetch } from '../../utils/api';
+
+// ─── Toaster ─────────────────────────────────────────────────────────────────
+interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+
+const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
+    <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column-reverse', gap: '0.5rem' }}>
+        {toasts.map(t => (
+            <div key={t.id} onClick={() => onRemove(t.id)} style={{
+                padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
+                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#fffbeb',
+                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#92400e',
+                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#fde68a'}`,
+                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                animation: 'slideIn 0.2s ease'
+            }}>
+                {t.type === 'error' ? '❌ ' : t.type === 'success' ? '✅ ' : 'ℹ️ '}{t.message}
+            </div>
+        ))}
+    </div>
+);
+
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import styles from './SmtLogin.module.css';
@@ -20,6 +42,19 @@ export const SmtLogin: React.FC = () => {
     // Admin State
     const [isAdminMode, setIsAdminMode] = useState(false);
     const [employees, setEmployees] = useState<any[]>([]);
+    
+    // Toast state
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
+
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
+    
     const [empName, setEmpName] = useState('');
     const [empUserId, setEmpUserId] = useState('');
     const [empPassword, setEmpPassword] = useState('');
@@ -31,6 +66,7 @@ export const SmtLogin: React.FC = () => {
     const [showAdminPassword, setShowAdminPassword] = useState(false);
 
     const from = location.state?.from?.pathname || '/smt/work-order';
+    const isSuperAdmin = mainUser?.role === 'Super Admin';
 
     useEffect(() => {
         if (isAdminMode) {
@@ -89,8 +125,6 @@ export const SmtLogin: React.FC = () => {
                 return;
             }
 
-            // --- Step 3: Try Central Auth Login (Super Admin, Admin, Manager) ---
-            // We treat the "userId" field as the email for central accounts
             const authRes = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -101,7 +135,6 @@ export const SmtLogin: React.FC = () => {
                 const authData = await authRes.json();
                 const globalUser = authData.user;
                 
-                // Allow only authorized roles
                 const authorizedRoles = ['Super Admin', 'Admin', 'Manager'];
                 if (authorizedRoles.includes(globalUser.role)) {
                     smtLogin({
@@ -162,10 +195,14 @@ export const SmtLogin: React.FC = () => {
         }
     };
 
-    const handleDeleteEmployee = async (id: string) => {
-        if (window.confirm("Are you sure you want to delete this employee?")) {
+    const handleDeleteEmployee = async (id: string, name: string) => {
+        if (!isSuperAdmin) {
+            addToast("Access Denied: Only Super Admin can delete employees.", "error");
+            return;
+        }
+        if (window.confirm(`Are you sure you want to delete ${name}?`)) {
             try {
-                const res = await fetch(`/api/smt/employees/${id}`, { method: 'DELETE' });
+                const res = await apiFetch(`/api/smt/employees/${id}`, { method: 'DELETE' });
                 if (res.ok) fetchEmployees();
             } catch (err) {
                 console.error("Delete error:", err);
@@ -193,7 +230,6 @@ export const SmtLogin: React.FC = () => {
         }
 
         try {
-            // Verify password against the main auth system using the current user's email
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -215,11 +251,19 @@ export const SmtLogin: React.FC = () => {
     if (isAdminMode) {
         return (
             <div className={styles.container}>
+                <Toaster toasts={toasts} onRemove={removeToast} />
                 <div className={styles.adminCard}>
                     <div className={styles.adminHeader}>
-                        <div>
-                            <h2 className={styles.title}>SMT Admin Panel</h2>
-                            <p className={styles.subtitle}>Manage employee access and credentials</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <img 
+                                src="https://img.icons8.com/?size=100&id=37960&format=png&color=000000" 
+                                alt="Admin" 
+                                style={{ width: '40px', height: '40px' }} 
+                            />
+                            <div>
+                                <h2 className={styles.title}>SMT Admin Panel</h2>
+                                <p className={styles.subtitle}>Manage employee access and credentials</p>
+                            </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={() => setIsAdminMode(false)}>
                             Back to Login
@@ -285,13 +329,15 @@ export const SmtLogin: React.FC = () => {
                                                 >
                                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                                                 </button>
-                                                <button 
-                                                    className={`${styles.iconButton} ${styles.deleteButton}`}
-                                                    onClick={() => handleDeleteEmployee(emp.id)}
-                                                    title="Delete"
-                                                >
-                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                                                </button>
+                                                {isSuperAdmin && (
+                                                    <button 
+                                                        className={`${styles.iconButton} ${styles.deleteButton}`}
+                                                        onClick={() => handleDeleteEmployee(emp.id, emp.name)}
+                                                        title="Delete"
+                                                    >
+                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -309,12 +355,22 @@ export const SmtLogin: React.FC = () => {
 
     return (
         <div className={styles.container}>
+            <Toaster toasts={toasts} onRemove={removeToast} />
             <div className={styles.loginCard}>
                 <button className={styles.adminLock} onClick={handleAdminIconClick} title="Admin Access">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    <img 
+                        src="https://img.icons8.com/?size=100&id=37960&format=png&color=000000" 
+                        alt="Admin Lock" 
+                        style={{ width: '24px', height: '24px', opacity: 0.6 }} 
+                    />
                 </button>
                 <div className={styles.header}>
-                    <span className={styles.logo}>⚙️</span>
+                    <img 
+                        src="https://img.icons8.com/?size=100&id=ieVSeD9Tpqf1&format=png&color=000000" 
+                        alt="SMT Logo" 
+                        className={styles.logo} 
+                        style={{ width: '80px', height: '80px', margin: '0 auto 1.5rem auto', display: 'block' }} 
+                    />
                     <h2 className={styles.title}>SMT Portal Login</h2>
                     <p className={styles.subtitle}>Please enter your credentials to access SMT tools</p>
                 </div>
@@ -377,7 +433,12 @@ export const SmtLogin: React.FC = () => {
                     backdropFilter: 'blur(4px)'
                 }}>
                     <div className={styles.loginCard} style={{ maxWidth: '400px', width: '90%', padding: '2rem' }}>
-                        <div className={styles.header}>
+                        <div className={styles.header} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', marginBottom: '0' }}>
+                            <img 
+                                src="https://img.icons8.com/?size=100&id=37960&format=png&color=000000" 
+                                alt="Admin" 
+                                style={{ width: '32px', height: '32px' }} 
+                            />
                             <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Enter Admin Password:</h3>
                         </div>
                         <form onSubmit={handleAdminSubmit} style={{ marginTop: '1.5rem' }}>

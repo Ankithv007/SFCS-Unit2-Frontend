@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'react-qr-code';
 import styles from './PostWorkSoldering.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
+import { useAuth } from '../../hooks/useAuth';
+import { apiFetch } from '../../utils/api';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
@@ -50,7 +52,6 @@ const PostWorkSolderingDetail: React.FC<PostWorkSolderingDetailProps> = ({ woId,
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // Fetch items eligible for this station (passed Previous Soldering)
             const eligibleUrl = new URL('/api/smt/serial-numbers', window.location.origin);
             eligibleUrl.searchParams.set('work_order_id', woId);
             eligibleUrl.searchParams.set('filter_step', 'Previous Soldering');
@@ -61,7 +62,6 @@ const PostWorkSolderingDetail: React.FC<PostWorkSolderingDetailProps> = ({ woId,
                 setTotalSerials(eligibleData.length);
             }
 
-            // Fetch Post-Work Soldering history
             const inspUrl = new URL('/api/smt/inspections', window.location.origin);
             inspUrl.searchParams.set('work_order_id', woId);
             inspUrl.searchParams.set('process_step', 'Post-Work Soldering');
@@ -114,9 +114,9 @@ const PostWorkSolderingDetail: React.FC<PostWorkSolderingDetailProps> = ({ woId,
     };
 
     const handleFailOnly = async (serialId: number) => {
-        const reason = window.prompt('Please enter the reason for failure (Remark):');
+        const reason = window.prompt('Please enter the reason for failure (rework):');
         if (reason === null) return;
-        if (!reason.trim()) { addToast('Remark is required.', 'error'); return; }
+        if (!reason.trim()) { addToast('rework is required.', 'error'); return; }
 
         try {
             const res = await fetch('/api/smt/inspections', {
@@ -292,12 +292,23 @@ const PostWorkSolderingDetail: React.FC<PostWorkSolderingDetailProps> = ({ woId,
 // --- Main Page Component ---
 export const PostWorkSoldering: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
+    const { user } = useAuth();
+    const isSuperAdmin = user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
 
-    // View mode state
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
+
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
+
     const [viewingWoId, setViewingWoId] = useState<string | null>(null);
 
-    // Form state
     const [formWoId, setFormWoId] = useState('');
     const [productName, setProductName] = useState('');
     const [woQty, setWoQty] = useState('');
@@ -374,160 +385,169 @@ export const PostWorkSoldering: React.FC = () => {
             if (res.ok) {
                 const newEntry = await res.json();
                 setSavedEntries([newEntry, ...savedEntries]);
-                alert(`Starting Post-Work Soldering for WO: ${formWoId}`);
+                addToast(`Starting Post-Work Soldering for WO: ${formWoId}`, 'success');
             } else {
-                alert("Failed to save setup");
+                addToast("Failed to save setup", 'error');
             }
         } catch (err) {
             console.error("Error saving setup:", err);
-            alert("Connection error while saving setup");
+            addToast("Connection error while saving setup", 'error');
         }
     };
 
     return (
-        <div className={styles.container}>
-            <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>⚡ Post-Work Soldering</h2>
-                    <p style={{ color: '#64748b' }}>Manage Post-Soldering tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
-                </div>
-                <button
-                    onClick={() => {
-                        if (window.confirm("Are you sure you want to logout from SMT?")) {
-                            smtLogout();
-                        }
-                    }}
-                    className={styles.secondaryButton}
-                    style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                    <span>🔒</span> Logout SMT
-                </button>
-            </div>
-
-            {viewingWoId ? (
-                <PostWorkSolderingDetail
-                    woId={viewingWoId}
-                    onBack={() => setViewingWoId(null)}
-                    operatorName={smtUser?.name || 'System'}
-                />
-            ) : (
-                <>
-                    <div className={styles.card}>
-                        <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Inspection Setup Form</h3>
-                        <div className={styles.formGrid}>
-                            <div className={styles.inputGroup}>
-                                <label>Select Work Order (Serial Number Scanned Only) *</label>
-                                <select
-                                    className={styles.input}
-                                    value={formWoId}
-                                    onChange={(e) => handleSelectWo(e.target.value)}
-                                >
-                                    <option value="">-- Select Work Order --</option>
-                                    {workOrders.map((wo) => (
-                                        <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
-                                            {wo.id || wo.work_order_id} - {wo.product_name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Product Name (Auto-filled)</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={productName}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>WO Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    value={woQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Panel Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    value={panelQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Generated By *</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={createdBy}
-                                    readOnly
-                                    style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}
-                                />
-                            </div>
-                        </div>
-                        <div style={{ marginTop: '30px' }}>
-                            <button className={styles.button} onClick={handleStartProcess}>
-                                Start Process
-                            </button>
-                        </div>
+        <>
+            <Toaster toasts={toasts} onRemove={removeToast} />
+            <div className={styles.container}>
+                <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>⚡ Post-Work Soldering</h2>
+                        <p style={{ color: '#64748b' }}>Manage Post-Soldering tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
                     </div>
+                    <button
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to logout from SMT?")) {
+                                smtLogout();
+                            }
+                        }}
+                        className={styles.secondaryButton}
+                        style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <span>🔒</span> Logout SMT
+                    </button>
+                </div>
 
-                    <div className={styles.card}>
-                        <h3>Recent Post-Work Entries</h3>
-                        <div className={styles.tableContainer}>
-                            <table className={styles.table}>
-                                <thead>
-                                    <tr>
-                                        <th>WO NUMBER</th>
-                                        <th>PRODUCT NAME</th>
-                                        <th>WO QTY</th>
-                                        <th>PANEL QTY</th>
-                                        <th>TIME</th>
-                                        <th>ACTION</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {savedEntries.map((entry) => (
-                                        <tr key={entry.id}>
-                                            <td style={{ color: '#2563eb', fontWeight: 600 }}>{entry.work_order_id}</td>
-                                            <td>{entry.product_name}</td>
-                                            <td>{entry.quantity || entry.wo_qty}</td>
-                                            <td>{entry.panel_qty || 'N/A'}</td>
-                                            <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                                {new Date(entry.timestamp).toLocaleTimeString()}
-                                            </td>
-                                            <td style={{ display: 'flex', gap: '5px' }}>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                    onClick={() => setViewingWoId(entry.work_order_id)}
-                                                >
-                                                    View
-                                                </button>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                    onClick={async () => {
-                                                        if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                            const res = await fetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                            if (res.ok) setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                                                        }
-                                                    }}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </td>
+                {viewingWoId ? (
+                    <PostWorkSolderingDetail
+                        woId={viewingWoId}
+                        onBack={() => setViewingWoId(null)}
+                        operatorName={smtUser?.name || 'System'}
+                    />
+                ) : (
+                    <>
+                        <div className={styles.card}>
+                            <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Inspection Setup Form</h3>
+                            <div className={styles.formGrid}>
+                                <div className={styles.inputGroup}>
+                                    <label>Select Work Order *</label>
+                                    <select
+                                        className={styles.input}
+                                        value={formWoId}
+                                        onChange={(e) => handleSelectWo(e.target.value)}
+                                    >
+                                        <option value="">-- Select Work Order --</option>
+                                        {workOrders.map((wo) => (
+                                            <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
+                                                {wo.id || wo.work_order_id} - {wo.product_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Product Name (Auto-filled)</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={productName}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>WO Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        value={woQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Panel Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        value={panelQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Generated By *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={createdBy}
+                                        readOnly
+                                        style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}
+                                    />
+                                </div>
+                            </div>
+                            <div style={{ marginTop: '30px' }}>
+                                <button className={styles.button} onClick={handleStartProcess}>
+                                    Start Process
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className={styles.card}>
+                            <h3>Recent Post-Work Entries</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>TIME</th>
+                                            <th>ACTION</th>
                                         </tr>
+                                    </thead>
+                                    <tbody>
+                                        {savedEntries.map((entry) => (
+                                            <tr key={entry.id}>
+                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{entry.work_order_id}</td>
+                                                <td>{entry.product_name}</td>
+                                                <td>{entry.quantity || entry.wo_qty}</td>
+                                                <td>{entry.panel_qty || 'N/A'}</td>
+                                                <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                    {new Date(entry.timestamp).toLocaleTimeString()}
+                                                </td>
+                                                <td style={{ display: 'flex', gap: '5px' }}>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                                        onClick={() => setViewingWoId(entry.work_order_id)}
+                                                    >
+                                                        View
+                                                    </button>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                        onClick={async () => {
+                                                            if (!isSuperAdmin) {
+                                                                addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                                return;
+                                                            }
+                                                            if (window.confirm("Are you sure you want to delete this entry?")) {
+                                                                const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                if (res.ok) {
+                                                                    setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                                    addToast("Entry deleted successfully.", "success");
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
                                     ))}
                                     {savedEntries.length === 0 && (
                                         <tr>
@@ -543,5 +563,6 @@ export const PostWorkSoldering: React.FC = () => {
                 </>
             )}
         </div>
+        </>
     );
 };

@@ -97,7 +97,7 @@ export const VLTCompletedTable: React.FC<Props> = ({ refreshTrigger = 0 }) => {
                             inspections.map(item => {
                                 // Parity matching for Passed/Failed columns
                                 const isPassed = item.final_status === 'PASS' || item.retested_result === 'PASS';
-                                const isFailed = item.final_status === 'FAIL' || item.final_status === 'REWORK' || item.retested_result === 'FAIL';
+                                const isFailed = item.final_status === 'FAIL' || item.final_status === 'rework' || item.retested_result === 'FAIL';
 
                                 return (
                                     <tr key={item.id} style={{ borderBottom: '1px solid #e5e7eb' }}>

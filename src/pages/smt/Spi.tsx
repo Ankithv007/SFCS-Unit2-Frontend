@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'react-qr-code';
 import styles from './Spi.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
+import { useAuth } from '../../hooks/useAuth';
+import { apiFetch } from '../../utils/api';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
 
 const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
-    <div style={{ position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column-reverse', gap: '0.5rem' }}>
         {toasts.map(t => (
             <div key={t.id} onClick={() => onRemove(t.id)} style={{
                 padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
@@ -112,9 +114,9 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
     };
 
     const handleFailOnly = async (serialId: number) => {
-        const reason = window.prompt('Please enter the reason for failure (Remark):');
+        const reason = window.prompt('Please enter the reason for failure (rework):');
         if (reason === null) return;
-        if (!reason.trim()) { addToast('Remark is required.', 'error'); return; }
+        if (!reason.trim()) { addToast('rework is required.', 'error'); return; }
 
         try {
             const res = await fetch('/api/smt/inspections', {
@@ -293,8 +295,22 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
 // --- Main Page Component ---
 const Spi: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
+    const { user } = useAuth();
+    const isSuperAdmin = user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
     const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
+
+    // Toast state
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
+
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
     // Form state
     const [formWoId, setFormWoId] = useState('');
@@ -384,7 +400,9 @@ const Spi: React.FC = () => {
     };
 
     return (
-        <div className={styles.container}>
+        <>
+            <Toaster toasts={toasts} onRemove={removeToast} />
+            <div className={styles.container}>
             <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                     <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🔍 SPI Inspection</h2>
@@ -415,7 +433,7 @@ const Spi: React.FC = () => {
                         <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>SPI Setup Form</h3>
                         <div className={styles.formGrid}>
                             <div className={styles.inputGroup}>
-                                <label>Select Work Order (Serial Number Scanned Only) *</label>
+                                <label>Select Work Order *</label>
                                 <select
                                     className={styles.input}
                                     value={formWoId}
@@ -517,9 +535,16 @@ const Spi: React.FC = () => {
                                                     className={styles.secondaryButton}
                                                     style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                     onClick={async () => {
+                                                        if (!isSuperAdmin) {
+                                                            addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                            return;
+                                                        }
                                                         if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                            const res = await fetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                            if (res.ok) setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                            const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                            if (res.ok) {
+                                                                setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                                addToast("Entry deleted successfully.", "success");
+                                                            }
                                                         }
                                                     }}
                                                 >
@@ -542,6 +567,7 @@ const Spi: React.FC = () => {
                 </>
             )}
         </div>
+        </>
     );
 };
 

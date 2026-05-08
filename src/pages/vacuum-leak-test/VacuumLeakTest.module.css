@@ -166,7 +166,7 @@
     filter: brightness(110%);
 }
 
-.remarkBox {
+.reworkBox {
     margin-top: 1rem;
     display: flex;
     flex-direction: column;

@@ -3,7 +3,7 @@ import { apiFetch } from '../../utils/api';
 import styles from './PTH.module.css';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
-import { Search, Package, Plus } from 'lucide-react';
+import { Search, Package, Plus, Building2, Settings, Hash, User, Calendar, CheckCircle, MessageSquare, AlertTriangle } from 'lucide-react';
 
 interface WorkOrder {
     id: number;
@@ -21,13 +21,14 @@ interface Batch {
     work_order_id: number;
     wo_number: string;
     wo_qty: number;
+    customer_name?: string;
     created_by: string;
     created_at: string;
     status: 'active' | 'completed';
     scanned_count: number;
     scanned_qty?: number;
     passed?: number;
-    rework?: number;
+    remark?: number;
     debug?: number;
 }
 
@@ -37,60 +38,126 @@ interface ScanRecord {
     scanned_by: string;
     scanned_at: string;
     status: string;
-    previous_batch?: string;
+    resolution_remarks?: string;
+    failed_at?: string;
+    failed_remarks?: string;
     remarks?: string;
     selectedReason?: string;
 }
 
-interface FailModalProps {
-    item: ScanRecord;
-    remark: string;
-    setRemark: (val: string) => void;
-    onSubmit: () => void;
+
+interface ScanDecisionModalProps {
+    barcode: string;
+    onFinalize: (status: string, remarks?: string) => void;
     onClose: () => void;
-    error: string;
 }
 
-const FailModal: React.FC<FailModalProps> = ({ item, remark, setRemark, onSubmit, onClose, error }) => {
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const reason = item.selectedReason || "";
+const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinalize, onClose }) => {
+    const [mode, setMode] = useState<'select' | 'input'>('select');
+    const [status, setStatus] = useState<'accepted' | 'remark' | 'debug'>('accepted');
+    const [text, setText] = useState('');
+    const [focusedIndex, setFocusedIndex] = useState(0);
+
+    const bufferRef = useRef('');
+    const actions: ('accepted' | 'remark' | 'debug')[] = ['accepted', 'remark', 'debug'];
 
     useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.focus();
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (mode === 'select') {
+                if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    setFocusedIndex(prev => (prev + 1) % 3);
+                } else if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    setFocusedIndex(prev => (prev - 1 + 3) % 3);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (bufferRef.current.toUpperCase() === 'RESOLVED') {
+                        handleAction('accepted');
+                    } else if (bufferRef.current === '') {
+                        handleAction(actions[focusedIndex]);
+                    }
+                    bufferRef.current = '';
+                } else if (e.key.length === 1) {
+                    bufferRef.current += e.key;
+                    // Clear buffer if it gets too long without Enter
+                    if (bufferRef.current.length > 20) bufferRef.current = '';
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [mode, focusedIndex]);
+
+    const handleAction = (selectedStatus: 'accepted' | 'remark' | 'debug') => {
+        if (selectedStatus === 'accepted') {
+            onFinalize('accepted');
+        } else {
+            setStatus(selectedStatus);
+            setMode('input');
         }
-    }, []);
+    };
 
     return (
         <div className={styles.modalOverlay}>
             <div className={styles.modalContent}>
                 <div className={styles.modalHeader}>
-                    <h3>{reason.toUpperCase()} Details - {item.barcode}</h3>
+                    <h3>Scan Action - {barcode}</h3>
+                    <button className={styles.closeBtn} onClick={onClose}>&times;</button>
                 </div>
                 <div className={styles.modalBody}>
-                    <div className={styles.inputGroup}>
-                        <label>Remark *</label>
-                        <textarea 
-                            ref={textareaRef}
-                            className={styles.textarea}
-                            placeholder={`Enter ${reason} details...`}
-                            value={remark}
-                            onChange={(e) => {
-                                setRemark(e.target.value);
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                            }}
-                        />
-                    </div>
-                    {error && <p className={styles.errorText}>{error}</p>}
-                </div>
-                <div className={styles.modalFooter}>
-                    <button className={styles.secondaryBtn} onClick={onClose}>
-                        Cancel
-                    </button>
-                    <button className={styles.primaryBtn} onClick={onSubmit}>
-                        Submit Failure
-                    </button>
+                    {mode === 'select' ? (
+                        <div className={styles.decisionGrid}>
+                            <button 
+                                className={`${styles.decisionBtn} ${focusedIndex === 0 ? styles.defaultAction : ''}`} 
+                                onClick={() => handleAction('accepted')}
+                                onMouseEnter={() => setFocusedIndex(0)}
+                            >
+                                <CheckCircle size={32} className={styles.passIcon} />
+                                Pass
+                            </button>
+                            <button 
+                                className={`${styles.decisionBtn} ${focusedIndex === 1 ? styles.defaultAction : ''}`} 
+                                onClick={() => handleAction('remark')}
+                                onMouseEnter={() => setFocusedIndex(1)}
+                            >
+                                <MessageSquare size={32} className={styles.remarkIcon} />
+                                Remark
+                            </button>
+                            <button 
+                                className={`${styles.decisionBtn} ${focusedIndex === 2 ? styles.defaultAction : ''}`} 
+                                onClick={() => handleAction('debug')}
+                                onMouseEnter={() => setFocusedIndex(2)}
+                            >
+                                <AlertTriangle size={32} className={styles.debugIcon} />
+                                Debug
+                            </button>
+                        </div>
+                    ) : (
+                        <div className={styles.inputGroup}>
+                            <label style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>
+                                {status === 'remark' ? 'Remark Details' : 'Debug Reason'} *
+                            </label>
+                            <textarea
+                                autoFocus
+                                className={styles.textarea}
+                                placeholder={`Enter ${status} details...`}
+                                value={text}
+                                onChange={(e) => setText(e.target.value)}
+                            />
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
+                                <button className={styles.secondaryBtn} onClick={() => setMode('select')}>Back</button>
+                                <button
+                                    className={styles.primaryBtn}
+                                    style={{ marginTop: 0 }}
+                                    onClick={() => onFinalize(status, text)}
+                                    disabled={!text.trim()}
+                                >
+                                    Submit
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -108,34 +175,38 @@ const PTH: React.FC = () => {
     const [batches, setBatches] = useState<Batch[]>([]);
     const [activeBatch, setActiveBatch] = useState<Batch | null>(null);
     const [scannedItems, setScannedItems] = useState<ScanRecord[]>([]);
-
-    // Scan Form State
     const [barcode, setBarcode] = useState('');
+    const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
+    const [tableSearch, setTableSearch] = useState('');
     const [isScanning, setIsScanning] = useState(false);
     const [currentDateTime, setCurrentDateTime] = useState("");
 
     const scanInputRef = useRef<HTMLInputElement>(null);
 
-    // Fail Modal State
-    const [failItem, setFailItem] = useState<ScanRecord | null>(null);
-    const [remark, setRemark] = useState("");
-    const [modalError, setModalError] = useState("");
+
+    // Decision Modal State
 
     // Initial load and refresh when returning to select step
     useEffect(() => {
         fetchWorkOrders();
         fetchBatches();
-        
+
         // Set current date/time
         const now = new Date();
         setCurrentDateTime(now.toLocaleString());
     }, []);
 
     useEffect(() => {
-        if (step === 'scan' && scanInputRef.current && !failItem) {
+        if (step === 'scan' && scanInputRef.current && !pendingBarcode) {
             scanInputRef.current.focus();
         }
     });
+
+    useEffect(() => {
+        if (barcode.trim().length >= 14 && !isScanning && activeBatch) {
+            handleScan();
+        }
+    }, [barcode, isScanning, activeBatch]);
 
     const fetchWorkOrders = async () => {
         try {
@@ -226,7 +297,8 @@ const PTH: React.FC = () => {
     };
 
     const handleDeleteBatch = async (id: number) => {
-        if (user?.role !== 'admin') {
+        const isAdmin = user?.role?.toLowerCase().includes('admin');
+        if (!isAdmin) {
             alert('Only admin can delete');
             return;
         }
@@ -241,71 +313,59 @@ const PTH: React.FC = () => {
         }
     };
 
-    const openFailModal = (item: ScanRecord, type: string) => {
-        setFailItem({
-            ...item,
-            selectedReason: type
-        });
-        setRemark("");
-        setModalError("");
-        console.log("Opening fail modal with reason:", type);
+
+    const handleScan = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!barcode.trim() || isScanning || !activeBatch) return;
+
+        // 🔥 Open Decision Modal instead of scanning immediately
+        setPendingBarcode(barcode.trim().toUpperCase());
+        setBarcode(''); // Clear input
     };
 
-    const handleScan = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!barcode.trim() || isScanning || !activeBatch) return;
+    const handleScanFinalize = async (status: string, remarks?: string) => {
+        if (!pendingBarcode || !activeBatch) return;
 
         setIsScanning(true);
         try {
-            // STEP 3: SCAN MODE (POST /backend/pth/scan)
+            let resolution_remarks = '';
+            if (status === 'accepted' || status === 'ACCEPTED') {
+                try {
+                    const res = await apiFetch(`/api/backend/remark/resolution/${pendingBarcode}`);
+                    if (res && res.remarks) {
+                        resolution_remarks = res.remarks;
+                    }
+                } catch (e) {
+                    console.log("No resolution found for this barcode");
+                }
+            }
+
             const newScan = await apiFetch('/api/backend/pth/scan', {
                 method: 'POST',
                 body: JSON.stringify({
                     work_order_id: activeBatch.work_order_id,
                     batch_id: activeBatch.id,
-                    barcode: barcode.trim().toUpperCase(),
+                    barcode: pendingBarcode,
                     scanned_by: user?.name || 'Operator',
-                    status: 'accepted'
+                    status: status,
+                    remarks: remarks,
+                    resolution_remarks: resolution_remarks
                 })
             });
 
-            setBarcode('');
             setScannedItems(prev => [newScan, ...prev]);
-            showToast('Item scanned', 'success');
+            showToast(`Item marked as ${status.toUpperCase()}`, 'success');
+            setPendingBarcode(null); // Close modal
         } catch (error: any) {
             showToast(error.message || 'Scan failed', 'error');
         } finally {
             setIsScanning(false);
-            if (scanInputRef.current) scanInputRef.current.focus();
         }
     };
 
-    const handleFailSubmit = async () => {
-        if (!remark.trim()) {
-            setModalError("Remark is required");
-            return;
-        }
-        if (!failItem || !failItem.selectedReason) return;
-
-        setModalError("");
-        console.log("Submitting failure with status:", failItem.selectedReason);
-        try {
-            await apiFetch(`/api/backend/pth/scan/${failItem.id}/status`, {
-                method: 'PUT',
-                body: JSON.stringify({
-                    status: failItem.selectedReason, // 🔥 Use reason as status
-                    remarks: remark
-                })
-            });
-
-            showToast(`Item marked as ${failItem.selectedReason.toUpperCase()}`, 'success');
-            setFailItem(null);
-            setRemark("");
-            if (activeBatch) fetchScans(activeBatch.id);
-        } catch (error) {
-            showToast('Failed to update status', 'error');
-        }
-    };
+    const filteredItems = scannedItems.filter(item =>
+        item.barcode.toLowerCase().includes(tableSearch.toLowerCase())
+    );
 
     // --- MAIN RENDER (STATE-BASED SWITCHING LIKE PRECALIBRATION) ---
     return (
@@ -327,21 +387,21 @@ const PTH: React.FC = () => {
 
                         <div className={styles.grid}>
                             <div className={styles.inputGroup}>
-                                <label>Select Work Order *</label>
+                                <label><Hash size={14} /> Work Order ID *</label>
                                 <select
                                     className={styles.select}
                                     onChange={(e) => handleSelectWO(e.target.value)}
                                     defaultValue=""
                                 >
                                     <option value="" disabled>-- Select Work Order --</option>
-                                    {workOrders.map(wo => (
+                                    {workOrders.filter(wo => !batches.some(b => b.wo_number === wo.wo_number)).map(wo => (
                                         <option key={wo.id} value={wo.id}>{wo.wo_number}</option>
                                     ))}
                                 </select>
                             </div>
 
                             <div className={styles.inputGroup}>
-                                <label>Customer Name</label>
+                                <label><Building2 size={14} /> Customer Name *</label>
                                 <input
                                     type="text"
                                     className={styles.input}
@@ -351,7 +411,7 @@ const PTH: React.FC = () => {
                             </div>
 
                             <div className={styles.inputGroup}>
-                                <label>WO Quantity</label>
+                                <label><Package size={14} /> Quantity *</label>
                                 <input
                                     type="text"
                                     className={styles.input}
@@ -361,7 +421,7 @@ const PTH: React.FC = () => {
                             </div>
 
                             <div className={styles.inputGroup}>
-                                <label>Model</label>
+                                <label><Settings size={14} /> Model *</label>
                                 <input
                                     type="text"
                                     className={styles.input}
@@ -371,7 +431,7 @@ const PTH: React.FC = () => {
                             </div>
 
                             <div className={styles.inputGroup}>
-                                <label>Created By</label>
+                                <label><User size={14} /> Created By *</label>
                                 <input
                                     type="text"
                                     className={styles.input}
@@ -381,7 +441,7 @@ const PTH: React.FC = () => {
                             </div>
 
                             <div className={styles.inputGroup}>
-                                <label>Created At</label>
+                                <label><Calendar size={14} /> Created At *</label>
                                 <input
                                     type="text"
                                     className={styles.input}
@@ -398,69 +458,100 @@ const PTH: React.FC = () => {
                         >
                             <Plus size={16} /> Create Batch
                         </button>
-                    </div>
-
-                    {/* Pending Table */}
-                    <div className={styles.card} style={{ marginTop: '2rem' }}>
-                        <h3>Recent PTH Batches</h3>
-                        <div className={styles.tableWrapper}>
-                            <table className={styles.scanTable}>
-                                <thead>
-                                    <tr>
-                                        <th>Batch Number</th>
-                                        <th>Created By</th>
-                                        <th>Date</th>
-                                        <th>Scanned Qty</th>
-                                        <th>Passed</th>
-                                        <th>Rework</th>
-                                        <th>Debug</th>
-                                        <th>Status</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {batches.length > 0 ? (
-                                        batches.map(batch => (
-                                            <tr key={batch.id}>
-                                                <td style={{ fontWeight: 700, color: '#1e293b' }}>{batch.batch_number}</td>
-                                                <td>{batch.created_by}</td>
-                                                <td>{new Date(batch.created_at).toLocaleDateString()}</td>
-                                                <td className={styles.statusBlue}>{batch.scanned_qty ?? 0}</td>
-                                                <td className={styles.statusGreen}>{batch.passed ?? 0}</td>
-                                                <td>{batch.rework ?? 0}</td>
-                                                <td>{batch.debug ?? 0}</td>
-                                                <td>
-                                                    {batch.scanned_count >= batch.wo_qty ? (
-                                                        <span className={styles.completed}>Completed</span>
-                                                    ) : (
-                                                        <span className={styles.pending}>Pending</span>
-                                                    )}
-                                                </td>
-                                                <td className={styles.actionCell}>
-                                                    <button
-                                                        className={styles.viewBtn}
-                                                        onClick={() => handleResume(batch)}
-                                                    >
-                                                        View
-                                                    </button>
-                                                    <button
-                                                        className={styles.deleteBtn}
-                                                        onClick={() => handleDeleteBatch(batch.id)}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
+                        {/* Pending Table */}
+                        <div className={styles.card} style={{ marginTop: '2rem' }}>
+                            <h3>Pending PTH Batches</h3>
+                            <div className={styles.tableWrapper}>
+                                <table className={styles.scanTable}>
+                                    <thead>
                                         <tr>
-                                            <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                                                No batches found.
-                                            </td>
+                                            <th>Batch Number</th>
+                                            <th>Customer Name</th>
+                                            <th>Created By</th>
+                                            <th>Date & Time</th>
+                                            <th>Total QTY</th>
+                                            <th>Scanned</th>
+                                            <th>Passed</th>
+                                            <th>Pending</th>
+                                            <th>Remark</th>
+                                            <th>Debug</th>
+                                            <th>Action</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {batches.filter(b => (Number(b.scanned_qty) < Number(b.wo_qty)) || (Number(b.remark) > 0) || (Number(b.debug) > 0)).length > 0 ? (
+                                            batches.filter(b => (Number(b.scanned_qty) < Number(b.wo_qty)) || (Number(b.remark) > 0) || (Number(b.debug) > 0)).map(batch => (
+                                                <tr key={batch.id}>
+                                                    <td style={{ fontWeight: 700, color: '#1e293b' }}>{batch.batch_number}</td>
+                                                    <td>{batch.customer_name || "-"}</td>
+                                                    <td>{batch.created_by}</td>
+                                                    <td>{new Date(batch.created_at).toLocaleString()}</td>
+                                                    <td style={{ fontWeight: 600 }}>{batch.wo_qty}</td>
+                                                    <td className={styles.statusBlue}>{batch.scanned_qty ?? 0}</td>
+                                                    <td className={styles.statusGreen}>{batch.passed ?? 0}</td>
+                                                    <td style={{ fontWeight: 600, color: '#64748b' }}>{Math.max(0, (batch.wo_qty ?? 0) - (batch.scanned_qty ?? 0))}</td>
+                                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.remark ?? 0}</td>
+                                                    <td style={{ color: '#ef4444', fontWeight: 700 }}>{batch.debug ?? 0}</td>
+                                                    <td className={styles.actionCell}>
+                                                        <button className={styles.viewBtn} onClick={() => handleResume(batch)}>View</button>
+                                                        <button className={styles.deleteBtn} onClick={() => handleDeleteBatch(batch.id)}>Delete</button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr><td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No pending batches</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Completed Table */}
+                        <div className={styles.card} style={{ marginTop: '2rem', borderTop: '4px solid #10b981' }}>
+                            <h3 style={{ color: '#059669' }}>Completed PTH Batches</h3>
+                            <div className={styles.tableWrapper}>
+                                <table className={styles.scanTable}>
+                                    <thead>
+                                        <tr>
+                                            <th>Batch Number</th>
+                                            <th>Customer Name</th>
+                                            <th>Created By</th>
+                                            <th>Date & Time</th>
+                                            <th>Total QTY</th>
+                                            <th>Scanned</th>
+                                            <th>Passed</th>
+                                            <th>Pending</th>
+                                            <th>Remark</th>
+                                            <th>Debug</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {batches.filter(b => (Number(b.scanned_qty) >= Number(b.wo_qty)) && (Number(b.remark) === 0) && (Number(b.debug) === 0)).length > 0 ? (
+                                            batches.filter(b => (Number(b.scanned_qty) >= Number(b.wo_qty)) && (Number(b.remark) === 0) && (Number(b.debug) === 0)).map(batch => (
+                                                <tr key={batch.id}>
+                                                    <td style={{ fontWeight: 700, color: '#1e293b' }}>{batch.batch_number}</td>
+                                                    <td>{batch.customer_name || "-"}</td>
+                                                    <td>{batch.created_by}</td>
+                                                    <td>{new Date(batch.created_at).toLocaleString()}</td>
+                                                    <td style={{ fontWeight: 600 }}>{batch.wo_qty}</td>
+                                                    <td className={styles.statusBlue}>{batch.scanned_qty ?? 0}</td>
+                                                    <td className={styles.statusGreen}>{batch.passed ?? 0}</td>
+                                                    <td style={{ fontWeight: 600, color: '#64748b' }}>{Math.max(0, (batch.wo_qty ?? 0) - (batch.scanned_qty ?? 0))}</td>
+                                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.remark ?? 0}</td>
+                                                    <td style={{ color: '#ef4444', fontWeight: 700 }}>{batch.debug ?? 0}</td>
+                                                    <td className={styles.actionCell}>
+                                                        <button className={styles.viewBtn} onClick={() => handleResume(batch)}>View</button>
+                                                        <button className={styles.deleteBtn} onClick={() => handleDeleteBatch(batch.id)}>Delete</button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr><td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No completed batches</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </>
@@ -469,11 +560,15 @@ const PTH: React.FC = () => {
                     {/* Header Bar */}
                     <div className={styles.headerBar}>
                         <div className={styles.headerInfo}>
+                            <h2 style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>PTH Page</h2>
                             <h1 className={styles.woNumber}>{activeBatch.batch_number}</h1>
                             <p className={styles.woMeta}>
-                                Expected: {activeBatch.wo_qty} |
-                                Scanned: {scannedItems.length} |
-                                Created by: {activeBatch.created_by}
+                                🏭 Total Serial Number Available: {activeBatch.wo_qty} |
+                                ✅ Completed: {scannedItems.length} |
+                                🔄 Pending: {Math.max(0, activeBatch.wo_qty - scannedItems.length)} |
+                                📝 Passed: {scannedItems.filter(s => s.status === 'accepted').length} |
+                                ⚠️ Remark: {scannedItems.filter(s => s.status === 'remark').length} |
+                                🛠️ Debug: {scannedItems.filter(s => s.status === 'debug').length}
                             </p>
                         </div>
                         <button className={styles.endSessionBtn} onClick={handleEndSession}>
@@ -515,6 +610,16 @@ const PTH: React.FC = () => {
                         <div className={styles.tableCard}>
                             <div className={styles.tableHeader}>
                                 <h3>Scanned Items ({scannedItems.length})</h3>
+                                <div className={styles.tableSearchWrapper}>
+                                    <Search size={16} className={styles.tableSearchIcon} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search barcode..."
+                                        className={styles.tableSearchInput}
+                                        value={tableSearch}
+                                        onChange={(e) => setTableSearch(e.target.value)}
+                                    />
+                                </div>
                             </div>
                             <div className={styles.tableWrapper}>
                                 <table className={styles.scanTable}>
@@ -522,52 +627,41 @@ const PTH: React.FC = () => {
                                         <tr>
                                             <th>BARCODE <Search size={14} style={{ marginLeft: 4 }} /></th>
                                             <th>SCANNED BY</th>
-                                            <th>TIME</th>
+                                            <th>DATE & TIME</th>
                                             <th>STATUS</th>
-                                            <th>PREVIOUS BATCH</th>
-                                            <th>REMARKS</th>
-                                            <th>ACTION</th>
+                                            <th>REMARK/DEBUG TIME</th>
+                                            <th>ORIGINAL NOTE</th>
+                                            <th>REMARK/DEBUG Remarks</th>
+                                            <th>REMARK</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {scannedItems.length > 0 ? (
-                                            scannedItems.map((scan) => (
+                                        {filteredItems.length > 0 ? (
+                                            filteredItems.map((scan) => (
                                                 <tr key={scan.id}>
                                                     <td className={styles.barcodeCell}>{scan.barcode}</td>
                                                     <td>{scan.scanned_by}</td>
-                                                    <td>{new Date(scan.scanned_at).toLocaleTimeString()}</td>
+                                                    <td>{new Date(scan.scanned_at).toLocaleString()}</td>
                                                     <td>
                                                         {scan.status === 'accepted' && (
                                                             <span className={styles.acceptedBadge}>ACCEPTED</span>
                                                         )}
-                                                        {scan.status === 'rework' && (
-                                                            <span className={styles.reworkBadge}>REWORK</span>
+                                                        {scan.status === 'remark' && (
+                                                            <span className={styles.remarkBadge}>REMARK</span>
                                                         )}
                                                         {scan.status === 'debug' && (
                                                             <span className={styles.failedBadge}>DEBUG</span>
                                                         )}
                                                     </td>
-                                                    <td>{scan.previous_batch || "-"}</td>
+                                                    <td>{scan.failed_at ? new Date(scan.failed_at).toLocaleString() : "-"}</td>
+                                                    <td>{scan.failed_remarks || "-"}</td>
+                                                    <td>{scan.resolution_remarks || "-"}</td>
                                                     <td>{scan.remarks || "-"}</td>
-                                                    <td className={styles.actionCell}>
-                                                        <button 
-                                                            className={styles.reworkBtn} 
-                                                            onClick={() => openFailModal(scan, 'rework')}
-                                                        >
-                                                            Rework
-                                                        </button>
-                                                        <button 
-                                                            className={styles.debugBtn} 
-                                                            onClick={() => openFailModal(scan, 'debug')}
-                                                        >
-                                                            Debug
-                                                        </button>
-                                                    </td>
                                                 </tr>
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                                <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
                                                     No items scanned. Start scanning barcodes.
                                                 </td>
                                             </tr>
@@ -580,15 +674,13 @@ const PTH: React.FC = () => {
                 </>
             )}
 
-            {/* Fail Modal */}
-            {failItem && (
-                <FailModal 
-                    item={failItem}
-                    remark={remark}
-                    setRemark={setRemark}
-                    onSubmit={handleFailSubmit}
-                    onClose={() => { setFailItem(null); setModalError(""); }}
-                    error={modalError}
+
+            {/* Decision Modal */}
+            {pendingBarcode && (
+                <ScanDecisionModal
+                    barcode={pendingBarcode}
+                    onFinalize={handleScanFinalize}
+                    onClose={() => setPendingBarcode(null)}
                 />
             )}
         </div>

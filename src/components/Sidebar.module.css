@@ -145,6 +145,7 @@
     align-items: center;
     position: relative;
     transition: all 0.2s ease;
+    font-weight: 700;
 }
 
 /* Dot on the vertical line */
@@ -222,4 +223,10 @@
 
 .actionItem:hover {
     text-decoration: underline;
+}
+
+.imageIcon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
 }

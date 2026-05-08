@@ -129,7 +129,10 @@
 .tableHeader {
     padding: 1rem 1.25rem;
     border-bottom: 1px solid #f1f5f9;
-    background: #fafafa;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
 }
 
 .tableHeader h3 {
@@ -137,6 +140,36 @@
     font-size: 1rem;
     font-weight: 700;
     color: #334155;
+}
+
+.tableSearchWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.tableSearchIcon {
+    position: absolute;
+    left: 0.875rem;
+    color: #94a3b8;
+    pointer-events: none;
+}
+
+.tableSearchInput {
+    padding: 0.625rem 0.875rem 0.625rem 2.25rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    width: 250px;
+    transition: all 0.2s;
+    background: #f8fafc;
+}
+
+.tableSearchInput:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .tableWrapper {
@@ -424,7 +457,7 @@
     background: #059669;
 }
 
-.reworkBtn {
+.remarkBtn {
     background: #f59e0b;
     color: white;
     border: none;
@@ -436,7 +469,7 @@
     transition: all 0.2s;
 }
 
-.reworkBtn:hover {
+.remarkBtn:hover {
     background: #d97706;
 }
 
@@ -585,7 +618,7 @@
     font-weight: 600;
 }
 
-.reworkBadge {
+.remarkBadge {
     padding: 0.25rem 0.6rem;
     background: #ffedd5;
     color: #9a3412;
@@ -603,6 +636,15 @@
     font-weight: 600;
 }
 
+.remarkBadge {
+    padding: 0.25rem 0.6rem;
+    background: #fef9c3;
+    color: #854d0e;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
 /* Batch Table Styles */
 .actionCell {
     display: flex;
@@ -611,31 +653,31 @@
 }
 
 .viewBtn {
-  background: #6366f1;
-  color: white;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: none;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
+    background: #6366f1;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
 }
 
 .deleteBtn {
-  background: white;
-  color: red;
-  border: 1px solid red;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+    background: white;
+    color: red;
+    border: 1px solid red;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
 }
 
 .deleteBtn:hover {
-  background: red;
-  color: white;
+    background: red;
+    color: white;
 }
 
 .pending {
@@ -651,32 +693,74 @@
 }
 
 .grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
 }
 
 .card {
-  background: white;
-  padding: 20px;
-  border-radius: 10px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
 }
 
 .primaryBtn {
-  margin-top: 16px;
-  background: #5b5bd6;
-  color: white;
-  padding: 10px 16px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: bold;
+    margin-top: 16px;
+    background: #5b5bd6;
+    color: white;
+    padding: 10px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: bold;
 }
 
 .primaryBtn:disabled {
-  background: #a5a5db;
-  cursor: not-allowed;
+    background: #a5a5db;
+    cursor: not-allowed;
+}
+
+/* Decision Modal Styles */
+.decisionGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    padding: 1rem 0;
+}
+
+.decisionBtn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.5rem 1rem;
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 1rem;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 700;
+    color: #475569;
+}
+
+.decisionBtn:hover {
+    border-color: #6366f1;
+    background: #f8fafc;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.passIcon {
+    color: #10b981;
+}
+
+.remarkIcon {
+    color: #f59e0b;
+}
+
+.debugIcon {
+    color: #ef4444;
 }

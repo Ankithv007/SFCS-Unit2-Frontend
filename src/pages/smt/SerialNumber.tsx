@@ -1,8 +1,30 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styles from './SerialNumber.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
+import { useAuth } from '../../hooks/useAuth';
+import { apiFetch } from '../../utils/api';
 import QRCodeReact from 'react-qr-code';
 import QRCode from 'qrcode';
+
+// ─── Toaster ─────────────────────────────────────────────────────────────────
+interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+
+const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
+    <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column-reverse', gap: '0.5rem' }}>
+        {toasts.map(t => (
+            <div key={t.id} onClick={() => onRemove(t.id)} style={{
+                padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
+                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#fffbeb',
+                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#92400e',
+                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#fde68a'}`,
+                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                animation: 'slideIn 0.2s ease'
+            }}>
+                {t.type === 'error' ? '❌ ' : t.type === 'success' ? '✅ ' : 'ℹ️ '}{t.message}
+            </div>
+        ))}
+    </div>
+);
 
 interface ScannedComponent {
     id: string;
@@ -13,7 +35,7 @@ interface ScannedComponent {
     wo_qty: number;
     panel_qty: number;
     wo_number: string;
-    status: 'ACCEPTED' | 'REWORK' | 'SCRAP' | 'SCANNED';
+    status: 'ACCEPTED' | 'rework' | 'SCRAP' | 'SCANNED';
 }
 
 interface SmtBatch {
@@ -33,6 +55,8 @@ interface SmtBatch {
 
 export const SerialNumber: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
+    const { user } = useAuth();
+    const isSuperAdmin = user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
 
     // Form state
@@ -55,6 +79,19 @@ export const SerialNumber: React.FC = () => {
     const [viewMode, setViewMode] = useState<'GENERATED' | 'REGISTRATION_PENDING' | 'REGISTRATION_COMPLETED' | null>(null);
 
     const [batches, setBatches] = useState<SmtBatch[]>([]);
+
+    // Toast state
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
+
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
+
     const scanInputRef = useRef<HTMLInputElement>(null);
 
     // Auto-focus the input whenever we are in a scanning viewMode
@@ -306,9 +343,13 @@ export const SerialNumber: React.FC = () => {
     };
 
     const handleDeleteBatch = async (woId: string) => {
+        if (!isSuperAdmin) {
+            addToast("Access Denied: Only Super Admin can delete.", "error");
+            return;
+        }
         if (window.confirm(`Are you sure you want to delete all serials for Work Order ${woId}? This action cannot be undone.`)) {
             try {
-                const res = await fetch(`/api/smt/serial-numbers?work_order_id=${woId}`, {
+                const res = await apiFetch(`/api/smt/serial-numbers?work_order_id=${woId}`, {
                     method: 'DELETE'
                 });
                 if (res.ok) {
@@ -316,13 +357,13 @@ export const SerialNumber: React.FC = () => {
                     if (activeBatch && activeBatch.work_order_id === woId) {
                         setActiveBatch(null);
                     }
-                    alert('Batch deleted successfully.');
+                    addToast('Batch deleted successfully.', 'success');
                 } else {
-                    alert('Failed to delete batch from database.');
+                    addToast('Failed to delete batch from database.', 'error');
                 }
             } catch (err) {
                 console.error("Delete error:", err);
-                alert('Error connecting to backend.');
+                addToast('Error connecting to backend.', 'error');
             }
         }
     };
@@ -439,217 +480,158 @@ export const SerialNumber: React.FC = () => {
     const paginatedComponents = filteredComponents.slice(startIndex, startIndex + itemsPerPage);
 
     return (
-        <div className={styles.container}>
-            <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2>🔢 Serial Number Scanning</h2>
-                    <p>Scan and manage unique PCB serial numbers for SMT production.</p>
+        <>
+            <Toaster toasts={toasts} onRemove={removeToast} />
+            <div className={styles.container}>
+                <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h2>🔢 Serial Number Scanning</h2>
+                        <p>Scan and manage unique PCB serial numbers for SMT production.</p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to logout from SMT?")) {
+                                smtLogout();
+                            }
+                        }}
+                        className={styles.secondaryButton}
+                        style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <span>🔒</span> Logout SMT
+                    </button>
                 </div>
-                <button
-                    onClick={() => {
-                        if (window.confirm("Are you sure you want to logout from SMT?")) {
-                            smtLogout();
-                        }
-                    }}
-                    className={styles.secondaryButton}
-                    style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                    <span>🔒</span> Logout SMT
-                </button>
-            </div>
 
-            {!activeBatch ? (
-                <>
-                    <div className={styles.card}>
-                        <h3>Generate Serials for Work Order</h3>
-                        <div className={styles.formGrid} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
-                            <div className={styles.inputGroup}>
-                                <label>Select Work Order *</label>
-                                <select
-                                    className={styles.batchSelect}
-                                    value={selectedWoId}
-                                    onChange={(e) => handleSelectWo(e.target.value)}
-                                >
-                                    <option value="">-- Select Work Order --</option>
-                                    {workOrders
-                                        .filter(wo => !batches.some(b => b.work_order_id === wo.work_order_id))
-                                        .map((wo, i) => (
-                                            <option key={i} value={wo.work_order_id}>{wo.work_order_id}</option>
-                                        ))
-                                    }
-                                </select>
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label>Product Name (Auto-filled)</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    placeholder="Product Name"
-                                    value={productName}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label>WO Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    placeholder="WO Quantity"
-                                    value={woQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label>Panel Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    placeholder="Panel Quantity"
-                                    value={panelQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
+                {!activeBatch ? (
+                    <>
+                        <div className={styles.card}>
+                            <h3>Generate Serials for Work Order</h3>
+                            <div className={styles.formGrid} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+                                <div className={styles.inputGroup}>
+                                    <label>Select Work Order *</label>
+                                    <select
+                                        className={styles.batchSelect}
+                                        value={selectedWoId}
+                                        onChange={(e) => handleSelectWo(e.target.value)}
+                                    >
+                                        <option value="">-- Select Work Order --</option>
+                                        {workOrders
+                                            .filter(wo => !batches.some(b => b.work_order_id === wo.work_order_id))
+                                            .map((wo, i) => (
+                                                <option key={i} value={wo.work_order_id}>{wo.work_order_id}</option>
+                                            ))
+                                        }
+                                    </select>
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label>Product Name (Auto-filled)</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Product Name"
+                                        value={productName}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label>WO Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        placeholder="WO Quantity"
+                                        value={woQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label>Panel Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        placeholder="Panel Quantity"
+                                        value={panelQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
 
-                            <div className={styles.inputGroup}>
-                                <label>Serial Format *</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    placeholder="e.g. QWERTYUIOP"
-                                    maxLength={10}
-                                    value={serialFormat}
-                                    onChange={(e) => setSerialFormat(e.target.value.toUpperCase())}
-                                />
+                                <div className={styles.inputGroup}>
+                                    <label>Serial Format *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="e.g. QWERTYUIOP"
+                                        maxLength={10}
+                                        value={serialFormat}
+                                        onChange={(e) => setSerialFormat(e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label>Starting Number *</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        placeholder="e.g. 1"
+                                        value={startingNumber}
+                                        onChange={(e) => setStartingNumber(e.target.value)}
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label>End Number *</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        placeholder="e.g. 100"
+                                        value={endNumber}
+                                        onChange={(e) => setEndNumber(e.target.value)}
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label>Generated By *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Logged in user"
+                                        value={createdBy}
+                                        style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}
+                                        readOnly
+                                    />
+                                </div>
                             </div>
-                            <div className={styles.inputGroup}>
-                                <label>Starting Number *</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    placeholder="e.g. 1"
-                                    value={startingNumber}
-                                    onChange={(e) => setStartingNumber(e.target.value)}
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label>End Number *</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    placeholder="e.g. 100"
-                                    value={endNumber}
-                                    onChange={(e) => setEndNumber(e.target.value)}
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label>Generated By *</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    placeholder="Logged in user"
-                                    value={createdBy}
-                                    style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}
-                                    readOnly
-                                />
+                            <div style={{ marginTop: '30px' }}>
+                                <button className={styles.button} onClick={handleGenerateSerials}>
+                                    Generate Serials
+                                </button>
                             </div>
                         </div>
-                        <div style={{ marginTop: '30px' }}>
-                            <button className={styles.button} onClick={handleGenerateSerials}>
-                                Generate Serials
-                            </button>
-                        </div>
-                    </div>
 
-                    <div className={styles.card}>
-                        <h3>Generated Batches</h3>
-                        <div className={styles.tableContainer}>
-                            <table className={styles.table}>
-                                <thead>
-                                    <tr>
-                                        <th>PRODUCT NAME</th>
-                                        <th>WO QTY</th>
-                                        <th>PANEL QTY</th>
-                                        <th>WO NUMBER</th>
-                                        <th>START - END</th>
-                                        <th>GENERATED AT</th>
-                                        <th>CREATED BY</th>
-                                        <th>ACTION</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {batches.filter(b => b.components.some(c => !isScannedComponent(c))).map((batch) => (
-                                        <tr key={batch.id}>
-                                            <td style={{ fontWeight: 600 }}>{batch.product_name}</td>
-                                            <td>{batch.wo_qty}</td>
-                                            <td>{batch.panel_qty}</td>
-                                            <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
-                                            <td>{batch.serial_format ? `${batch.serial_format}${batch.starting_number.toString().padStart(6, '0')}` : batch.starting_number} to {batch.serial_format ? `${batch.serial_format}${batch.end_number.toString().padStart(6, '0')}` : batch.end_number}</td>
-                                            <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>{new Date(batch.created_at).toLocaleString()}</td>
-                                            <td style={{ fontWeight: 500, color: '#374151' }}>{batch.created_by}</td>
-                                            <td>
-                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                    <button
-                                                        className={styles.secondaryButton}
-                                                        onClick={() => {
-                                                            setActiveBatch(batch);
-                                                            setCurrentPage(1);
-                                                            setBarcodeFilter('');
-                                                            setViewMode('GENERATED');
-                                                        }}
-                                                    >
-                                                        View Details
-                                                    </button>
-                                                    <button
-                                                        className={styles.deleteTextButton}
-                                                        onClick={() => handleDeleteBatch(batch.work_order_id)}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {batches.filter(b => b.components.some(c => !isScannedComponent(c))).length === 0 && (
+                        <div className={styles.card}>
+                            <h3>Generated Batches</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
                                         <tr>
-                                            <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                No serials generated yet.
-                                            </td>
+                                            <th>PRODUCT NAME</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>WO NUMBER</th>
+                                            <th>START - END</th>
+                                            <th>GENERATED AT</th>
+                                            <th>CREATED BY</th>
+                                            <th>ACTION</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div className={styles.card}>
-                        <h3 style={{ color: '#d97706' }}>Pending Serial Number Scanning</h3>
-                        <div className={styles.tableContainer}>
-                            <table className={styles.table}>
-                                <thead>
-                                    <tr>
-                                        <th>WO NUMBER</th>
-                                        <th>PRODUCT NAME</th>
-                                        <th>AVAILABLE</th>
-                                        <th>COMPLETED</th>
-                                        <th>PENDING</th>
-                                        <th>ACTION</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {batches.filter(b => b.components.some(c => !isScannedComponent(c))).map((batch) => {
-                                        const available = batch.components.length;
-                                        const completed = getScannedComponents(batch).length;
-                                        const pending = available - completed;
-                                        return (
+                                    </thead>
+                                    <tbody>
+                                        {batches.filter(b => b.components.some(c => !isScannedComponent(c))).map((batch) => (
                                             <tr key={batch.id}>
-                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
                                                 <td style={{ fontWeight: 600 }}>{batch.product_name}</td>
-                                                <td>{available}</td>
-                                                <td style={{ color: '#059669', fontWeight: 700 }}>{completed}</td>
-                                                <td style={{ color: '#d97706', fontWeight: 700 }}>{pending}</td>
+                                                <td>{batch.wo_qty}</td>
+                                                <td>{batch.panel_qty}</td>
+                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
+                                                <td>{batch.serial_format ? `${batch.serial_format}${batch.starting_number.toString().padStart(6, '0')}` : batch.starting_number} to {batch.serial_format ? `${batch.serial_format}${batch.end_number.toString().padStart(6, '0')}` : batch.end_number}</td>
+                                                <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>{new Date(batch.created_at).toLocaleString()}</td>
+                                                <td style={{ fontWeight: 500, color: '#374151' }}>{batch.created_by}</td>
                                                 <td>
                                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                                                         <button
@@ -658,283 +640,347 @@ export const SerialNumber: React.FC = () => {
                                                                 setActiveBatch(batch);
                                                                 setCurrentPage(1);
                                                                 setBarcodeFilter('');
-                                                                setViewMode('REGISTRATION_PENDING');
-                                                                setActuallyScanned(getScannedComponents(batch).map(c => c.barcode));
+                                                                setViewMode('GENERATED');
                                                             }}
-                                                            style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
                                                         >
-                                                            View
+                                                            View Details
                                                         </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                    {batches.filter(b => b.components.some(c => !isScannedComponent(c))).length === 0 && (
-                                        <tr>
-                                            <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                No pending registrations.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div className={styles.card}>
-                        <h3 style={{ color: '#059669' }}>Completed Serial Number Scanning</h3>
-                        <div className={styles.tableContainer}>
-                            <table className={styles.table}>
-                                <thead>
-                                    <tr>
-                                        <th>WO NUMBER</th>
-                                        <th>PRODUCT NAME</th>
-                                        <th>AVAILABLE</th>
-                                        <th>COMPLETED</th>
-                                        <th>PENDING</th>
-                                        <th>ACTION</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {batches.filter(b => b.components.some(isScannedComponent)).map((batch) => {
-                                        const scannedComponents = getScannedComponents(batch);
-                                        const available = scannedComponents.length;
-                                        const completed = scannedComponents.length;
-                                        const pending = 0;
-                                        return (
-                                            <tr key={batch.id}>
-                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
-                                                <td style={{ fontWeight: 600 }}>{batch.product_name}</td>
-                                                <td>{available}</td>
-                                                <td style={{ color: '#059669', fontWeight: 700 }}>{completed}</td>
-                                                <td style={{ color: '#d97706', fontWeight: 700 }}>{pending}</td>
-                                                <td>
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
                                                         <button
-                                                            className={styles.secondaryButton}
-                                                            onClick={() => {
-                                                                setActiveBatch(batch);
-                                                                setCurrentPage(1);
-                                                                setBarcodeFilter('');
-                                                                setViewMode('REGISTRATION_COMPLETED');
-                                                                setActuallyScanned(scannedComponents.map(c => c.barcode));
-                                                            }}
-                                                            style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
+                                                            className={styles.deleteTextButton}
+                                                            onClick={() => handleDeleteBatch(batch.work_order_id)}
                                                         >
-                                                            View Scanned Serials
+                                                            Delete
                                                         </button>
-                                                        <span style={{
-                                                            color: '#059669',
-                                                            fontSize: '0.85rem',
-                                                            fontWeight: 700,
-                                                            display: 'flex',
-                                                            alignItems: 'center'
-                                                        }}>
-                                                            SCANNED
-                                                        </span>
                                                     </div>
                                                 </td>
                                             </tr>
-                                        );
-                                    })}
-                                    {batches.filter(b => b.components.some(isScannedComponent)).length === 0 && (
+                                        ))}
+                                        {batches.filter(b => b.components.some(c => !isScannedComponent(c))).length === 0 && (
+                                            <tr>
+                                                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No serials generated yet.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className={styles.card}>
+                            <h3 style={{ color: '#d97706' }}>Pending Serial Number Scanning</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
                                         <tr>
-                                            <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                No completed registrations.
-                                            </td>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>AVAILABLE</th>
+                                            <th>COMPLETED</th>
+                                            <th>PENDING</th>
+                                            <th>ACTION</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </>
-            ) : (
-                <>
-                    <div className={styles.activeBatchHeader}>
-                        <div>
-                            <h3 style={{ margin: 0, fontSize: '1.3rem' }}>Batch: {activeBatch.work_order_id}</h3>
-                            <p style={{ margin: '4px 0', fontSize: '0.9rem', color: '#6b7280' }}>Created by: {activeBatch.created_by}</p>
-
-                            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', fontSize: '1rem', color: '#4b5563', marginTop: '1rem' }}>
-                                <span>Total Scanned: <strong>{actuallyScanned.length} / {activeAvailableCount}</strong></span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    🏭 Serial Number Available: <strong style={{ color: '#2563eb' }}>{activeAvailableCount}</strong>
-                                </span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    ✅ completed: <strong style={{ color: '#059669' }}>{actuallyScanned.length}</strong>
-                                </span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    🔄 pending: <strong style={{ color: '#d97706' }}>{Math.max(activeAvailableCount - actuallyScanned.length, 0)}</strong>
-                                </span>
+                                    </thead>
+                                    <tbody>
+                                        {batches.filter(b => b.components.some(c => !isScannedComponent(c))).map((batch) => {
+                                            const available = batch.components.length;
+                                            const completed = getScannedComponents(batch).length;
+                                            const pending = available - completed;
+                                            return (
+                                                <tr key={batch.id}>
+                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
+                                                    <td style={{ fontWeight: 600 }}>{batch.product_name}</td>
+                                                    <td>{available}</td>
+                                                    <td style={{ color: '#059669', fontWeight: 700 }}>{completed}</td>
+                                                    <td style={{ color: '#d97706', fontWeight: 700 }}>{pending}</td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <button
+                                                                className={styles.secondaryButton}
+                                                                onClick={() => {
+                                                                    setActiveBatch(batch);
+                                                                    setCurrentPage(1);
+                                                                    setBarcodeFilter('');
+                                                                    setViewMode('REGISTRATION_PENDING');
+                                                                    setActuallyScanned(getScannedComponents(batch).map(c => c.barcode));
+                                                                }}
+                                                                style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
+                                                            >
+                                                                View
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {batches.filter(b => b.components.some(c => !isScannedComponent(c))).length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No pending registrations.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.75rem' }}>
-                            <button
-                                className={styles.button}
-                                onClick={() => handlePrint(activeBatch.components)}
-                                style={{ backgroundColor: '#059669', padding: '0.5rem 1rem' }}
-                            >
-                                🖨️ Print All
-                            </button>
-                            <button
-                                className={styles.secondaryButton}
-                                onClick={() => { setActiveBatch(null); setActuallyScanned([]); setViewMode(null); }}
-                                style={{ padding: '0.5rem 1rem' }}
-                            >
-                                Back to Batches
-                            </button>
-                        </div>
-                    </div>
 
-                    {(viewMode === 'REGISTRATION_PENDING' || viewMode === 'REGISTRATION_COMPLETED') && (
-                        <div className={styles.card} style={{ border: '1px dashed #d1d5db', backgroundColor: '#f9fafb' }}>
-                            <div className={styles.inputGroup} style={{ maxWidth: '300px', marginBottom: '1.5rem' }}>
-                                <label style={{ fontWeight: 'bold' }}>Scanned By *</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={scannedBy}
-                                    onChange={(e) => setScannedBy(e.target.value)}
-                                    placeholder="Enter Your Name"
-                                />
+                        <div className={styles.card}>
+                            <h3 style={{ color: '#059669' }}>Completed Serial Number Scanning</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>AVAILABLE</th>
+                                            <th>COMPLETED</th>
+                                            <th>PENDING</th>
+                                            <th>ACTION</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {batches.filter(b => b.components.some(isScannedComponent)).map((batch) => {
+                                            const scannedComponents = getScannedComponents(batch);
+                                            const available = scannedComponents.length;
+                                            const completed = scannedComponents.length;
+                                            const pending = 0;
+                                            return (
+                                                <tr key={batch.id}>
+                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
+                                                    <td style={{ fontWeight: 600 }}>{batch.product_name}</td>
+                                                    <td>{available}</td>
+                                                    <td style={{ color: '#059669', fontWeight: 700 }}>{completed}</td>
+                                                    <td style={{ color: '#d97706', fontWeight: 700 }}>{pending}</td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <button
+                                                                className={styles.secondaryButton}
+                                                                onClick={() => {
+                                                                    setActiveBatch(batch);
+                                                                    setCurrentPage(1);
+                                                                    setBarcodeFilter('');
+                                                                    setViewMode('REGISTRATION_COMPLETED');
+                                                                    setActuallyScanned(scannedComponents.map(c => c.barcode));
+                                                                }}
+                                                                style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
+                                                            >
+                                                                View Scanned Serials
+                                                            </button>
+                                                            <span style={{
+                                                                color: '#059669',
+                                                                fontSize: '0.85rem',
+                                                                fontWeight: 700,
+                                                                display: 'flex',
+                                                                alignItems: 'center'
+                                                            }}>
+                                                                SCANNED
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {batches.filter(b => b.components.some(isScannedComponent)).length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No completed registrations.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className={styles.activeBatchHeader}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.3rem' }}>Batch: {activeBatch.work_order_id}</h3>
+                                <p style={{ margin: '4px 0', fontSize: '0.9rem', color: '#6b7280' }}>Created by: {activeBatch.created_by}</p>
 
-                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                <input
-                                    ref={scanInputRef}
-                                    type="text"
-                                    className={styles.input}
-                                    style={{ flex: 1, height: '50px', fontSize: '1.2rem', borderColor: '#6366f1' }}
-                                    placeholder="Scan Item Barcode..."
-                                    value={scanInput}
-                                    onChange={(e) => setScanInput(e.target.value)}
-                                    onKeyPress={(e) => e.key === 'Enter' && handleScan()}
-                                />
+                                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', fontSize: '1rem', color: '#4b5563', marginTop: '1rem' }}>
+                                    <span>Total Scanned: <strong>{actuallyScanned.length} / {activeAvailableCount}</strong></span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        🏭 Serial Number Available: <strong style={{ color: '#2563eb' }}>{activeAvailableCount}</strong>
+                                    </span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        ✅ completed: <strong style={{ color: '#059669' }}>{actuallyScanned.length}</strong>
+                                    </span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        🔄 pending: <strong style={{ color: '#d97706' }}>{Math.max(activeAvailableCount - actuallyScanned.length, 0)}</strong>
+                                    </span>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <button
                                     className={styles.button}
-                                    style={{ height: '50px', padding: '0 2rem', backgroundColor: '#10b981' }}
-                                    onClick={handleScan}
+                                    onClick={() => handlePrint(activeBatch.components)}
+                                    style={{ backgroundColor: '#059669', padding: '0.5rem 1rem' }}
                                 >
-                                    SCAN
+                                    🖨️ Print All
+                                </button>
+                                <button
+                                    className={styles.secondaryButton}
+                                    onClick={() => { setActiveBatch(null); setActuallyScanned([]); setViewMode(null); }}
+                                    style={{ padding: '0.5rem 1rem' }}
+                                >
+                                    Back to Batches
                                 </button>
                             </div>
                         </div>
-                    )}
 
-                    <div className={styles.scanSection}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <h3 style={{ margin: 0, padding: 0, border: 'none' }}>
-                                {(viewMode === 'REGISTRATION_PENDING' || viewMode === 'REGISTRATION_COMPLETED') ? `Items (${actuallyScanned.length})` : 'Generated Serial Numbers'}
-                            </h3>
-                            <input
-                                type="text"
-                                className={styles.input}
-                                placeholder="Search by Serial Number..."
-                                value={barcodeFilter}
-                                onChange={(e) => { setBarcodeFilter(e.target.value); setCurrentPage(1); }}
-                                style={{ width: '300px' }}
-                            />
-                        </div>
+                        {(viewMode === 'REGISTRATION_PENDING' || viewMode === 'REGISTRATION_COMPLETED') && (
+                            <div className={styles.card} style={{ border: '1px dashed #d1d5db', backgroundColor: '#f9fafb' }}>
+                                <div className={styles.inputGroup} style={{ maxWidth: '300px', marginBottom: '1.5rem' }}>
+                                    <label style={{ fontWeight: 'bold' }}>Scanned By *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={scannedBy}
+                                        onChange={(e) => setScannedBy(e.target.value)}
+                                        placeholder="Enter Your Name"
+                                    />
+                                </div>
 
-                        <div className={styles.tableContainer} style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                            <table className={styles.table}>
-                                <thead>
-                                    <tr>
-                                        <th>SERIAL NUMBER</th>
-                                        <th>BARCODE</th>
-                                        <th>STATUS</th>
-                                        <th>GENERATED AT</th>
-                                        <th>ACTION</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {paginatedComponents.map((component) => {
-                                        const isScanned = actuallyScanned.includes(component.barcode) || isScannedComponent(component);
-                                        return (
-                                            <tr key={component.id} style={{ height: '100px', backgroundColor: isScanned ? '#f0fdf4' : '#fff7ed' }}>
-                                                <td style={{ fontWeight: 'bold', fontSize: '1rem', letterSpacing: '1px' }}>
-                                                    {component.barcode}
-                                                </td>
-                                                <td style={{ textAlign: 'center', padding: '0.5rem' }}>
-                                                    <div className={styles.qrItem}>
-                                                        <QRCodeReact
-                                                            value={component.barcode.replace(/-/g, "")}
-                                                            size={80}
-                                                            level="H"
-                                                        />
-                                                        <p className={styles.serialText}>
-                                                            {component.barcode.replace(/-/g, "")}
-                                                        </p>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <span style={{
-                                                        padding: '0.25rem 0.75rem',
-                                                        borderRadius: '1rem',
-                                                        fontSize: '0.8rem',
-                                                        fontWeight: 700,
-                                                        backgroundColor: isScanned ? '#dcfce7' : '#f3f4f6',
-                                                        color: isScanned ? '#15803d' : '#6b7280'
-                                                    }}>
-                                                        {isScanned ? '✓ SCANNED' : 'PENDING'}
-                                                    </span>
-                                                </td>
-                                                <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>
-                                                    {new Date(component.scanned_at).toLocaleString()}
-                                                </td>
-                                                <td>
-                                                    <button
-                                                        className={styles.secondaryButton}
-                                                        onClick={() => handlePrint([component])}
-                                                        style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
-                                                    >
-                                                        🖨️ Print
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                    {filteredComponents.length === 0 && (
-                                        <tr>
-                                            <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                                                {actuallyScanned.length === 0
-                                                    ? "No items scanned yet. Please scan a serial number to see it here."
-                                                    : "No scanned items match your search filter."}
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {totalPages > 1 && (
-                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1.5rem' }}>
-                                <button
-                                    className={styles.secondaryButton}
-                                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                                    disabled={currentPage === 1}
-                                    style={{ padding: '0.5rem 1rem' }}
-                                >
-                                    Previous
-                                </button>
-                                <span style={{ fontWeight: '500', color: '#4b5563' }}>
-                                    Page {currentPage} of {totalPages}
-                                </span>
-                                <button
-                                    className={styles.secondaryButton}
-                                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                                    disabled={currentPage === totalPages}
-                                    style={{ padding: '0.5rem 1rem' }}
-                                >
-                                    Next
-                                </button>
+                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                    <input
+                                        ref={scanInputRef}
+                                        type="text"
+                                        className={styles.input}
+                                        style={{ flex: 1, height: '50px', fontSize: '1.2rem', borderColor: '#6366f1' }}
+                                        placeholder="Scan Item Barcode..."
+                                        value={scanInput}
+                                        onChange={(e) => setScanInput(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && handleScan()}
+                                    />
+                                    <button
+                                        className={styles.button}
+                                        style={{ height: '50px', padding: '0 2rem', backgroundColor: '#10b981' }}
+                                        onClick={handleScan}
+                                    >
+                                        SCAN
+                                    </button>
+                                </div>
                             </div>
                         )}
-                    </div>
-                </>
-            )}
-        </div>
+
+                        <div className={styles.scanSection}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h3 style={{ margin: 0, padding: 0, border: 'none' }}>
+                                    {(viewMode === 'REGISTRATION_PENDING' || viewMode === 'REGISTRATION_COMPLETED') ? `Items (${actuallyScanned.length})` : 'Generated Serial Numbers'}
+                                </h3>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    placeholder="Search by Serial Number..."
+                                    value={barcodeFilter}
+                                    onChange={(e) => { setBarcodeFilter(e.target.value); setCurrentPage(1); }}
+                                    style={{ width: '300px' }}
+                                />
+                            </div>
+
+                            <div className={styles.tableContainer} style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>SERIAL NUMBER</th>
+                                            <th>BARCODE</th>
+                                            <th>STATUS</th>
+                                            <th>GENERATED AT</th>
+                                            <th>ACTION</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {paginatedComponents.map((component) => {
+                                            const isScanned = actuallyScanned.includes(component.barcode) || isScannedComponent(component);
+                                            return (
+                                                <tr key={component.id} style={{ height: '100px', backgroundColor: isScanned ? '#f0fdf4' : '#fff7ed' }}>
+                                                    <td style={{ fontWeight: 'bold', fontSize: '1rem', letterSpacing: '1px' }}>
+                                                        {component.barcode}
+                                                    </td>
+                                                    <td style={{ textAlign: 'center', padding: '0.5rem' }}>
+                                                        <div className={styles.qrItem}>
+                                                            <QRCodeReact
+                                                                value={component.barcode.replace(/-/g, "")}
+                                                                size={80}
+                                                                level="H"
+                                                            />
+                                                            <p className={styles.serialText}>
+                                                                {component.barcode.replace(/-/g, "")}
+                                                            </p>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span style={{
+                                                            padding: '0.25rem 0.75rem',
+                                                            borderRadius: '1rem',
+                                                            fontSize: '0.8rem',
+                                                            fontWeight: 700,
+                                                            backgroundColor: isScanned ? '#dcfce7' : '#f3f4f6',
+                                                            color: isScanned ? '#15803d' : '#6b7280'
+                                                        }}>
+                                                            {isScanned ? '✓ SCANNED' : 'PENDING'}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>
+                                                        {new Date(component.scanned_at).toLocaleString()}
+                                                    </td>
+                                                    <td>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            onClick={() => handlePrint([component])}
+                                                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                                                        >
+                                                            🖨️ Print
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {filteredComponents.length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                                    {actuallyScanned.length === 0
+                                                        ? "No items scanned yet. Please scan a serial number to see it here."
+                                                        : "No scanned items match your search filter."}
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {totalPages > 1 && (
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1.5rem' }}>
+                                    <button
+                                        className={styles.secondaryButton}
+                                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                                        disabled={currentPage === 1}
+                                        style={{ padding: '0.5rem 1rem' }}
+                                    >
+                                        Previous
+                                    </button>
+                                    <span style={{ fontWeight: '500', color: '#4b5563' }}>
+                                        Page {currentPage} of {totalPages}
+                                    </span>
+                                    <button
+                                        className={styles.secondaryButton}
+                                        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                                        disabled={currentPage === totalPages}
+                                        style={{ padding: '0.5rem 1rem' }}
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
+        </>
     );
 };
+
+export default SerialNumber;

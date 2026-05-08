@@ -155,7 +155,7 @@
     border-color: #ef4444 !important;
 }
 
-.remarkInput {
+.reworkInput {
     width: 100%;
     padding: 0.5rem;
     border: 1px solid #ef4444;
@@ -285,11 +285,11 @@
     transform: translateY(-1px);
 }
 
-.remarksDisplay {
+.reworksDisplay {
     border-left: 4px solid #ef4444;
 }
 
-.remarksDisplay h4 {
+.reworksDisplay h4 {
     font-size: 0.9rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -297,7 +297,7 @@
     color: #991b1b;
 }
 
-.remarksDisplay pre {
+.reworksDisplay pre {
     font-family: inherit;
     line-height: 1.5;
     margin: 0;

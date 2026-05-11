@@ -13,6 +13,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     const location = useLocation();
     const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
+    React.useEffect(() => {
+        if (location.pathname.startsWith('/pre-testing')) setExpandedModule('pre-testing');
+        else if (location.pathname.startsWith('/smt')) setExpandedModule('smt');
+        else if (location.pathname.startsWith('/backend')) setExpandedModule('backend');
+        else if (location.pathname === '/purchase-order' || location.pathname === '/wip-stack' || location.pathname === '/return-wip' || location.pathname === '/report') setExpandedModule('inventory-report');
+    }, [location.pathname]);
+
     const toggleModule = (module: string) => {
         setExpandedModule(expandedModule === module ? null : module);
     };
@@ -21,7 +28,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
 
     const handleMouseLeave = () => {
         onMouseLeave();
-        setExpandedModule(null);
+        if (location.pathname.startsWith('/pre-testing')) setExpandedModule('pre-testing');
+        else if (location.pathname.startsWith('/smt')) setExpandedModule('smt');
+        else if (location.pathname.startsWith('/backend')) setExpandedModule('backend');
+        else if (location.pathname === '/purchase-order' || location.pathname === '/wip-stack' || location.pathname === '/return-wip' || location.pathname === '/report') setExpandedModule('inventory-report');
+        else setExpandedModule(null);
     };
 
     return (

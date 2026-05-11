@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './VI.module.css';
+import ExpandableText from '../../components/ExpandableText';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { Search, Package, Plus, Building2, Settings, Hash, User, Calendar, CheckCircle, MessageSquare, AlertTriangle } from 'lucide-react';
@@ -37,10 +38,10 @@ interface ScanRecord {
     scanned_by: string;
     scanned_at: string;
     status: string;
-    resolution_remarks?: string;
-    failed_at?: string;
-    failed_remarks?: string;
     remarks?: string;
+    failed_at?: string | null;
+    failed_remarks?: string | null;
+    resolution_remarks?: string | null;
     selectedReason?: string;
 }
 
@@ -107,24 +108,24 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                 <div className={styles.modalBody}>
                     {mode === 'select' ? (
                         <div className={styles.decisionGrid}>
-                            <button 
-                                className={`${styles.decisionBtn} ${focusedIndex === 0 ? styles.defaultAction : ''}`} 
+                            <button
+                                className={`${styles.decisionBtn} ${focusedIndex === 0 ? styles.defaultAction : ''}`}
                                 onClick={() => handleAction('accepted')}
                                 onMouseEnter={() => setFocusedIndex(0)}
                             >
                                 <CheckCircle size={32} className={styles.passIcon} />
                                 Pass
                             </button>
-                            <button 
-                                className={`${styles.decisionBtn} ${focusedIndex === 1 ? styles.defaultAction : ''}`} 
+                            <button
+                                className={`${styles.decisionBtn} ${focusedIndex === 1 ? styles.defaultAction : ''}`}
                                 onClick={() => handleAction('remark')}
                                 onMouseEnter={() => setFocusedIndex(1)}
                             >
                                 <MessageSquare size={32} className={styles.remarkIcon} />
                                 Remark
                             </button>
-                            <button 
-                                className={`${styles.decisionBtn} ${focusedIndex === 2 ? styles.defaultAction : ''}`} 
+                            <button
+                                className={`${styles.decisionBtn} ${focusedIndex === 2 ? styles.defaultAction : ''}`}
                                 onClick={() => handleAction('debug')}
                                 onMouseEnter={() => setFocusedIndex(2)}
                             >
@@ -330,14 +331,27 @@ const VI: React.FC = () => {
         setIsScanning(true);
         try {
             let resolution_remarks = '';
-            if (status === 'accepted' || status === 'ACCEPTED') {
+            let failed_at = null;
+            let failed_remarks = null;
+
+            if (status.toLowerCase() === 'accepted') {
+                const existing = scannedItems.find(item => 
+                    item.barcode.trim().toUpperCase() === pendingBarcode.trim().toUpperCase() &&
+                    (item.status.toLowerCase() === 'remark' || item.status.toLowerCase() === 'debug')
+                );
+                
+                if (existing) {
+                    failed_at = existing.failed_at || existing.scanned_at;
+                    failed_remarks = existing.failed_remarks || existing.remarks;
+                }
+
                 try {
                     const res = await apiFetch(`/api/backend/remark/resolution/${pendingBarcode}`);
                     if (res && res.remarks) {
                         resolution_remarks = res.remarks;
                     }
                 } catch (e) {
-                    console.log("No resolution found for this barcode");
+                    // Resolution not found
                 }
             }
 
@@ -350,11 +364,23 @@ const VI: React.FC = () => {
                     scanned_by: user?.name || 'Operator',
                     status: status,
                     remarks: remarks,
-                    resolution_remarks: resolution_remarks
+                    resolution_remarks: resolution_remarks,
+                    failed_at: failed_at,
+                    failed_remarks: failed_remarks
                 })
             });
 
-            setScannedItems(prev => [newScan, ...prev]);
+            setScannedItems(prev => {
+                const isAccepted = status.toLowerCase() === 'accepted';
+                if (isAccepted) {
+                    // Remove any previous records for this barcode to ensure only the latest ACCEPTED record exists
+                    const cleanedPrev = prev.filter(item => 
+                        item.barcode.trim().toUpperCase() !== pendingBarcode.trim().toUpperCase()
+                    );
+                    return [newScan, ...cleanedPrev];
+                }
+                return [newScan, ...prev];
+            });
             showToast(`Item marked as ${status.toUpperCase()}`, 'success');
             setPendingBarcode(null); // Close modal
         } catch (error: any) {
@@ -565,11 +591,11 @@ const VI: React.FC = () => {
                             <h2 style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>VI Page</h2>
                             <h1 className={styles.woNumber}>{activeBatch.batch_number}</h1>
                             <p className={styles.woMeta}>
-                                🏭 Total Serial Number Available: {activeBatch.wo_qty} | 
-                                ✅ Completed: {scannedItems.length} | 
-                                🔄 Pending: {Math.max(0, activeBatch.wo_qty - scannedItems.length)} | 
-                                📝 Passed: {scannedItems.filter(s => s.status === 'accepted').length} | 
-                                ⚠️ Remark: {scannedItems.filter(s => s.status === 'remark').length} | 
+                                🏭 Total Serial Number Available: {activeBatch.wo_qty} |
+                                ✅ Completed: {scannedItems.length} |
+                                🔄 Pending: {Math.max(0, activeBatch.wo_qty - scannedItems.length)} |
+                                📝 Passed: {scannedItems.filter(s => s.status === 'accepted').length} |
+                                ⚠️ Remark: {scannedItems.filter(s => s.status === 'remark').length} |
                                 🛠️ Debug: {scannedItems.filter(s => s.status === 'debug').length}
                             </p>
                         </div>
@@ -632,9 +658,8 @@ const VI: React.FC = () => {
                                             <th>DATE & TIME</th>
                                             <th>STATUS</th>
                                             <th>REMARK/DEBUG TIME</th>
-                                            <th>ORIGINAL NOTE</th>
+                                            <th>Remarks</th>
                                             <th>REMARK/DEBUG Remarks</th>
-                                            <th>REMARK</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -645,25 +670,22 @@ const VI: React.FC = () => {
                                                     <td>{scan.scanned_by}</td>
                                                     <td>{new Date(scan.scanned_at).toLocaleString()}</td>
                                                     <td>
-                                                        {scan.status === 'accepted' && (
-                                                            <span className={styles.acceptedBadge}>ACCEPTED</span>
-                                                        )}
-                                                        {scan.status === 'remark' && (
-                                                            <span className={styles.remarkBadge}>REMARK</span>
-                                                        )}
-                                                        {scan.status === 'debug' && (
-                                                            <span className={styles.failedBadge}>DEBUG</span>
-                                                        )}
+                                                        {scan.status === 'accepted' && <span className={styles.acceptedBadge}>ACCEPTED</span>}
+                                                        {scan.status === 'remark' && <span className={styles.remarkBadge}>REMARK</span>}
+                                                        {scan.status === 'debug' && <span className={styles.failedBadge}>DEBUG</span>}
                                                     </td>
-                                                    <td>{scan.failed_at ? new Date(scan.failed_at).toLocaleString() : "-"}</td>
-                                                    <td>{scan.failed_remarks || "-"}</td>
-                                                    <td>{scan.resolution_remarks || "-"}</td>
-                                                    <td>{scan.remarks || "-"}</td>
+                                                    <td>{scan.status.toLowerCase() === 'accepted' && scan.failed_at ? new Date(scan.failed_at).toLocaleString() : "-"}</td>
+                                                    <td>
+                                                        <ExpandableText text={scan.failed_remarks || "-"} />
+                                                    </td>
+                                                    <td>
+                                                        <ExpandableText text={scan.resolution_remarks || "-"} />
+                                                    </td>
                                                 </tr>
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                                <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
                                                     No items scanned. Start scanning barcodes.
                                                 </td>
                                             </tr>

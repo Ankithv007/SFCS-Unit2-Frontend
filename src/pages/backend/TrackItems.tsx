@@ -10,6 +10,8 @@ interface TrackRecord {
     scanned_at: string;
     remarks: string | null;
     resolution_remarks: string | null;
+    failed_at: string | null;
+    failed_remarks: string | null;
 }
 
 
@@ -27,7 +29,7 @@ const TrackItems: React.FC = () => {
 
         setLoading(true);
         setError(null);
-        
+
         try {
             const data = await apiFetch(`/api/backend/track/${encodeURIComponent(searchTerm)}?type=${searchType}`);
             if (data && data.history) {
@@ -155,7 +157,7 @@ const TrackItems: React.FC = () => {
                                                 </div>
                                                 <div className={styles.stepContent}>
                                                     <div className={styles.stepStation}>{record.station}</div>
-                                                    
+
                                                     <div className={styles.stepDetails}>
                                                         <div className={styles.detailRow}>
                                                             <span className={`${styles.statusBadge} ${styles[record.status.toLowerCase()] || ''}`}>
@@ -170,11 +172,30 @@ const TrackItems: React.FC = () => {
                                                             <span className={styles.detailLabel}>Time:</span>
                                                             <span>{new Date(record.scanned_at).toLocaleString()}</span>
                                                         </div>
-                                                        {(record.remarks || record.resolution_remarks) && (
-                                                            <div className={styles.detailRow} style={{ marginTop: '0.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem' }}>
-                                                                <span style={{ fontSize: '0.7rem' }}>
-                                                                    <strong>Note:</strong> {record.remarks || record.resolution_remarks}
-                                                                </span>
+                                                        {(record.remarks || record.resolution_remarks || record.failed_remarks) && (
+                                                            <div className={styles.detailRow} style={{ marginTop: '0.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem', width: '100%' }}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', width: '100%' }}>
+                                                                    {record.failed_at && (
+                                                                        <span style={{ color: '#64748b' }}>
+                                                                            <strong>Remark/Debug Time:</strong> {new Date(record.failed_at).toLocaleString()}
+                                                                        </span>
+                                                                    )}
+                                                                    {record.failed_remarks && (
+                                                                        <span>
+                                                                            <strong>Original Remark:</strong> {record.failed_remarks}
+                                                                        </span>
+                                                                    )}
+                                                                    {record.resolution_remarks && (
+                                                                        <span>
+                                                                            <strong>Resolution:</strong> {record.resolution_remarks}
+                                                                        </span>
+                                                                    )}
+                                                                    {record.remarks && (
+                                                                        <span>
+                                                                            <strong>Station Remark:</strong> {record.remarks}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>

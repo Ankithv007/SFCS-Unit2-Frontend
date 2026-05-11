@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './Remark.module.css';
+import ExpandableText from '../../components/ExpandableText';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { Search, Package, Plus, Building2, Settings, Hash, User, Calendar, CheckCircle, MessageSquare, AlertTriangle } from 'lucide-react';
@@ -37,8 +38,11 @@ interface ScanRecord {
     scanned_at: string;
     status: string;
     previous_batch?: string;
-    remarks?: string;
+    remarks: string;
     stage?: string;
+    failed_at?: string | null;
+    failed_remarks?: string | null;
+    resolution_remarks?: string | null;
 }
 
 interface ScanDecisionModalProps {
@@ -100,28 +104,28 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                 <div className={styles.modalBody}>
                     {mode === 'select' ? (
                         <div className={styles.decisionGrid}>
-                            <button 
-                                className={`${styles.decisionBtn} ${focusedIndex === 0 ? styles.defaultAction : ''}`} 
+                            <button
+                                className={`${styles.decisionBtn} ${focusedIndex === 0 ? styles.defaultAction : ''}`}
                                 onClick={() => handleAction('accepted')}
                                 onMouseEnter={() => setFocusedIndex(0)}
                             >
                                 <CheckCircle size={32} className={styles.passIcon} />
                                 Pass
                             </button>
-                            <button 
-                                className={`${styles.decisionBtn} ${focusedIndex === 1 ? styles.defaultAction : ''}`} 
+                            <button
+                                className={`${styles.decisionBtn} ${focusedIndex === 1 ? styles.defaultAction : ''}`}
                                 onClick={() => handleAction('remark')}
-                                disabled 
+                                disabled
                                 style={{ opacity: 0.5, cursor: 'not-allowed' }}
                                 onMouseEnter={() => setFocusedIndex(1)}
                             >
                                 <MessageSquare size={32} className={styles.remarkIcon} />
                                 Remark
                             </button>
-                            <button 
-                                className={`${styles.decisionBtn} ${focusedIndex === 2 ? styles.defaultAction : ''}`} 
+                            <button
+                                className={`${styles.decisionBtn} ${focusedIndex === 2 ? styles.defaultAction : ''}`}
                                 onClick={() => handleAction('debug')}
-                                disabled 
+                                disabled
                                 style={{ opacity: 0.5, cursor: 'not-allowed' }}
                                 onMouseEnter={() => setFocusedIndex(2)}
                             >
@@ -173,6 +177,7 @@ const Remark: React.FC = () => {
 
     const [barcode, setBarcode] = useState('');
     const [tableSearch, setTableSearch] = useState('');
+    const [isPendingExpanded, setIsPendingExpanded] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const [currentDateTime, setCurrentDateTime] = useState("");
     const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
@@ -310,6 +315,19 @@ const Remark: React.FC = () => {
         if (!pendingBarcode || !activeBatch) return;
         setIsScanning(true);
         try {
+            let failed_at = null;
+            let failed_remarks = null;
+
+            // Find the original failure metadata from the pending list
+            const pending = pendingStationItems.find(item => 
+                item.barcode.trim().toUpperCase() === pendingBarcode.trim().toUpperCase()
+            );
+            
+            if (pending) {
+                failed_at = pending.scanned_at;
+                failed_remarks = pending.remarks;
+            }
+
             const newScan = await apiFetch('/api/backend/remark/scan', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -317,7 +335,9 @@ const Remark: React.FC = () => {
                     barcode: pendingBarcode,
                     scanned_by: user?.name || 'Operator',
                     status: status,
-                    remarks: remarks
+                    remarks: remarks,
+                    failed_at: failed_at,
+                    failed_remarks: failed_remarks
                 })
             });
             setScannedItems(prev => [newScan, ...prev]);
@@ -470,46 +490,57 @@ const Remark: React.FC = () => {
 
                     {/* Pending Items from Stations */}
                     <div className={styles.card} style={{ marginTop: '2rem', borderLeft: '4px solid #f59e0b' }}>
-                        <h3 style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <AlertTriangle size={18} /> Items Pending Remark from Production Stations
-                        </h3>
-                        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>
-                            These items were marked as 'Remark' at various production stages and require attention.
-                        </p>
-                        <div className={styles.tableWrapper}>
-                            <table className={styles.scanTable}>
-                                <thead>
-                                    <tr>
-                                        <th>Station</th>
-                                        <th>Batch Number</th>
-                                        <th>Barcode</th>
-                                        <th>Reported By</th>
-                                        <th>Time</th>
-                                        <th>Defect/Remark</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {pendingStationItems.length > 0 ? (
-                                        pendingStationItems.map((item, idx) => (
-                                            <tr key={idx}>
-                                                <td style={{ fontWeight: 700, color: '#6366f1' }}>{item.station}</td>
-                                                <td style={{ fontWeight: 700, color: '#1e293b' }}>{item.batch_number}</td>
-                                                <td style={{ fontWeight: 600 }}>{item.barcode}</td>
-                                                <td>{item.scanned_by}</td>
-                                                <td>{new Date(item.scanned_at).toLocaleString()}</td>
-                                                <td>
-                                                    <span className={styles.remarkBadge} style={{ background: '#fef3c7', color: '#92400e' }}>
-                                                        {item.remarks || "No remark provided"}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
-                                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No items pending from stations</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h3 style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                                <AlertTriangle size={18} /> Items Pending Remark from Production Stations
+                            </h3>
+                            <button 
+                                className={styles.viewBtn} 
+                                onClick={() => setIsPendingExpanded(!isPendingExpanded)}
+                                style={{ minWidth: '100px' }}
+                            >
+                                {isPendingExpanded ? 'Close' : 'View'}
+                            </button>
                         </div>
+                        {isPendingExpanded && (
+                            <>
+                                <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>
+                                    These items were marked as 'Remark' at various production stages and require attention.
+                                </p>
+                                <div className={styles.tableWrapper}>
+                                    <table className={styles.scanTable}>
+                                        <thead>
+                                            <tr>
+                                                <th>Station</th>
+                                                <th>Batch Number</th>
+                                                <th>Barcode</th>
+                                                <th>Reported By</th>
+                                                <th>Time</th>
+                                                <th>Defect/Remark</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {pendingStationItems.length > 0 ? (
+                                                pendingStationItems.map((item, idx) => (
+                                                    <tr key={idx}>
+                                                        <td style={{ fontWeight: 700, color: '#6366f1' }}>{item.station}</td>
+                                                        <td style={{ fontWeight: 700, color: '#1e293b' }}>{item.batch_number}</td>
+                                                        <td style={{ fontWeight: 600 }}>{item.barcode}</td>
+                                                        <td>{item.scanned_by}</td>
+                                                        <td>{new Date(item.scanned_at).toLocaleString()}</td>
+                                                        <td>
+                                                            <ExpandableText text={item.remarks} />
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No items pending from stations</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </>
             ) : (
@@ -519,11 +550,11 @@ const Remark: React.FC = () => {
                             <h2 style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Remark Page</h2>
                             <h1 className={styles.woNumber}>{activeBatch.batch_number}</h1>
                             <p className={styles.woMeta}>
-                                🏭 Total Remark Available: {activeBatch.wo_qty} | 
-                                ✅ Resolved: {scannedItems.length} | 
-                                🔄 Pending: {Math.max(0, activeBatch.wo_qty - scannedItems.length)} | 
-                                📝 Passed: {scannedItems.filter(s => s.status === 'accepted').length} | 
-                                ⚠️ Remark: {scannedItems.filter(s => s.status === 'remark').length} | 
+                                🏭 Total Remark Available: {activeBatch.wo_qty} |
+                                ✅ Resolved: {scannedItems.length} |
+                                🔄 Pending: {Math.max(0, activeBatch.wo_qty - scannedItems.length)} |
+                                📝 Passed: {scannedItems.filter(s => s.status === 'accepted').length} |
+                                ⚠️ Remark: {scannedItems.filter(s => s.status === 'remark').length} |
                                 🛠️ Debug: {scannedItems.filter(s => s.status === 'debug').length}
                             </p>
                         </div>
@@ -573,9 +604,8 @@ const Remark: React.FC = () => {
                                             <th>SCANNED BY</th>
                                             <th>DATE & TIME</th>
                                             <th>STATUS</th>
-                                            <th>STAGES</th>
+                                            <th>Remarks</th>
                                             <th>REMARK/DEBUG Remarks</th>
-                                            <th>REMARK</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -591,15 +621,16 @@ const Remark: React.FC = () => {
                                                         {scan.status === 'debug' && <span className={styles.failedBadge}>DEBUG</span>}
                                                     </td>
                                                     <td>
-                                                        <span style={{ fontWeight: 600, color: '#6366f1' }}>{scan.stage || "-"}</span>
+                                                        <ExpandableText text={`[${scan.stage || 'N/A'}] ${scan.failed_remarks || '-'}`} />
                                                     </td>
-                                                    <td>{scan.previous_batch || "-"}</td>
-                                                    <td>{scan.remarks || "-"}</td>
+                                                    <td>
+                                                        <ExpandableText text={scan.resolution_remarks || "-"} />
+                                                    </td>
                                                 </tr>
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                                <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
                                                     No items found.
                                                 </td>
                                             </tr>

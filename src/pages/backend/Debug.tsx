@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './Debug.module.css';
+import ExpandableText from '../../components/ExpandableText';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { Search, Package, Plus, Building2, Settings, Hash, User, Calendar, CheckCircle, MessageSquare, AlertTriangle } from 'lucide-react';
@@ -36,9 +37,11 @@ interface ScanRecord {
     scanned_by: string;
     scanned_at: string;
     status: string;
-    previous_batch?: string;
-    remarks?: string;
+    remarks: string;
     stage?: string;
+    failed_at?: string | null;
+    failed_remarks?: string | null;
+    resolution_remarks?: string | null;
 }
 
 interface ScanDecisionModalProps {
@@ -177,6 +180,7 @@ const Debug: React.FC = () => {
     const [currentDateTime, setCurrentDateTime] = useState("");
     const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
     const [pendingStationItems, setPendingStationItems] = useState<any[]>([]);
+    const [isPendingExpanded, setIsPendingExpanded] = useState(false);
 
     const scanInputRef = useRef<HTMLInputElement>(null);
 
@@ -306,6 +310,19 @@ const Debug: React.FC = () => {
         if (!pendingBarcode || !activeBatch) return;
         setIsScanning(true);
         try {
+            let failed_at = null;
+            let failed_remarks = null;
+
+            // Find the original failure metadata from the pending list
+            const pending = pendingStationItems.find(item => 
+                item.barcode.trim().toUpperCase() === pendingBarcode.trim().toUpperCase()
+            );
+            
+            if (pending) {
+                failed_at = pending.scanned_at;
+                failed_remarks = pending.remarks;
+            }
+
             const newScan = await apiFetch('/api/backend/debug/scan', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -313,7 +330,9 @@ const Debug: React.FC = () => {
                     barcode: pendingBarcode,
                     scanned_by: user?.name || 'Operator',
                     status: status,
-                    remarks: remarks
+                    remarks: remarks,
+                    failed_at: failed_at,
+                    failed_remarks: failed_remarks
                 })
             });
             setScannedItems(prev => [newScan, ...prev]);
@@ -470,46 +489,57 @@ const Debug: React.FC = () => {
 
                     {/* Pending Items from Stations */}
                     <div className={styles.card} style={{ marginTop: '2rem', borderLeft: '4px solid #ef4444' }}>
-                        <h3 style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <AlertTriangle size={18} /> Items Pending Debug from Production Stations
-                        </h3>
-                        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>
-                            These items were marked as 'Debug' at various production stages and require technical analysis.
-                        </p>
-                        <div className={styles.tableWrapper}>
-                            <table className={styles.scanTable}>
-                                <thead>
-                                    <tr>
-                                        <th>Station</th>
-                                        <th>Batch Number</th>
-                                        <th>Barcode</th>
-                                        <th>Reported By</th>
-                                        <th>Time</th>
-                                        <th>Debug Reason</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {pendingStationItems.length > 0 ? (
-                                        pendingStationItems.map((item, idx) => (
-                                            <tr key={idx}>
-                                                <td style={{ fontWeight: 700, color: '#6366f1' }}>{item.station}</td>
-                                                <td style={{ fontWeight: 700, color: '#1e293b' }}>{item.batch_number}</td>
-                                                <td style={{ fontWeight: 600 }}>{item.barcode}</td>
-                                                <td>{item.scanned_by}</td>
-                                                <td>{new Date(item.scanned_at).toLocaleString()}</td>
-                                                <td>
-                                                    <span className={styles.failedBadge} style={{ background: '#fee2e2', color: '#b91c1c' }}>
-                                                        {item.remarks || "No reason provided"}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
-                                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No items pending from stations</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h3 style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                                <AlertTriangle size={18} /> Items Pending Debug from Production Stations
+                            </h3>
+                            <button 
+                                className={styles.viewBtn} 
+                                onClick={() => setIsPendingExpanded(!isPendingExpanded)}
+                                style={{ minWidth: '100px' }}
+                            >
+                                {isPendingExpanded ? 'Close' : 'View'}
+                            </button>
                         </div>
+                        {isPendingExpanded && (
+                            <>
+                                <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>
+                                    These items were marked as 'Debug' at various production stages and require technical analysis.
+                                </p>
+                                <div className={styles.tableWrapper}>
+                                    <table className={styles.scanTable}>
+                                        <thead>
+                                            <tr>
+                                                <th>Station</th>
+                                                <th>Batch Number</th>
+                                                <th>Barcode</th>
+                                                <th>Reported By</th>
+                                                <th>Time</th>
+                                                <th>Debug Reason</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {pendingStationItems.length > 0 ? (
+                                                pendingStationItems.map((item, idx) => (
+                                                    <tr key={idx}>
+                                                        <td style={{ fontWeight: 700, color: '#6366f1' }}>{item.station}</td>
+                                                        <td style={{ fontWeight: 700, color: '#1e293b' }}>{item.batch_number}</td>
+                                                        <td style={{ fontWeight: 600 }}>{item.barcode}</td>
+                                                        <td>{item.scanned_by}</td>
+                                                        <td>{new Date(item.scanned_at).toLocaleString()}</td>
+                                                        <td>
+                                                            <ExpandableText text={item.remarks || "No reason provided"} />
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No items pending from stations</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </>
             ) : (
@@ -573,9 +603,8 @@ const Debug: React.FC = () => {
                                             <th>SCANNED BY</th>
                                             <th>DATE & TIME</th>
                                             <th>STATUS</th>
-                                            <th>STAGES</th>
+                                            <th>Remarks</th>
                                             <th>REMARK/DEBUG Remarks</th>
-                                            <th>REMARK</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -591,15 +620,16 @@ const Debug: React.FC = () => {
                                                         {scan.status === 'debug' && <span className={styles.failedBadge}>DEBUG</span>}
                                                     </td>
                                                     <td>
-                                                        <span style={{ fontWeight: 600, color: '#6366f1' }}>{scan.stage || "-"}</span>
+                                                        <ExpandableText text={`[${scan.stage || 'N/A'}] ${scan.failed_remarks || '-'}`} />
                                                     </td>
-                                                    <td>{scan.previous_batch || "-"}</td>
-                                                    <td>{scan.remarks || "-"}</td>
+                                                    <td>
+                                                        <ExpandableText text={scan.resolution_remarks || "-"} />
+                                                    </td>
                                                 </tr>
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                                <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
                                                     No items found.
                                                 </td>
                                             </tr>

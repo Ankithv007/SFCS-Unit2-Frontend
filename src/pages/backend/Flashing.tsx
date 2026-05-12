@@ -28,7 +28,7 @@ interface Batch {
     status: 'active' | 'completed';
     scanned_qty?: number;
     passed?: number;
-    remark?: number;
+    rework?: number;
     debug?: number;
 }
 
@@ -52,12 +52,12 @@ interface ScanDecisionModalProps {
 
 const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinalize, onClose }) => {
     const [mode, setMode] = useState<'select' | 'input'>('select');
-    const [status, setStatus] = useState<'accepted' | 'remark' | 'debug'>('accepted');
+    const [status, setStatus] = useState<'accepted' | 'rework' | 'debug'>('accepted');
     const [text, setText] = useState('');
     const [focusedIndex, setFocusedIndex] = useState(0);
 
     const bufferRef = useRef('');
-    const actions: ('accepted' | 'remark' | 'debug')[] = ['accepted', 'remark', 'debug'];
+    const actions: ('accepted' | 'rework' | 'debug')[] = ['accepted', 'rework', 'debug'];
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -78,7 +78,6 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                     bufferRef.current = '';
                 } else if (e.key.length === 1) {
                     bufferRef.current += e.key;
-                    // Clear buffer if it gets too long without Enter
                     if (bufferRef.current.length > 20) bufferRef.current = '';
                 }
             }
@@ -87,7 +86,7 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [mode, focusedIndex]);
 
-    const handleAction = (selectedStatus: 'accepted' | 'remark' | 'debug') => {
+    const handleAction = (selectedStatus: 'accepted' | 'rework' | 'debug') => {
         if (selectedStatus === 'accepted') {
             onFinalize('accepted');
         } else {
@@ -116,11 +115,11 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                             </button>
                             <button
                                 className={`${styles.decisionBtn} ${focusedIndex === 1 ? styles.defaultAction : ''}`}
-                                onClick={() => handleAction('remark')}
+                                onClick={() => handleAction('rework')}
                                 onMouseEnter={() => setFocusedIndex(1)}
                             >
-                                <MessageSquare size={32} className={styles.remarkIcon} />
-                                Remark
+                                <MessageSquare size={32} className={styles.reworkIcon} />
+                                Rework
                             </button>
                             <button
                                 className={`${styles.decisionBtn} ${focusedIndex === 2 ? styles.defaultAction : ''}`}
@@ -134,7 +133,7 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                     ) : (
                         <div className={styles.inputGroup}>
                             <label style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>
-                                {status === 'remark' ? 'Remark Details' : 'Debug Reason'} *
+                                {status === 'rework' ? 'Rework Details' : 'Debug Reason'} *
                             </label>
                             <textarea
                                 autoFocus
@@ -307,7 +306,7 @@ const Flashing: React.FC = () => {
             if (status.toLowerCase() === 'accepted') {
                 const existing = scannedItems.find(item => 
                     item.barcode.trim().toUpperCase() === pendingBarcode.trim().toUpperCase() &&
-                    (item.status.toLowerCase() === 'remark' || item.status.toLowerCase() === 'debug')
+                    (item.status.toLowerCase() === 'rework' || item.status.toLowerCase() === 'debug')
                 );
                 
                 if (existing) {
@@ -316,7 +315,7 @@ const Flashing: React.FC = () => {
                 }
 
                 try {
-                    const res = await apiFetch(`/api/backend/remark/resolution/${pendingBarcode}`);
+                    const res = await apiFetch(`/api/backend/rework/resolution/${pendingBarcode}`);
                     if (res && res.remarks) {
                         resolution_remarks = res.remarks;
                     }
@@ -341,7 +340,6 @@ const Flashing: React.FC = () => {
             setScannedItems(prev => {
                 const isAccepted = status.toLowerCase() === 'accepted';
                 if (isAccepted) {
-                    // Remove any previous records for this barcode to ensure only the latest ACCEPTED record exists
                     const cleanedPrev = prev.filter(item => 
                         item.barcode.trim().toUpperCase() !== pendingBarcode.trim().toUpperCase()
                     );
@@ -426,14 +424,14 @@ const Flashing: React.FC = () => {
                                             <th>Scanned</th>
                                             <th>Passed</th>
                                             <th>Pending</th>
-                                            <th>Remark</th>
+                                            <th>Rework</th>
                                             <th>Debug</th>
                                             <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {batches.filter(b => (Number(b.scanned_qty) < Number(b.wo_qty)) || (Number(b.remark) > 0) || (Number(b.debug) > 0)).length > 0 ? (
-                                            batches.filter(b => (Number(b.scanned_qty) < Number(b.wo_qty)) || (Number(b.remark) > 0) || (Number(b.debug) > 0)).map(batch => (
+                                        {batches.filter(b => (Number(b.scanned_qty) < Number(b.wo_qty)) || (Number(b.rework) > 0) || (Number(b.debug) > 0)).length > 0 ? (
+                                            batches.filter(b => (Number(b.scanned_qty) < Number(b.wo_qty)) || (Number(b.rework) > 0) || (Number(b.debug) > 0)).map(batch => (
                                                 <tr key={batch.id}>
                                                     <td style={{ fontWeight: 700, color: '#1e293b' }}>{batch.batch_number}</td>
                                                     <td>{batch.customer_name || "-"}</td>
@@ -443,7 +441,7 @@ const Flashing: React.FC = () => {
                                                     <td className={styles.statusBlue}>{batch.scanned_qty ?? 0}</td>
                                                     <td className={styles.statusGreen}>{batch.passed ?? 0}</td>
                                                     <td style={{ fontWeight: 600, color: '#64748b' }}>{Math.max(0, (batch.wo_qty ?? 0) - (batch.scanned_qty ?? 0))}</td>
-                                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.remark ?? 0}</td>
+                                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.rework ?? 0}</td>
                                                     <td style={{ color: '#ef4444', fontWeight: 700 }}>{batch.debug ?? 0}</td>
                                                     <td className={styles.actionCell}>
                                                         <button className={styles.viewBtn} onClick={() => handleResume(batch)}>View</button>
@@ -473,14 +471,14 @@ const Flashing: React.FC = () => {
                                             <th>Scanned</th>
                                             <th>Passed</th>
                                             <th>Pending</th>
-                                            <th>Remark</th>
+                                            <th>Rework</th>
                                             <th>Debug</th>
                                             <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {batches.filter(b => (Number(b.scanned_qty) >= Number(b.wo_qty)) && (Number(b.remark) === 0) && (Number(b.debug) === 0)).length > 0 ? (
-                                            batches.filter(b => (Number(b.scanned_qty) >= Number(b.wo_qty)) && (Number(b.remark) === 0) && (Number(b.debug) === 0)).map(batch => (
+                                        {batches.filter(b => (Number(b.scanned_qty) >= Number(b.wo_qty)) && (Number(b.rework) === 0) && (Number(b.debug) === 0)).length > 0 ? (
+                                            batches.filter(b => (Number(b.scanned_qty) >= Number(b.wo_qty)) && (Number(b.rework) === 0) && (Number(b.debug) === 0)).map(batch => (
                                                 <tr key={batch.id}>
                                                     <td style={{ fontWeight: 700, color: '#1e293b' }}>{batch.batch_number}</td>
                                                     <td>{batch.customer_name || "-"}</td>
@@ -490,7 +488,7 @@ const Flashing: React.FC = () => {
                                                     <td className={styles.statusBlue}>{batch.scanned_qty ?? 0}</td>
                                                     <td className={styles.statusGreen}>{batch.passed ?? 0}</td>
                                                     <td style={{ fontWeight: 600, color: '#64748b' }}>{Math.max(0, (batch.wo_qty ?? 0) - (batch.scanned_qty ?? 0))}</td>
-                                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.remark ?? 0}</td>
+                                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.rework ?? 0}</td>
                                                     <td style={{ color: '#ef4444', fontWeight: 700 }}>{batch.debug ?? 0}</td>
                                                     <td className={styles.actionCell}>
                                                         <button className={styles.viewBtn} onClick={() => handleResume(batch)}>View</button>
@@ -518,7 +516,7 @@ const Flashing: React.FC = () => {
                                 ✅ Completed: {scannedItems.length} |
                                 🔄 Pending: {Math.max(0, activeBatch.wo_qty - scannedItems.length)} |
                                 📝 Passed: {scannedItems.filter(s => s.status === 'accepted').length} |
-                                ⚠️ Remark: {scannedItems.filter(s => s.status === 'remark').length} |
+                                ⚠️ Rework: {scannedItems.filter(s => s.status === 'rework').length} |
                                 🛠️ Debug: {scannedItems.filter(s => s.status === 'debug').length}
                             </p>
                         </div>
@@ -558,9 +556,9 @@ const Flashing: React.FC = () => {
                                             <th>SCANNED BY</th>
                                             <th>DATE & TIME</th>
                                             <th>STATUS</th>
-                                            <th>REMARK/DEBUG TIME</th>
+                                            <th>REWORK/DEBUG TIME</th>
                                             <th>Remarks</th>
-                                            <th>REMARK/DEBUG Remarks</th>
+                                            <th>REWORK/DEBUG Remarks</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -572,7 +570,7 @@ const Flashing: React.FC = () => {
                                                     <td>{new Date(scan.scanned_at).toLocaleString()}</td>
                                                     <td>
                                                         {scan.status === 'accepted' && <span className={styles.acceptedBadge}>ACCEPTED</span>}
-                                                        {scan.status === 'remark' && <span className={styles.remarkBadge}>REMARK</span>}
+                                                        {scan.status === 'rework' && <span className={styles.reworkBadge}>REWORK</span>}
                                                         {scan.status === 'debug' && <span className={styles.failedBadge}>DEBUG</span>}
                                                     </td>
                                                     <td>{scan.status.toLowerCase() === 'accepted' && scan.failed_at ? new Date(scan.failed_at).toLocaleString() : "-"}</td>

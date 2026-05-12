@@ -51,7 +51,7 @@ const TrackItems: React.FC = () => {
         if (!status) return <Clock size={24} />;
         const s = status.toLowerCase();
         if (s === 'accepted') return <CheckCircle2 size={24} />;
-        if (s === 'remark') return <AlertCircle size={24} />;
+        if (s === 'rework') return <AlertCircle size={24} />;
         if (s === 'debug') return <XCircle size={24} />;
         return <Info size={24} />;
     };
@@ -60,7 +60,7 @@ const TrackItems: React.FC = () => {
         if (!status) return styles.pending;
         const s = status.toLowerCase();
         if (s === 'accepted') return styles.passed;
-        if (s === 'remark') return styles.remark;
+        if (s === 'rework') return styles.rework;
         if (s === 'debug') return styles.failed;
         return styles.pending;
     };
@@ -177,12 +177,12 @@ const TrackItems: React.FC = () => {
                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', width: '100%' }}>
                                                                     {record.failed_at && (
                                                                         <span style={{ color: '#64748b' }}>
-                                                                            <strong>Remark/Debug Time:</strong> {new Date(record.failed_at).toLocaleString()}
+                                                                            <strong>Rework/Debug Time:</strong> {new Date(record.failed_at).toLocaleString()}
                                                                         </span>
                                                                     )}
                                                                     {record.failed_remarks && (
                                                                         <span>
-                                                                            <strong>Original Remark:</strong> {record.failed_remarks}
+                                                                            <strong>Original Rework:</strong> {record.failed_remarks}
                                                                         </span>
                                                                     )}
                                                                     {record.resolution_remarks && (
@@ -192,7 +192,7 @@ const TrackItems: React.FC = () => {
                                                                     )}
                                                                     {record.remarks && (
                                                                         <span>
-                                                                            <strong>Station Remark:</strong> {record.remarks}
+                                                                            <strong>Station Rework Notes:</strong> {record.remarks}
                                                                         </span>
                                                                     )}
                                                                 </div>

@@ -37,7 +37,7 @@ import Assembly from './pages/backend/Assembly';
 import UnitTesting from './pages/backend/UnitTesting';
 import QI from './pages/backend/QI';
 import Packing from './pages/backend/Packing';
-import RemarkBackend from './pages/backend/Remark';
+import ReworkBackend from './pages/backend/Rework';
 import DebugBackend from './pages/backend/Debug';
 import TrackItems from './pages/backend/TrackItems';
 import { Layout } from './components/Layout';
@@ -267,10 +267,10 @@ export const router = createBrowserRouter([
                 ),
             },
             {
-                path: '/backend/remark',
+                path: '/backend/rework',
                 element: (
                     <ProtectedRoute>
-                        <RemarkBackend />
+                        <ReworkBackend />
                     </ProtectedRoute>
                 ),
             },

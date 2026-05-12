@@ -52,7 +52,7 @@ interface ScanDecisionModalProps {
 
 const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinalize, onClose }) => {
     const [mode, setMode] = useState<'select' | 'input'>('select');
-    const [status, setStatus] = useState<'accepted' | 'remark' | 'debug'>('accepted');
+    const [status, setStatus] = useState<'accepted' | 'rework' | 'debug'>('accepted');
     const [text, setText] = useState('');
     const [focusedIndex, setFocusedIndex] = useState(0);
 
@@ -79,7 +79,6 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                     bufferRef.current = '';
                 } else if (e.key.length === 1) {
                     bufferRef.current += e.key;
-                    // Clear buffer if it gets too long without Enter
                     if (bufferRef.current.length > 20) bufferRef.current = '';
                 }
             }
@@ -88,7 +87,7 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [mode, focusedIndex]);
 
-    const handleAction = (selectedStatus: 'accepted' | 'remark' | 'debug') => {
+    const handleAction = (selectedStatus: 'accepted' | 'rework' | 'debug') => {
         setStatus(selectedStatus);
         setMode('input');
     };
@@ -113,13 +112,13 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                             </button>
                             <button 
                                 className={`${styles.decisionBtn} ${focusedIndex === 1 ? styles.defaultAction : ''}`} 
-                                onClick={() => handleAction('remark')}
+                                onClick={() => handleAction('rework')}
                                 disabled 
                                 style={{ opacity: 0.5, cursor: 'not-allowed' }}
                                 onMouseEnter={() => setFocusedIndex(1)}
                             >
-                                <MessageSquare size={32} className={styles.remarkIcon} />
-                                Remark
+                                <MessageSquare size={32} className={styles.reworkIcon} />
+                                Rework
                             </button>
                             <button 
                                 className={`${styles.decisionBtn} ${focusedIndex === 2 ? styles.defaultAction : ''}`} 
@@ -135,7 +134,7 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                     ) : (
                         <div className={styles.inputGroup}>
                             <label style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>
-                                {status === 'accepted' ? `What is Resolved action in ${barcode}?` : status === 'remark' ? `What is Remarked in ${barcode}?` : `What is Debugged in ${barcode}?`} *
+                                {status === 'accepted' ? `What is Resolved action in ${barcode}?` : status === 'rework' ? `What is Reworked in ${barcode}?` : `What is Debugged in ${barcode}?`} *
                             </label>
                             <textarea
                                 autoFocus
@@ -313,7 +312,6 @@ const Debug: React.FC = () => {
             let failed_at = null;
             let failed_remarks = null;
 
-            // Find the original failure metadata from the pending list
             const pending = pendingStationItems.find(item => 
                 item.barcode.trim().toUpperCase() === pendingBarcode.trim().toUpperCase()
             );
@@ -403,7 +401,6 @@ const Debug: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Pending Table */}
                     <div className={styles.card} style={{ marginTop: '2rem' }}>
                         <h3>Pending Debug Batches</h3>
                         <div className={styles.tableWrapper}>
@@ -445,7 +442,6 @@ const Debug: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Completed Table */}
                     <div className={styles.card} style={{ marginTop: '2rem', borderTop: '4px solid #10b981' }}>
                         <h3 style={{ color: '#059669' }}>Completed Debug Batches</h3>
                         <div className={styles.tableWrapper}>
@@ -487,7 +483,6 @@ const Debug: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Pending Items from Stations */}
                     <div className={styles.card} style={{ marginTop: '2rem', borderLeft: '4px solid #ef4444' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                             <h3 style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
@@ -553,7 +548,7 @@ const Debug: React.FC = () => {
                                 ✅ Resolved: {scannedItems.length} | 
                                 🔄 Pending: {Math.max(0, activeBatch.wo_qty - scannedItems.length)} | 
                                 📝 Passed: {scannedItems.filter(s => s.status === 'accepted').length} | 
-                                ⚠️ Remark: {scannedItems.filter(s => s.status === 'remark').length} | 
+                                ⚠️ Rework: {scannedItems.filter(s => s.status === 'rework').length} | 
                                 🛠️ Debug: {scannedItems.filter(s => s.status === 'debug').length}
                             </p>
                         </div>
@@ -604,7 +599,7 @@ const Debug: React.FC = () => {
                                             <th>DATE & TIME</th>
                                             <th>STATUS</th>
                                             <th>Remarks</th>
-                                            <th>REMARK/DEBUG Remarks</th>
+                                            <th>REWORK/DEBUG Remarks</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -616,7 +611,7 @@ const Debug: React.FC = () => {
                                                     <td>{new Date(scan.scanned_at).toLocaleString()}</td>
                                                     <td>
                                                         {scan.status === 'accepted' && <span className={styles.acceptedBadge}>ACCEPTED</span>}
-                                                        {scan.status === 'remark' && <span className={styles.remarkBadge}>REMARK</span>}
+                                                        {scan.status === 'rework' && <span className={styles.reworkBadge}>REWORK</span>}
                                                         {scan.status === 'debug' && <span className={styles.failedBadge}>DEBUG</span>}
                                                     </td>
                                                     <td>

@@ -402,12 +402,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             </span> Packing
                         </div>
                         <div
-                            className={`${styles.submenuItem} ${isActive('/backend/remark') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/backend/remark')}
+                            className={`${styles.submenuItem} ${isActive('/backend/rework') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/backend/rework')}
                         >
                             <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Remark" className={styles.imageIcon} />
-                            </span> Remark
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Rework" className={styles.imageIcon} />
+                            </span> Rework
                         </div>
                         <div
                             className={`${styles.submenuItem} ${isActive('/backend/debug') ? styles.activeSubmenu : ''}`}

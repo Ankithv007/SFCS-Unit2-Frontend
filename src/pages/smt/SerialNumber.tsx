@@ -56,7 +56,7 @@ interface SmtBatch {
 export const SerialNumber: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
-    const isSuperAdmin = user?.role === 'Super Admin';
+    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
 
     // Form state
@@ -450,7 +450,7 @@ export const SerialNumber: React.FC = () => {
     }, [scanInput, activeBatch]);
 
     const isScannedComponent = (component: ScannedComponent) =>
-        component.status?.toString().trim().toUpperCase() === 'SCANNED';
+        (component.status || '').toString().trim().toUpperCase() === 'SCANNED';
 
     const getScannedComponents = (batch: SmtBatch) => batch.components.filter(isScannedComponent);
 
@@ -625,11 +625,11 @@ export const SerialNumber: React.FC = () => {
                                     <tbody>
                                         {batches.filter(b => b.components.some(c => !isScannedComponent(c))).map((batch) => (
                                             <tr key={batch.id}>
-                                                <td style={{ fontWeight: 600 }}>{batch.product_name}</td>
+                                                <td style={{ fontWeight: 600 }}>{(batch.product_name || '').toUpperCase()}</td>
                                                 <td>{batch.wo_qty}</td>
                                                 <td>{batch.panel_qty}</td>
-                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
-                                                <td>{batch.serial_format ? `${batch.serial_format}${batch.starting_number.toString().padStart(6, '0')}` : batch.starting_number} to {batch.serial_format ? `${batch.serial_format}${batch.end_number.toString().padStart(6, '0')}` : batch.end_number}</td>
+                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{(batch.work_order_id || '').toUpperCase()}</td>
+                                                <td>{batch.serial_format ? `${(batch.serial_format || '').toUpperCase()}${batch.starting_number.toString().padStart(6, '0')}` : batch.starting_number} to {batch.serial_format ? `${(batch.serial_format || '').toUpperCase()}${batch.end_number.toString().padStart(6, '0')}` : batch.end_number}</td>
                                                 <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>{new Date(batch.created_at).toLocaleString()}</td>
                                                 <td style={{ fontWeight: 500, color: '#374151' }}>{batch.created_by}</td>
                                                 <td>
@@ -688,8 +688,8 @@ export const SerialNumber: React.FC = () => {
                                             const pending = available - completed;
                                             return (
                                                 <tr key={batch.id}>
-                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
-                                                    <td style={{ fontWeight: 600 }}>{batch.product_name}</td>
+                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{(batch.work_order_id || '').toUpperCase()}</td>
+                                                    <td style={{ fontWeight: 600 }}>{(batch.product_name || '').toUpperCase()}</td>
                                                     <td>{available}</td>
                                                     <td style={{ color: '#059669', fontWeight: 700 }}>{completed}</td>
                                                     <td style={{ color: '#d97706', fontWeight: 700 }}>{pending}</td>
@@ -747,8 +747,8 @@ export const SerialNumber: React.FC = () => {
                                             const pending = 0;
                                             return (
                                                 <tr key={batch.id}>
-                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{batch.work_order_id}</td>
-                                                    <td style={{ fontWeight: 600 }}>{batch.product_name}</td>
+                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{(batch.work_order_id || '').toUpperCase()}</td>
+                                                    <td style={{ fontWeight: 600 }}>{(batch.product_name || '').toUpperCase()}</td>
                                                     <td>{available}</td>
                                                     <td style={{ color: '#059669', fontWeight: 700 }}>{completed}</td>
                                                     <td style={{ color: '#d97706', fontWeight: 700 }}>{pending}</td>
@@ -898,17 +898,17 @@ export const SerialNumber: React.FC = () => {
                                             return (
                                                 <tr key={component.id} style={{ height: '100px', backgroundColor: isScanned ? '#f0fdf4' : '#fff7ed' }}>
                                                     <td style={{ fontWeight: 'bold', fontSize: '1rem', letterSpacing: '1px' }}>
-                                                        {component.barcode}
+                                                        {(component.barcode || '').toUpperCase()}
                                                     </td>
                                                     <td style={{ textAlign: 'center', padding: '0.5rem' }}>
                                                         <div className={styles.qrItem}>
                                                             <QRCodeReact
-                                                                value={component.barcode.replace(/-/g, "")}
+                                                                value={(component.barcode || '').replace(/-/g, "").toUpperCase()}
                                                                 size={80}
                                                                 level="H"
                                                             />
                                                             <p className={styles.serialText}>
-                                                                {component.barcode.replace(/-/g, "")}
+                                                                {(component.barcode || '').replace(/-/g, "").toUpperCase()}
                                                             </p>
                                                         </div>
                                                     </td>

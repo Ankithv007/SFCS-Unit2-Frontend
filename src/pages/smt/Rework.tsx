@@ -137,14 +137,14 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
         if (processingRef.current) return;
         processingRef.current = true;
 
-        const cleanInput = barcodeInput.trim().replace(/-/g, '').toUpperCase();
+        const cleanInput = (barcodeInput || '').trim().replace(/-/g, '').toUpperCase();
         setScanBarcode('');
 
         if (!cleanInput) { processingRef.current = false; return; }
 
         const serialObj = serials.find((s: any) =>
             [s.serial_number, s.barcode].some(v =>
-                v?.toString().replace(/-/g, '').toUpperCase() === cleanInput
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
             )
         );
 
@@ -171,11 +171,11 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
 
     // Auto-scan when full barcode is typed
     useEffect(() => {
-        const clean = scanBarcode.trim().replace(/-/g, '').toUpperCase();
+        const clean = (scanBarcode || '').trim().replace(/-/g, '').toUpperCase();
         if (!clean || processingRef.current) return;
         const match = serials.find((s: any) =>
             [s.serial_number, s.barcode].some(v =>
-                v?.toString().replace(/-/g, '').toUpperCase() === clean
+                (v || '').toString().replace(/-/g, '').toUpperCase() === clean
             )
         );
         if (match) processScan(scanBarcode);

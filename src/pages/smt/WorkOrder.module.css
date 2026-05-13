@@ -272,3 +272,28 @@
     background-color: var(--error-color);
     color: white;
 }
+
+.deleteBtn {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid #ef4444;
+    background: white;
+    color: #ef4444;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    transition: all 0.2s;
+}
+
+.deleteBtn:hover {
+    background: #ef4444;
+    color: white;
+}
+
+.actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}

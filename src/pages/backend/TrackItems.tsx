@@ -1,214 +1,169 @@
 import React, { useState } from 'react';
-import styles from './TrackItems.module.css';
-import { Search, CheckCircle2, AlertCircle, XCircle, Clock, Info } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
+import { Search, History, CheckCircle, Clock, AlertTriangle, MessageSquare, Package } from 'lucide-react';
+import styles from './TrackItems.module.css';
 
-interface TrackRecord {
-    station: string;
+interface ScanHistoryEntry {
+    stage: string;
     status: string;
+    remarks: string;
     scanned_by: string;
     scanned_at: string;
-    remarks: string | null;
-    resolution_remarks: string | null;
-    failed_at: string | null;
-    failed_remarks: string | null;
 }
 
+interface ItemDetails {
+    barcode: string;
+    batch_number: string;
+    wo_number: string;
+    model: string;
+    current_stage: string;
+    scan_history: ScanHistoryEntry[];
+}
 
 const TrackItems: React.FC = () => {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [searchType, setSearchType] = useState<'serial' | 'batch'>('serial');
+    const [barcode, setBarcode] = useState('');
     const [loading, setLoading] = useState(false);
-    const [history, setHistory] = useState<TrackRecord[]>([]);
-    const [searchedId, setSearchedId] = useState<string | null>(null);
+    const [item, setItem] = useState<ItemDetails | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!searchTerm.trim()) return;
+        if (!barcode.trim()) return;
 
         setLoading(true);
         setError(null);
+        setItem(null);
 
         try {
-            const data = await apiFetch(`/api/backend/track/${encodeURIComponent(searchTerm)}?type=${searchType}`);
-            if (data && data.history) {
-                setHistory(data.history);
-                setSearchedId(data.id);
-            } else {
-                setHistory([]);
-                setSearchedId(searchTerm);
-            }
+            const data = await apiFetch(`/api/backend/track/${barcode.trim()}`);
+            setItem(data);
         } catch (err: any) {
-            setError(err.message || "Failed to track item");
-            setHistory([]);
+            setError(err.message || 'Item not found or failed to fetch details');
         } finally {
             setLoading(false);
         }
     };
 
-    const getIconForStatus = (status: string | undefined) => {
-        if (!status) return <Clock size={24} />;
-        const s = status.toLowerCase();
-        if (s === 'accepted') return <CheckCircle2 size={24} />;
-        if (s === 'rework') return <AlertCircle size={24} />;
-        if (s === 'debug') return <XCircle size={24} />;
-        return <Info size={24} />;
-    };
-
-    const getStatusClass = (status: string | undefined) => {
-        if (!status) return styles.pending;
-        const s = status.toLowerCase();
-        if (s === 'accepted') return styles.passed;
-        if (s === 'rework') return styles.rework;
-        if (s === 'debug') return styles.failed;
-        return styles.pending;
+    const getStatusIcon = (status: string) => {
+        switch (status.toLowerCase()) {
+            case 'accepted':
+            case 'passed':
+                return <CheckCircle className={styles.statusPass} size={18} />;
+            case 'rework':
+                return <MessageSquare className={styles.statusRework} size={18} />;
+            case 'debug':
+                return <AlertTriangle className={styles.statusDebug} size={18} />;
+            default:
+                return <Clock className={styles.statusPending} size={18} />;
+        }
     };
 
     return (
         <div className={styles.container}>
             <div className={styles.header}>
-                <h2>Track Items</h2>
-                <p>Track the complete lifecycle of Serial Numbers or Work Order Batches</p>
+                <div>
+                    <h2>🔍 Item Traceability</h2>
+                    <p>Track barcode history across all production stages.</p>
+                </div>
             </div>
 
-            <div className={styles.card}>
-                <form onSubmit={handleSearch} className={styles.searchSection}>
-                    <div className={styles.searchOptions}>
-                        <label className={styles.radioLabel}>
-                            <input
-                                type="radio"
-                                name="searchType"
-                                checked={searchType === 'serial'}
-                                onChange={() => setSearchType('serial')}
-                            />
-                            By Serial Number
-                        </label>
-                        <label className={styles.radioLabel}>
-                            <input
-                                type="radio"
-                                name="searchType"
-                                checked={searchType === 'batch'}
-                                onChange={() => setSearchType('batch')}
-                            />
-                            By Batch Number
-                        </label>
-                    </div>
-
-                    <div className={styles.searchBox}>
+            <div className={styles.searchCard}>
+                <form onSubmit={handleSearch} className={styles.searchForm}>
+                    <div className={styles.searchInputWrapper}>
                         <Search className={styles.searchIcon} size={20} />
                         <input
                             type="text"
-                            placeholder={`Enter ${searchType === 'serial' ? 'Serial Number' : 'Batch Number'}...`}
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder="Scan or enter Barcode..."
+                            value={barcode}
+                            onChange={(e) => setBarcode(e.target.value)}
                             className={styles.searchInput}
                             autoFocus
                         />
-                        <button type="submit" className={styles.searchBtn} disabled={!searchTerm.trim() || loading}>
-                            {loading ? 'Searching...' : 'Search'}
-                        </button>
                     </div>
-                    {error && <p style={{ color: '#ef4444', marginTop: '1rem', fontWeight: 600 }}>{error}</p>}
+                    <button type="submit" className={styles.searchBtn} disabled={loading}>
+                        {loading ? 'Searching...' : 'TRACK ITEM'}
+                    </button>
                 </form>
-
-                <div className={styles.resultsArea}>
-                    {!searchedId && !loading && (
-                        <div className={styles.emptyState}>
-                            <div className={styles.emptyIcon}>🔍</div>
-                            <h3>No Items Tracked Yet</h3>
-                            <p>Enter a serial number or batch number above to view its complete manufacturing history.</p>
-                        </div>
-                    )}
-
-                    {searchedId && history.length === 0 && !loading && (
-                        <div className={styles.emptyState}>
-                            <div className={styles.emptyIcon}>⚠️</div>
-                            <h3>No Records Found</h3>
-                            <p>No tracking history found for ID: <strong>{searchedId}</strong></p>
-                        </div>
-                    )}
-
-                    {searchedId && history.length > 0 && !loading && (
-                        <div className={styles.stepperContainer}>
-                            <div className={styles.stepperHeader}>
-                                <div>
-                                    <p style={{ margin: '0 0 0.5rem 0', color: '#64748b', fontSize: '0.875rem', fontWeight: 600 }}>TRACKING RESULTS FOR:</p>
-                                    <h3 className={styles.barcodeTitle}>{searchedId}</h3>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <p style={{ margin: '0 0 0.25rem 0', color: '#64748b', fontSize: '0.875rem' }}>Current Status</p>
-                                    <span className={`${styles.statusBadge} ${styles[history[history.length - 1].status.toLowerCase()] || ''}`} style={{ fontSize: '1rem', padding: '0.25rem 1rem' }}>
-                                        {history[history.length - 1].status}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className={styles.stepperScrollArea}>
-                                <div className={styles.stepperWrapper}>
-                                    {history.map((record, index) => {
-                                        const isLastStep = index === history.length - 1;
-
-                                        return (
-                                            <div key={`${record.station}-${index}`} className={styles.step}>
-                                                {!isLastStep && <div className={styles.stepLine}></div>}
-                                                <div className={`${styles.stepIcon} ${getStatusClass(record.status)}`}>
-                                                    {getIconForStatus(record.status)}
-                                                </div>
-                                                <div className={styles.stepContent}>
-                                                    <div className={styles.stepStation}>{record.station}</div>
-
-                                                    <div className={styles.stepDetails}>
-                                                        <div className={styles.detailRow}>
-                                                            <span className={`${styles.statusBadge} ${styles[record.status.toLowerCase()] || ''}`}>
-                                                                {record.status}
-                                                            </span>
-                                                        </div>
-                                                        <div className={styles.detailRow}>
-                                                            <span className={styles.detailLabel}>By:</span>
-                                                            <span>{record.scanned_by}</span>
-                                                        </div>
-                                                        <div className={styles.detailRow}>
-                                                            <span className={styles.detailLabel}>Time:</span>
-                                                            <span>{new Date(record.scanned_at).toLocaleString()}</span>
-                                                        </div>
-                                                        {(record.remarks || record.resolution_remarks || record.failed_remarks) && (
-                                                            <div className={styles.detailRow} style={{ marginTop: '0.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem', width: '100%' }}>
-                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', width: '100%' }}>
-                                                                    {record.failed_at && (
-                                                                        <span style={{ color: '#64748b' }}>
-                                                                            <strong>Rework/Debug Time:</strong> {new Date(record.failed_at).toLocaleString()}
-                                                                        </span>
-                                                                    )}
-                                                                    {record.failed_remarks && (
-                                                                        <span>
-                                                                            <strong>Original Rework:</strong> {record.failed_remarks}
-                                                                        </span>
-                                                                    )}
-                                                                    {record.resolution_remarks && (
-                                                                        <span>
-                                                                            <strong>Resolution:</strong> {record.resolution_remarks}
-                                                                        </span>
-                                                                    )}
-                                                                    {record.remarks && (
-                                                                        <span>
-                                                                            <strong>Station Rework Notes:</strong> {record.remarks}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
             </div>
+
+            {error && (
+                <div className={styles.errorBox}>
+                    <AlertTriangle size={20} />
+                    <span>{error}</span>
+                </div>
+            )}
+
+            {item && (
+                <div className={styles.resultGrid}>
+                    <div className={styles.infoCard}>
+                        <h3 className={styles.cardTitle}>
+                            <Package size={20} />
+                            Item Information
+                        </h3>
+                        <div className={styles.infoGrid}>
+                            <div className={styles.infoItem}>
+                                <label>Barcode</label>
+                                <span>{item.barcode}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <label>Batch Number</label>
+                                <span>{item.batch_number}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <label>WO Number</label>
+                                <span>{item.wo_number}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <label>Model</label>
+                                <span>{item.model}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <label>Current Location</label>
+                                <span className={styles.stageBadge}>{item.current_stage.toUpperCase()}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={styles.timelineCard}>
+                        <h3 className={styles.cardTitle}>
+                            <History size={20} />
+                            Production History
+                        </h3>
+                        <div className={styles.timeline}>
+                            {item.scan_history && Array.isArray(item.scan_history) && item.scan_history.length > 0 ? (
+                                item.scan_history.map((entry, idx) => (
+                                    <div key={idx} className={styles.timelineItem}>
+                                        <div className={styles.timelineMarker}>
+                                            {getStatusIcon(entry.status)}
+                                        </div>
+                                        <div className={styles.timelineContent}>
+                                            <div className={styles.timelineHeader}>
+                                                <span className={styles.timelineStage}>{entry.stage}</span>
+                                                <span className={styles.timelineTime}>
+                                                    {new Date(entry.scanned_at).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div className={styles.timelineStatus}>
+                                                Status: <span className={styles[`statusText${entry.status}`]}>{entry.status.toUpperCase()}</span>
+                                            </div>
+                                            <div className={styles.timelineOperator}>
+                                                Operator: <span>{entry.scanned_by}</span>
+                                            </div>
+                                            {entry.remarks && (
+                                                <div className={styles.timelineRemarks}>
+                                                    Remarks: <span>{entry.remarks}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className={styles.emptyTimeline}>No history records found for this item.</div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

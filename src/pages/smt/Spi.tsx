@@ -142,12 +142,12 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
     };
 
     const processScan = async (barcodeInput: string) => {
-        const cleanInput = barcodeInput.trim().replace(/-/g, '').toUpperCase();
+        const cleanInput = (barcodeInput || '').trim().replace(/-/g, '').toUpperCase();
         if (!cleanInput) return;
 
         const alreadyInTable = tableSerials.find((s: any) =>
             [s.serial_number, s.barcode].some(v =>
-                v?.toString().replace(/-/g, '').toUpperCase() === cleanInput
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
             )
         );
         if (alreadyInTable) {
@@ -166,7 +166,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
             const allSerials: any[] = await res.json();
             const match = allSerials.find((s: any) =>
                 [s.serial_number, s.barcode].some(v =>
-                    v?.toString().replace(/-/g, '').toUpperCase() === cleanInput
+                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
                 )
             );
 
@@ -258,11 +258,11 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                                     return (
                                         <tr key={s.id || idx}>
                                             <td style={{ color: '#9ca3af', fontWeight: 500 }}>{tableSerials.length - idx}</td>
-                                            <td style={{ fontWeight: 600 }}>{s.serial_number}</td>
+                                            <td style={{ fontWeight: 600 }}>{(s.serial_number || '').toUpperCase()}</td>
                                             <td style={{ textAlign: 'center' }}>
                                                 <div style={{ display: 'grid', gap: '0.3rem', justifyItems: 'center' }}>
-                                                    <QRCode value={s.serial_number} size={60} />
-                                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{s.serial_number}</span>
+                                                    <QRCode value={(s.serial_number || '').toUpperCase()} size={60} />
+                                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{(s.serial_number || '').toUpperCase()}</span>
                                                 </div>
                                             </td>
                                             <td>
@@ -296,7 +296,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
 const Spi: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
-    const isSuperAdmin = user?.role === 'Super Admin';
+    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
     const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
 
@@ -516,8 +516,8 @@ const Spi: React.FC = () => {
                                 <tbody>
                                     {savedEntries.map((entry) => (
                                         <tr key={entry.id}>
-                                            <td style={{ color: '#2563eb', fontWeight: 600 }}>{entry.work_order_id}</td>
-                                            <td>{entry.product_name}</td>
+                                            <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                            <td>{(entry.product_name || '').toUpperCase()}</td>
                                             <td>{entry.quantity || entry.wo_qty}</td>
                                             <td>{entry.panel_qty || 'N/A'}</td>
                                             <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>

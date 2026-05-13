@@ -97,7 +97,7 @@ export const SmtLogin: React.FC = () => {
         setError('');
 
         try {
-            if (userId.toUpperCase() === 'ADMIN' && password === '1234') {
+            if ((userId || '').toUpperCase() === 'ADMIN' && password === '1234') {
                 smtLogin({ id: 'admin', name: 'System Admin', userId: 'ADMIN' });
                 navigate(from, { replace: true });
                 return;

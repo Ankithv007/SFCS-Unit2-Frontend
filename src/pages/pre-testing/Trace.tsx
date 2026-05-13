@@ -18,7 +18,7 @@ interface TimelineItem {
     operator: string;
     timestamp: string;
     source: string;
-    reworks: string;
+    remarks: string;
 }
 
 interface TraceData {
@@ -417,8 +417,8 @@ export const Trace: React.FC = () => {
                                                         <div className={styles.timelineTimestamp}>
                                                             {new Date(item.timestamp).toLocaleString()}
                                                         </div>
-                                                        {item.reworks && item.reworks !== '-' && (
-                                                            <div className={styles.reworks}>{item.reworks}</div>
+                                                        {item.remarks && item.remarks !== '-' && (
+                                                            <div className={styles.reworks}>{item.remarks}</div>
                                                         )}
                                                     </div>
                                                     <div className={styles.timelineRight}>

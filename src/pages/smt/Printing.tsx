@@ -58,9 +58,9 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
                 // Printing should show serials that completed Serial Number Scanning,
                 // plus any serial already completed in Printing.
                 const scannedOnly = data.filter((s: any) =>
-                    s.status?.toString().toUpperCase() === 'SCANNED' ||
+                    (s.status || '').toString().toUpperCase() === 'SCANNED' ||
                     s.is_completed_here === true ||
-                    String(s.is_completed_here).toLowerCase() === 'true'
+                    String(s.is_completed_here || '').toLowerCase() === 'true'
                 );
 
                 setSerials(scannedOnly);
@@ -138,7 +138,7 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
 
     const completedSerials = serials.filter(s =>
         s.is_completed_here === true ||
-        String(s.is_completed_here).toLowerCase() === 'true'
+        String(s.is_completed_here || '').toLowerCase() === 'true'
     );
 
     return (
@@ -209,11 +209,11 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
                                 const isDone = completedSerials.includes(s);
                                 return (
                                     <tr key={s.id || idx} className={isDone ? styles.detailDoneRow : styles.detailPendingRow}>
-                                        <td className={styles.detailSerialCell}>{s.serial_number}</td>
+                                        <td className={styles.detailSerialCell}>{(s.serial_number || '').toUpperCase()}</td>
                                         <td className={styles.detailQrCell}>
                                             <div className={styles.detailQrItem}>
-                                                <QRCode value={s.serial_number} size={80} />
-                                                <p>{s.serial_number}</p>
+                                                <QRCode value={(s.serial_number || '').toUpperCase()} size={80} />
+                                                <p>{(s.serial_number || '').toUpperCase()}</p>
                                             </div>
                                         </td>
                                         <td>
@@ -256,7 +256,7 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
 export const Printing: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
-    const isSuperAdmin = user?.role === 'Super Admin';
+    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
 
     // Toast state
@@ -515,8 +515,8 @@ export const Printing: React.FC = () => {
                                     <tbody>
                                         {savedEntries.map((entry) => (
                                             <tr key={entry.id}>
-                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{entry.work_order_id}</td>
-                                                <td>{entry.product_name}</td>
+                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                                <td>{(entry.product_name || '').toUpperCase()}</td>
                                                 <td>{entry.quantity || entry.wo_qty}</td>
                                                 <td>{entry.panel_qty || 'N/A'}</td>
                                                 <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>

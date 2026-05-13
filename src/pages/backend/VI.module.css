@@ -48,6 +48,24 @@
     border-color: #fca5a5;
 }
 
+.backBtn {
+    background: none;
+    border: none;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #64748b;
+    transition: all 0.2s;
+}
+
+.backBtn:hover {
+    background: #f1f5f9;
+    color: #1e293b;
+}
+
 /* Operator Section */
 .operatorSection {
     margin-bottom: 1.25rem;

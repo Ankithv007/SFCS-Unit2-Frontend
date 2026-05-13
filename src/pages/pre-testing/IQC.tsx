@@ -27,8 +27,8 @@ interface ScannedComponent {
     barcode: string;
     scanned_by: string;
     scanned_at: string;
-    status: 'ACCEPTED' | 'REJECTED' | 'rework' | 'SCRAP';
-    reworks: string;
+    status: 'ACCEPTED' | 'REJECTED' | 'REWORK' | 'SCRAP';
+    remarks: string;
     previous_batch?: string;
 }
 
@@ -229,12 +229,12 @@ export const IQC: React.FC = () => {
         await submitScan(finalBarcode, false);
     };
 
-    const handleUpdateStatus = async (component: ScannedComponent, newStatus: 'ACCEPTED' | 'rework' | 'SCRAP') => {
+    const handleUpdateStatus = async (component: ScannedComponent, newStatus: 'ACCEPTED' | 'REWORK' | 'SCRAP') => {
         let reason = '';
-        if (newStatus === 'rework' || newStatus === 'SCRAP') {
-            reason = prompt(`Enter mandatory reworks for ${newStatus}:`) || '';
+        if (newStatus === 'REWORK' || newStatus === 'SCRAP') {
+            reason = prompt(`Enter mandatory remarks for ${newStatus}:`) || '';
             if (!reason.trim()) {
-                showToast(`reworks are mandatory for ${newStatus}`, 'error');
+                showToast(`remarks are mandatory for ${newStatus}`, 'error');
                 return;
             }
         }
@@ -244,7 +244,7 @@ export const IQC: React.FC = () => {
                 method: 'PUT',
                 body: JSON.stringify({
                     status: newStatus,
-                    reworks: reason
+                    remarks: reason
                 })
             }) as ScannedComponent;
 
@@ -252,7 +252,7 @@ export const IQC: React.FC = () => {
 
             // Update local state
             setScannedComponents((prev: ScannedComponent[]) => prev.map((c: ScannedComponent) =>
-                c.id === component.id ? { ...c, status: updated.status, reworks: updated.reworks } : c
+                c.id === component.id ? { ...c, status: updated.status, remarks: updated.remarks } : c
             ));
             fetchBatches(); // Update counts
         } catch (error: any) {
@@ -286,7 +286,7 @@ export const IQC: React.FC = () => {
                     barcode: coreBarcode,
                     scanned_by: scannerName,
                     status: 'ACCEPTED', // Always default to ACCEPTED
-                    reworks: '',
+                    remarks: '',
                     force_move: forceMove
                 })
             }) as ScannedComponent;
@@ -451,7 +451,7 @@ export const IQC: React.FC = () => {
                             <p><strong>Status:</strong> <span className={searchResult.status === 'ACCEPTED' ? styles.statusGreen : (searchResult.status === 'In Warehouse' ? styles.statusBlue : styles.statusRed)}>{searchResult.status}</span></p>
                             <p><strong>Scanned By:</strong> {searchResult.scanned_by}</p>
                             <p><strong>Scanned At:</strong> {new Date(searchResult.scanned_at).toLocaleString()}</p>
-                            <p><strong>reworks:</strong> {searchResult.reworks || '-'}</p>
+                            <p><strong>remarks:</strong> {searchResult.remarks || '-'}</p>
                             <p><strong>Previous Batch:</strong> {searchResult.previous_batch || 'N/A'}</p>
                         </div>
                         <button className={styles.secondaryButton} onClick={() => setSearchResult(null)} style={{ marginTop: '1rem', width: '100%' }}>
@@ -705,7 +705,7 @@ export const IQC: React.FC = () => {
                                 <span>Total Scanned: <strong>{scannedComponents.length}</strong> / {getTargetQty(activeBatch)}</span>
                                 <span style={{ color: '#2563eb', fontWeight: 600 }}>🏭 Available: {activeBatch.warehouse_received_quantity || 0}</span>
                                 <span style={{ color: '#10b981', fontWeight: 600 }}>✅ Passed: {scannedComponents.filter((c: ScannedComponent) => c.status === 'ACCEPTED').length}</span>
-                                <span style={{ color: '#eab308', fontWeight: 600 }}>🔄 rework: {scannedComponents.filter((c: ScannedComponent) => c.status === 'rework').length}</span>
+                                <span style={{ color: '#eab308', fontWeight: 600 }}>🔄 Rework: {scannedComponents.filter((c: ScannedComponent) => c.status === 'REWORK').length}</span>
                                 <span style={{ color: '#ef4444', fontWeight: 600 }}>🗑 Scrap: {scannedComponents.filter((c: ScannedComponent) => c.status === 'SCRAP').length}</span>
                             </div>
                         </div>
@@ -804,13 +804,13 @@ export const IQC: React.FC = () => {
                                         <td style={{ fontWeight: 600 }}>{comp.barcode}</td>
                                         <td>{comp.scanned_by}</td>
                                         <td>{new Date(comp.scanned_at).toLocaleTimeString()}</td>
-                                        <td className={comp.status === 'ACCEPTED' ? styles.statusGreen : (comp.status === 'rework' ? styles.statusYellow : (comp.status === 'SCRAP' ? styles.statusRed : ''))}>
+                                        <td className={comp.status === 'ACCEPTED' ? styles.statusGreen : (comp.status === 'REWORK' ? styles.statusYellow : (comp.status === 'SCRAP' ? styles.statusRed : ''))}>
                                             {comp.status}
                                         </td>
                                         <td style={{ color: comp.previous_batch ? '#c2410c' : '#6b7280', fontWeight: comp.previous_batch ? 600 : 400 }}>
                                             {comp.previous_batch || '-'}
                                         </td>
-                                        <td>{comp.reworks || '-'}</td>
+                                        <td>{comp.remarks || '-'}</td>
                                         <td>
                                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                                 {comp.status !== 'SCRAP' && (
@@ -824,13 +824,13 @@ export const IQC: React.FC = () => {
                                                                 Pass
                                                             </button>
                                                         )}
-                                                        {comp.status !== 'rework' && (
+                                                        {comp.status !== 'REWORK' && (
                                                             <button
                                                                 className={styles.statusYellow}
                                                                 style={{ border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600 }}
-                                                                onClick={() => handleUpdateStatus(comp, 'rework')}
+                                                                onClick={() => handleUpdateStatus(comp, 'REWORK')}
                                                             >
-                                                                rework
+                                                                REWORK
                                                             </button>
                                                         )}
                                                         <button

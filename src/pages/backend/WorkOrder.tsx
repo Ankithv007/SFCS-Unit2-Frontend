@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './WorkOrder.module.css';
+import sharedStyles from '../smt/WorkOrder.module.css';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { 
@@ -69,10 +70,7 @@ const WorkOrder: React.FC = () => {
         try {
             console.log("Fetching Work Orders...");
             const data = await apiFetch('/api/backend/work-order');
-            if (data) {
-                console.log("Data received:", data);
-                setWorkOrders(data);
-            }
+            setWorkOrders(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Error fetching work orders:', error);
             showToast('Failed to load work orders', 'error');
@@ -162,7 +160,7 @@ const WorkOrder: React.FC = () => {
 
 
 
-    const isAdmin = ['Admin', 'Super Admin'].includes(user?.role || '');
+    const isAdmin = ['admin', 'super admin'].includes((user?.role || '').toLowerCase());
 
     return (
         <div className={styles.container}>
@@ -290,8 +288,7 @@ const WorkOrder: React.FC = () => {
                                             <div className={styles.actions}>
                                                 <button 
                                                     type="button"
-                                                    className={styles.viewBtn} 
-                                                    onClick={() => handleView(wo)}
+                                                    className={sharedStyles.secondaryButton} onClick={() => handleView(wo)}
                                                 >
                                                     <Eye size={14} /> View
                                                 </button>

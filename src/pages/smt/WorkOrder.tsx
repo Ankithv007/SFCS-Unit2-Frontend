@@ -120,7 +120,8 @@ export const WorkOrder: React.FC = () => {
             const res = await fetch('/api/smt/work-orders');
             if (res.ok) {
                 const data = await res.json();
-                setWorkOrders(data.map((wo: any) => ({
+                const safeData = Array.isArray(data) ? data : [];
+                setWorkOrders(safeData.map((wo: any) => ({
                     work_order_id: wo.id,
                     product_name: wo.product_name,
                     product_description: wo.product_description,
@@ -494,7 +495,7 @@ export const WorkOrder: React.FC = () => {
                                                 backgroundColor: wo.priority === 'high' ? '#fee2e2' : wo.priority === 'medium' ? '#fef3c7' : '#e0e7ff',
                                                 color: wo.priority === 'high' ? '#991b1b' : wo.priority === 'medium' ? '#92400e' : '#3730a3'
                                             }}>
-                                                {wo.priority.toUpperCase()}
+                                                {(wo.priority || 'MEDIUM').toUpperCase()}
                                             </span>
                                         </td>
                                         <td>{wo.created_by || 'System'}</td>

@@ -1,7 +1,6 @@
-/* TrackItems.module.css */
 .container {
     padding: 2rem;
-    max-width: 1400px;
+    max-width: 1200px;
     margin: 0 auto;
 }
 
@@ -11,277 +10,227 @@
 
 .header h2 {
     font-size: 1.875rem;
-    font-weight: 800;
+    font-weight: 700;
     color: #1e293b;
-    margin: 0;
-    letter-spacing: -0.025em;
+    margin-bottom: 0.5rem;
 }
 
 .header p {
     color: #64748b;
-    margin-top: 0.5rem;
 }
 
-.card {
+.searchCard {
     background: white;
+    padding: 1.5rem;
     border-radius: 1rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    border: 1px solid #e2e8f0;
-    padding: 2rem;
-}
-
-.searchSection {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     margin-bottom: 2rem;
-    padding-bottom: 2rem;
-    border-bottom: 1px solid #e2e8f0;
 }
 
-.searchOptions {
-    display: flex;
-    gap: 2rem;
-    margin-bottom: 1.5rem;
-}
-
-.radioLabel {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 600;
-    color: #475569;
-    cursor: pointer;
-}
-
-.searchBox {
+.searchForm {
     display: flex;
     gap: 1rem;
-    align-items: center;
+}
+
+.searchInputWrapper {
     position: relative;
+    flex: 1;
 }
 
 .searchIcon {
     position: absolute;
     left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
     color: #94a3b8;
 }
 
 .searchInput {
-    flex: 1;
-    padding: 1rem 1rem 1rem 3rem;
-    font-size: 1.1rem;
-    border: 2px solid #e2e8f0;
-    border-radius: 0.75rem;
+    width: 100%;
+    padding: 0.75rem 1rem 0.75rem 3rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    font-size: 1rem;
     transition: all 0.2s;
-    background: #f8fafc;
 }
 
 .searchInput:focus {
     outline: none;
-    border-color: #6366f1;
-    background: white;
-    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .searchBtn {
-    padding: 1rem 2rem;
-    background: #6366f1;
+    background: #1e293b;
     color: white;
+    padding: 0.75rem 2rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
     border: none;
-    border-radius: 0.75rem;
-    font-weight: 700;
-    font-size: 1rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background 0.2s;
 }
 
-.searchBtn:hover:not(:disabled) {
-    background: #4f46e5;
-    transform: translateY(-1px);
+.searchBtn:hover {
+    background: #0f172a;
 }
 
 .searchBtn:disabled {
-    background: #cbd5e1;
+    background: #94a3b8;
     cursor: not-allowed;
 }
 
-.emptyState {
-    text-align: center;
-    padding: 4rem 2rem;
-    background: #f8fafc;
-    border-radius: 1rem;
-    border: 2px dashed #e2e8f0;
-}
-
-.emptyIcon {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-    opacity: 0.5;
-}
-
-.emptyState h3 {
-    margin: 0 0 0.5rem 0;
-    color: #334155;
-    font-size: 1.25rem;
-}
-
-.emptyState p {
-    color: #64748b;
-    margin: 0;
-}
-
-/* Tracking Stepper Styles */
-.stepperContainer {
-    margin-top: 2rem;
-}
-
-.stepperHeader {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    background: #f8fafc;
-    border-radius: 0.75rem;
-    border: 1px solid #e2e8f0;
-}
-
-.barcodeTitle {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: #1e293b;
-    margin: 0;
-}
-
-.stepperScrollArea {
-    padding: 1rem 0;
-}
-
-.stepperWrapper {
-    display: flex;
-    flex-direction: column;
-    padding: 0 1rem;
-    position: relative;
-}
-
-.step {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    position: relative;
-    padding-bottom: 2.5rem;
-}
-
-.step:last-child {
-    padding-bottom: 0;
-}
-
-.stepLine {
-    position: absolute;
-    top: 48px;
-    bottom: 0;
-    left: 22px;
-    width: 4px;
-    background: #e2e8f0;
-    z-index: 0;
-}
-
-.stepIcon {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: white;
-    border: 4px solid #e2e8f0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    z-index: 2;
-    transition: all 0.3s;
-    flex-shrink: 0;
-    margin-right: 1.5rem;
-}
-
-.stepIcon.passed {
-    border-color: #10b981;
-    color: #10b981;
-}
-
-.stepIcon.failed {
-    border-color: #ef4444;
-    color: #ef4444;
-}
-
-.stepIcon.rework {
-    border-color: #f59e0b;
-    color: #f59e0b;
-}
-
-.stepIcon.pending {
-    border-color: #e2e8f0;
-    color: #cbd5e1;
-}
-
-.stepContent {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-}
-
-.stepStation {
-    font-weight: 800;
-    color: #1e293b;
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
-    margin-top: 0.25rem;
-}
-
-.stepDetails {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.5rem;
+.errorBox {
+    background: #fef2f2;
+    border: 1px solid #fee2e2;
+    color: #b91c1c;
     padding: 1rem;
-    width: 100%;
-    max-width: 600px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    font-size: 0.875rem;
-    color: #475569;
-}
-
-.detailRow {
+    border-radius: 0.5rem;
     display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
 }
 
-.detailRow:last-child {
+.resultGrid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 2rem;
+}
+
+@media (max-width: 768px) {
+    .resultGrid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.infoCard, .timelineCard {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    padding: 1.5rem;
+}
+
+.cardTitle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.infoGrid {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.infoItem label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.infoItem span {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.stageBadge {
+    display: inline-block;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem !important;
+}
+
+.timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e2e8f0;
+}
+
+.timelineItem {
+    position: relative;
+    margin-bottom: 2rem;
+}
+
+.timelineItem:last-child {
     margin-bottom: 0;
 }
 
-.detailLabel {
-    font-weight: 600;
-    min-width: 50px;
+.timelineMarker {
+    position: absolute;
+    left: -2rem;
+    background: white;
+    padding: 0.25rem;
+    border-radius: 50%;
 }
 
-.statusBadge {
-    display: inline-block;
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
+.timelineContent {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid #f1f5f9;
+}
+
+.timelineHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.timelineStage {
     font-weight: 700;
-    font-size: 0.7rem;
-    text-transform: uppercase;
+    color: #1e293b;
+    font-size: 1rem;
 }
 
-.statusBadge.accepted {
-    background: #dcfce7;
-    color: #166534;
+.timelineTime {
+    font-size: 0.75rem;
+    color: #64748b;
 }
 
-.statusBadge.debug {
-    background: #fee2e2;
-    color: #991b1b;
+.timelineStatus, .timelineOperator, .timelineRemarks {
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+    color: #64748b;
 }
 
-.statusBadge.rework {
-    background: #fef3c7;
-    color: #92400e;
+.timelineStatus span, .timelineOperator span, .timelineRemarks span {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.statusTextaccepted, .statusTextpassed { color: #10b981 !important; }
+.statusTextrework { color: #f59e0b !important; }
+.statusTextdebug { color: #ef4444 !important; }
+
+.statusPass { color: #10b981; }
+.statusRework { color: #f59e0b; }
+.statusDebug { color: #ef4444; }
+.statusPending { color: #94a3b8; }
+
+.emptyTimeline {
+    text-align: center;
+    padding: 2rem;
+    color: #64748b;
 }

@@ -32,6 +32,7 @@ export const Layout: React.FC = () => {
                     )}
                     <div style={{
                         flex: 1,
+                        minWidth: 0,
                         marginLeft: showSidebar ? (isExpanded ? '266px' : '76px') : '0', // 250+8+8 vs 60+8+8
                         marginTop: showSidebar ? '88px' : '0', // 72px height + 8px top + 8px gap
                         minHeight: showSidebar ? 'calc(100vh - 88px)' : '100vh',

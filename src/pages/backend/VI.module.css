@@ -51,11 +51,11 @@
 .backBtn {
     background: none;
     border: none;
-    padding: 0.5rem;
-    border-radius: 0.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 0.5rem;
+    border-radius: 50%;
     cursor: pointer;
     color: #64748b;
     transition: all 0.2s;
@@ -198,6 +198,16 @@
     width: 100%;
     border-collapse: collapse;
 }
+
+.scanTable tbody tr:nth-child(even) {
+    background-color: #f1f5f9;
+}
+.actionColumn {
+    padding: 0.875rem 1.25rem;
+    text-align: center !important;
+    white-space: nowrap;
+}
+
 
 .scanTable th {
     background: #f8fafc;
@@ -636,18 +646,18 @@
     font-weight: 600;
 }
 
-.reworkBadge {
+.debugBadge {
     padding: 0.25rem 0.6rem;
-    background: #ffedd5;
+    background: #ffedd5; /* Orange/Yellow */
     color: #9a3412;
     border-radius: 9999px;
     font-size: 0.75rem;
     font-weight: 600;
 }
 
-.failedBadge {
+.reworkBadge, .failedBadge, .remarkBadge {
     padding: 0.25rem 0.6rem;
-    background: #fee2e2;
+    background: #fee2e2; /* Red */
     color: #991b1b;
     border-radius: 9999px;
     font-size: 0.75rem;
@@ -755,6 +765,19 @@
     color: #475569;
 }
 
+/* Default blue border for the primary action (Pass) */
+.decisionBtn.defaultAction {
+    border-color: #6366f1;
+    background: #f1f5ff;
+}
+
+/* Remove default border ONLY when hovering over another button */
+.decisionGrid:has(.decisionBtn:hover) .decisionBtn.defaultAction:not(:hover) {
+    border-color: #e2e8f0;
+    background: white;
+}
+
+/* Re-apply border/background if the user specifically hovers over any button (including Pass) */
 .decisionBtn:hover {
     border-color: #6366f1;
     background: #f8fafc;

@@ -5,19 +5,23 @@ import sharedStyles from '../smt/WorkOrder.module.css';
 
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
-import { Search, ArrowLeft, Eye, AlertTriangle } from 'lucide-react';
+import SearchInput from '../../components/SearchInput';
+import ScanDecisionModal from '../../components/ScanDecisionModal';
+import { Search, ArrowLeft, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 
 interface Batch {
     id: number;
+    work_order_id: number;
+    wo_number: string;
     batch_number: string;
     customer_name?: string;
     model?: string;
-    wo_qty: number;
-    scanned_qty: number;
-    passed: number;
-    failed: number;
+    workOrderQty: number;
+    sourceStage?: string;
+    scanned: number; // Number of items currently in Rework for this batch/WO/Stage
     rework: number;
     debug: number;
+    passed: number;
     status: 'pending' | 'in_progress' | 'completed';
 }
 
@@ -28,30 +32,47 @@ interface ScanRecord {
     scanned_at: string;
     status: string;
     remarks?: string;
-    remark_debug_time?: string;
-    remark_debug_remarks?: string;
+    repair_time?: string;
+    repair_remark?: string;
+    failed_at?: string;
+    failed_remarks?: string;
 }
 
 const Rework: React.FC = () => {
     const { user } = useAuth();
     const { showToast } = useToast();
 
-    const [batches, setBatches] = useState<Batch[]>([]);
+    const [activeFailureBatches, setActiveFailureBatches] = useState<Batch[]>([]);
+    const [page, setPage] = useState(1);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalRecords, setTotalRecords] = useState(0);
+
     const [activeBatch, setActiveBatch] = useState<Batch | null>(null);
     const [scannedItems, setScannedItems] = useState<ScanRecord[]>([]);
-
-    const [barcode, setBarcode] = useState('');
     const [tableSearch, setTableSearch] = useState('');
     const [isScanning, setIsScanning] = useState(false);
+    const [scanTotalRecords, setScanTotalRecords] = useState(0);
 
+    const [barcode, setBarcode] = useState('');
     const scanInputRef = useRef<HTMLInputElement>(null);
+    const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchBatches();
-    }, []);
+        fetchActiveBatches();
+        
+        // Add polling for real-time visibility (every 10 seconds)
+        const interval = setInterval(() => {
+            if (!activeBatch) {
+                fetchActiveBatches();
+            }
+        }, 10000);
+
+        return () => clearInterval(interval);
+    }, [page, searchTerm, activeBatch]);
 
     useEffect(() => {
-        if (activeBatch && scanInputRef.current) {
+        if (activeBatch && scanInputRef.current && !pendingBarcode) {
             scanInputRef.current.focus();
         }
     });
@@ -62,19 +83,22 @@ const Rework: React.FC = () => {
         }
     }, [barcode, isScanning, activeBatch]);
 
-    const fetchBatches = async () => {
+    const fetchActiveBatches = async () => {
         try {
-            const data = await apiFetch('/api/backend/rework/batch');
-            setBatches(Array.isArray(data) ? data : []);
+            const data = await apiFetch(`/api/backend/rework/batch?page=${page}&limit=10&search=${searchTerm}`);
+            setActiveFailureBatches(data.data || []);
+            setTotalPages(data.totalPages || 1);
+            setTotalRecords(data.total || 0);
         } catch (error) {
-            showToast('Failed to load batches', 'error');
+            console.error("Error fetching rework batches:", error);
         }
     };
 
-    const fetchScans = async (batchId: number) => {
+    const fetchScans = async (batchId: number, page = 1) => {
         try {
-            const data = await apiFetch(`/api/backend/rework/scan/${batchId}`);
-            setScannedItems(Array.isArray(data) ? data : []);
+            const data = await apiFetch(`/api/backend/rework/scan/${batchId}?page=${page}&limit=50`);
+            setScannedItems(data.data || []);
+            setScanTotalRecords(data.total || 0);
         } catch (error) {
             console.error('Error fetching scans:', error);
             setScannedItems([]);
@@ -86,79 +110,79 @@ const Rework: React.FC = () => {
             await fetchScans(batch.id);
             setActiveBatch(batch);
             setBarcode('');
-            showToast(`Starting session for ${batch.batch_number}`, 'success');
+            showToast(`Repair session started for ${batch.batch_number}`, 'success');
         } catch (error) {
-            showToast('Failed to load batch scans', 'error');
+            showToast('Failed to load batch failures', 'error');
         }
     };
 
     const handleEndSession = () => {
         setActiveBatch(null);
-        fetchBatches();
+        fetchActiveBatches();
     };
 
     const handleScan = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        const scancode = barcode.trim().toUpperCase();
-        if (!scancode || isScanning || !activeBatch) return;
+        if (!barcode.trim() || isScanning || !activeBatch) return;
+        setPendingBarcode(barcode.trim().toUpperCase());
+        setBarcode('');
+    };
+
+    const handleScanFinalize = async (_status: string, remarks?: string) => {
+        if (!pendingBarcode || !activeBatch) return;
+        if (!remarks?.trim()) {
+            showToast('Repair remark is mandatory', 'error');
+            return;
+        }
 
         setIsScanning(true);
-        setBarcode('');
         try {
-            const newScan = await apiFetch('/api/backend/rework/scan', {
+            const response = await apiFetch('/api/backend/rework/scan', {
                 method: 'POST',
                 body: JSON.stringify({
                     batch_id: activeBatch.id,
-                    barcode: scancode,
+                    work_order_id: activeBatch.work_order_id,
+                    barcode: pendingBarcode,
                     scanned_by: user?.name || 'Operator',
-                    status: 'accepted'
+                    status: 'ACCEPTED', // Always ACCEPTED from rework
+                    remarks: remarks
                 })
             });
 
-            setScannedItems(prev => [newScan, ...prev]);
-            showToast(`Item ${scancode} marked as RESOLVED (PASS)`, 'success');
-
-            const updatedBatches = await apiFetch('/api/backend/rework/batch');
-            const safeBatches = Array.isArray(updatedBatches) ? updatedBatches : [];
-            setBatches(safeBatches);
-            const currentBatch = safeBatches.find((b: Batch) => b.id === activeBatch.id);
-            if (currentBatch && currentBatch.status === 'completed') {
-                showToast('Batch completed successfully!', 'success');
-                setActiveBatch(null);
+            if (response.success) {
+                showToast(response.message || 'Item resolved', 'success');
+                setPendingBarcode(null);
+                fetchScans(activeBatch.id, 1);
+                fetchActiveBatches();
+                
+                // Refresh the active batch counters
+                const updatedBatches = await apiFetch(`/api/backend/rework/batch?search=${activeBatch.batch_number}`);
+                const updated = updatedBatches.data?.find((b: Batch) => b.id === activeBatch.id);
+                if (updated) {
+                    setActiveBatch(updated);
+                } else {
+                    // Batch disappeared because no more failures
+                    showToast('All failures resolved for this batch!', 'success');
+                    setActiveBatch(null);
+                }
             }
         } catch (error: any) {
             showToast(error.message || 'Scan failed', 'error');
+            setPendingBarcode(null);
         } finally {
             setIsScanning(false);
         }
     };
 
-    const handleDeleteBatch = async (batchId: number) => {
-        if (!window.confirm('Are you sure you want to delete this batch? This action cannot be undone.')) return;
-        try {
-            await apiFetch(`/api/backend/rework/batch/${batchId}`, {
-                method: 'DELETE'
-            });
-            showToast('Batch deleted successfully', 'success');
-            fetchBatches();
-        } catch (error) {
-            showToast('Failed to delete batch', 'error');
-        }
-    };
-
-    const safeScannedItems = Array.isArray(scannedItems) ? scannedItems : [];
-    const filteredItems = safeScannedItems.filter(item =>
-        item.barcode?.toLowerCase().includes(tableSearch.toLowerCase())
-    );
-
-    const safeBatches = Array.isArray(batches) ? batches : [];
-    const pendingBatches = safeBatches.filter(b => b.status !== 'completed');
-    const completedBatches = safeBatches.filter(b => b.status === 'completed');
-
-    const BatchTable = ({ data, title, showDelete = false }: { data: Batch[], title: string, showDelete?: boolean }) => (
-        <div className={styles.card} style={{ marginBottom: '2rem' }}>
+    const BatchTable = () => (
+        <div className={styles.card}>
             <div className={styles.tableHeader}>
-                <h3 style={{ margin: 0 }}>{title} ({data.length})</h3>
+                <h3 style={{ margin: 0 }}>Pending Rework ({totalRecords})</h3>
+                <SearchInput 
+                    value={searchTerm} 
+                    onChange={setSearchTerm} 
+                    placeholder="Search Work Order..." 
+                />
             </div>
             <div className={styles.tableWrapper}>
                 <table className={styles.scanTable}>
@@ -167,48 +191,56 @@ const Rework: React.FC = () => {
                             <th>Batch Number</th>
                             <th>Customer</th>
                             <th>Model</th>
-                            <th>Total QTY</th>
+                            <th>Work Order Qty</th>
+                            <th>Source Stage</th>
                             <th>Scanned</th>
+                            <th>Pending</th>
                             <th>Passed</th>
                             <th>Rework</th>
                             <th>Debug</th>
-                            <th style={{ textAlign: 'center' }}>Action</th>
+                            <th className={styles.actionColumn}>Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {data.length > 0 ? (
-                            data.map(batch => (
-                                <tr key={batch.id}>
+                        {activeFailureBatches.length > 0 ? (
+                            activeFailureBatches.map(batch => (
+                                <tr key={`${batch.id}-${batch.sourceStage}`}>
                                     <td style={{ fontWeight: 700 }}>{batch.batch_number}</td>
                                     <td>{batch.customer_name || "-"}</td>
                                     <td>{batch.model || "-"}</td>
-                                    <td style={{ fontWeight: 600 }}>{batch.wo_qty}</td>
-                                    <td className={styles.statusBlue}>{batch.scanned_qty ?? 0}</td>
-                                    <td className={styles.statusGreen}>{batch.passed ?? 0}</td>
-                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.rework ?? 0}</td>
-                                    <td style={{ color: '#ef4444', fontWeight: 700 }}>{batch.debug ?? 0}</td>
-                                    <td>
-                                        <div className={sharedStyles.actions}>
-                                            <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
-                                                {batch.status === 'completed' ? <><Eye size={14} /> View</> : <><Search size={14} /> Start Scanning</>}
-                                            </button>
-                                            {showDelete && (user?.role || '').toLowerCase().includes('admin') && (
-                                                <button 
-                                                    className={sharedStyles.deleteBtn} onClick={() => handleDeleteBatch(batch.id)}
-                                                >
-                                                    <AlertTriangle size={14} /> Delete
-                                                </button>
-                                            )}
-                                        </div>
+                                    <td style={{ fontWeight: 600 }}>{batch.workOrderQty}</td>
+                                    <td style={{ color: '#6366f1', fontWeight: 700 }}>{batch.sourceStage}</td>
+                                    <td className={styles.statusBlue}>0</td>
+                                    <td style={{ color: 'orange', fontWeight: 700 }}>{batch.rework}</td>
+                                    <td className={styles.statusGreen}>0</td>
+                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.rework}</td>
+                                    <td style={{ color: '#ef4444', fontWeight: 700 }}>0</td>
+                                    <td className={styles.actionColumn}>
+                                        <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
+                                            <Search size={14} /> Start Repair
+                                        </button>
                                     </td>
                                 </tr>
                             ))
                         ) : (
-                            <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}>No {title.toLowerCase()}</td></tr>
+                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '3rem' }}>No active rework failures found.</td></tr>
                         )}
                     </tbody>
                 </table>
             </div>
+
+            {totalRecords > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', padding: '0 1rem', paddingBottom: '1rem' }}>
+                    <span style={{ fontSize: '0.875rem', color: '#64748b' }}>
+                        Showing {(page - 1) * 10 + 1}-{Math.min(page * 10, totalRecords)} of {totalRecords} batches
+                    </span>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <button className={sharedStyles.secondaryButton} disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Page {page} of {totalPages}</span>
+                        <button className={sharedStyles.secondaryButton} disabled={page === totalPages} onClick={() => setPage(page + 1)}>Next</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 
@@ -218,13 +250,11 @@ const Rework: React.FC = () => {
                 <>
                     <div className={styles.header}>
                         <div>
-                            <h2>⚙️ Rework Stage</h2>
-                            <p>Resolve items marked for Rework.</p>
+                            <h2>🛠️ Rework Stage</h2>
+                            <p>Process repaired boards and return them to the production line.</p>
                         </div>
                     </div>
-
-                    <BatchTable data={pendingBatches} title="Pending Batches" showDelete={true} />
-                    <BatchTable data={completedBatches} title="Completed Batches" showDelete={false} />
+                    <BatchTable />
                 </>
             ) : (
                 <>
@@ -238,48 +268,83 @@ const Rework: React.FC = () => {
                             </div>
                             <h1 className={styles.woNumber}>{activeBatch.batch_number}</h1>
                             <p className={styles.woMeta}>
-                                🏭 Total: {activeBatch.wo_qty} |
-                                ✅ Scanned: {activeBatch.scanned_qty} |
-                                📝 Passed: {activeBatch.passed} |
-                                ⚠️ Rework: {activeBatch.rework} |
-                                🛠️ Debug: {activeBatch.debug}
+                                📥 Active Failures: <span style={{ color: '#ef4444', fontWeight: 800 }}>{activeBatch.rework}</span> |
+                                📋 Work Order Qty: {activeBatch.workOrderQty}
                             </p>
                         </div>
-                        {activeBatch.status !== 'completed' && (
-                            <button className={sharedStyles.secondaryButton} onClick={handleEndSession}>
-                                Close Session
-                            </button>
-                        )}
+                        <button className={sharedStyles.secondaryButton} onClick={handleEndSession}>Close Session</button>
                     </div>
 
                     <div className={styles.scanContent}>
-                        {activeBatch.status !== 'completed' && (
-                            <>
-                                <div className={styles.operatorSection}>
-                                    <label>Scanned By</label>
-                                    <input type="text" className={styles.operatorInput} value={user?.name || ""} disabled />
+                        {/* Session Counters */}
+                        <div className={sharedStyles.statsGrid} style={{ marginBottom: '1.5rem' }}>
+                            <div className={sharedStyles.statCard}>
+                                <div className={sharedStyles.statHeader}>
+                                    <span className={sharedStyles.statTitle}>SCANNED</span>
+                                    <div className={`${sharedStyles.statIcon} ${sharedStyles.blue}`}>
+                                        <Search size={16} />
+                                    </div>
                                 </div>
+                                <div className={sharedStyles.statValue}>{scannedItems.length}</div>
+                                <div className={sharedStyles.statLabel}>Processed in session</div>
+                            </div>
+                            <div className={sharedStyles.statCard}>
+                                <div className={sharedStyles.statHeader}>
+                                    <span className={sharedStyles.statTitle}>PENDING</span>
+                                    <div className={`${sharedStyles.statIcon} ${sharedStyles.orange}`}>
+                                        <Clock size={16} />
+                                    </div>
+                                </div>
+                                <div className={sharedStyles.statValue}>{activeBatch.rework}</div>
+                                <div className={sharedStyles.statLabel}>Waiting for repair</div>
+                            </div>
+                            <div className={sharedStyles.statCard}>
+                                <div className={sharedStyles.statHeader}>
+                                    <span className={sharedStyles.statTitle}>PASSED</span>
+                                    <div className={`${sharedStyles.statIcon} ${sharedStyles.green}`}>
+                                        <CheckCircle size={16} />
+                                    </div>
+                                </div>
+                                <div className={sharedStyles.statValue}>{scannedItems.length}</div>
+                                <div className={sharedStyles.statLabel}>Successfully repaired</div>
+                            </div>
+                            <div className={sharedStyles.statCard}>
+                                <div className={sharedStyles.statHeader}>
+                                    <span className={sharedStyles.statTitle}>REWORK</span>
+                                    <div className={`${sharedStyles.statIcon} ${sharedStyles.red}`}>
+                                        <AlertTriangle size={16} />
+                                    </div>
+                                </div>
+                                <div className={sharedStyles.statValue}>{activeBatch.rework}</div>
+                                <div className={sharedStyles.statLabel}>Active failures</div>
+                            </div>
+                        </div>
 
-                                <div className={styles.scanBoxWrapper}>
-                                    <form onSubmit={handleScan} className={styles.scanBox}>
-                                        <input
-                                            ref={scanInputRef}
-                                            type="text"
-                                            className={styles.largeScanInput}
-                                            placeholder="Scan Rework Barcode to Resolve..."
-                                            value={barcode}
-                                            onChange={(e) => setBarcode(e.target.value)}
-                                            autoFocus
-                                        />
-                                        <button type="submit" className={styles.largeScanBtn} disabled={isScanning}>{isScanning ? '...' : 'SCAN'}</button>
-                                    </form>
-                                </div>
-                            </>
-                        )}
+                        <div className={styles.operatorSection}>
+                            <label>Repair Operator</label>
+                            <input type="text" className={styles.operatorInput} value={user?.name || ""} disabled />
+                        </div>
+
+                        <div className={styles.scanBoxWrapper}>
+                            <form onSubmit={handleScan} className={styles.scanBox}>
+                                <input
+                                    ref={scanInputRef}
+                                    type="text"
+                                    className={styles.largeScanInput}
+                                    placeholder="Scan Repaired Barcode..."
+                                    value={barcode}
+                                    onChange={(e) => setBarcode(e.target.value)}
+                                    autoFocus
+                                />
+                                <button type="submit" className={styles.largeScanBtn} disabled={isScanning}>
+                                    {isScanning ? '...' : 'SCAN'}
+                                </button>
+                            </form>
+                        </div>
 
                         <div className={styles.tableCard}>
                             <div className={styles.tableHeader}>
-                                <h3>Scanned Items ({scannedItems.length})</h3>
+                                <h3>Recently Repaired ({scanTotalRecords})</h3>
                                 <div className={styles.tableSearchWrapper}>
                                     <Search size={16} className={styles.tableSearchIcon} />
                                     <input
@@ -296,33 +361,28 @@ const Rework: React.FC = () => {
                                     <thead>
                                         <tr>
                                             <th>BARCODE</th>
-                                            <th>SCANNED BY</th>
-                                            <th>DATE & TIME</th>
+                                            <th>REWORKED BY</th>
+                                            <th>REWORK DATE & TIME</th>
                                             <th>STATUS</th>
-                                            <th>REMARK/DEBUG TIME</th>
-                                            <th>Remarks</th>
-                                            <th>REMARK/DEBUG Remarks</th>
+                                            <th>FAILURE DATE & TIME</th>
+                                            <th>FAILURE REMARK</th>
+                                            <th>REWORK REMARK</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredItems.length > 0 ? (
-                                            filteredItems.map((scan) => (
-                                                <tr key={scan.id}>
-                                                    <td className={styles.barcodeCell}>{scan.barcode || '-'}</td>
-                                                    <td>{scan.scanned_by || '-'}</td>
-                                                    <td>{scan.scanned_at ? new Date(scan.scanned_at).toLocaleString() : '-'}</td>
-                                                    <td>
-                                                        <span className={styles[`${(scan.status || '').toLowerCase()}Badge`] || styles.acceptedBadge}>
-                                                            {(scan.status || '-').toUpperCase()}
-                                                        </span>
-                                                    </td>
-                                                    <td>{scan.remark_debug_time ? new Date(scan.remark_debug_time).toLocaleString() : '-'}</td>
-                                                    <td>{scan.remarks || '-'}</td>
-                                                    <td>{scan.remark_debug_remarks || '-'}</td>
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem' }}>No items scanned.</td></tr>
+                                        {scannedItems.filter(s => s.barcode?.toLowerCase().includes(tableSearch.toLowerCase())).map((scan) => (
+                                            <tr key={scan.id}>
+                                                <td className={styles.barcodeCell}>{scan.barcode}</td>
+                                                <td>{scan.scanned_by}</td>
+                                                <td>{new Date(scan.scanned_at).toLocaleString()}</td>
+                                                <td><span className={styles.acceptedBadge}>PASSED</span></td>
+                                                <td>{scan.failed_at ? new Date(scan.failed_at).toLocaleString() : '-'}</td>
+                                                <td style={{ color: '#ef4444' }}>{scan.failed_remarks || '-'}</td>
+                                                <td style={{ fontWeight: 600 }}>{scan.remarks || '-'}</td>
+                                            </tr>
+                                        ))}
+                                        {scannedItems.length === 0 && (
+                                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '3rem' }}>No repairs recorded in this session.</td></tr>
                                         )}
                                     </tbody>
                                 </table>
@@ -330,6 +390,15 @@ const Rework: React.FC = () => {
                         </div>
                     </div>
                 </>
+            )}
+
+            {pendingBarcode && (
+                <ScanDecisionModal
+                    barcode={pendingBarcode}
+                    repairMode={true}
+                    onFinalize={handleScanFinalize}
+                    onClose={() => setPendingBarcode(null)}
+                />
             )}
         </div>
     );

@@ -1,4 +1,4 @@
-/* PTH.module.css */
+/* Rework.module.css */
 .container {
     padding: 1.5rem;
     background-color: #f8fafc;
@@ -215,6 +215,10 @@
     border-bottom: 1px solid #f1f5f9;
     font-size: 0.875rem;
     color: #475569;
+    vertical-align: top;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-width: 120px;
 }
 
 .barcodeCell {
@@ -795,3 +799,5 @@
 .debugIcon {
     color: #ef4444;
 }
+
+.scanContent { display: flex; flex-direction: column; gap: 1.5rem; }

@@ -40,6 +40,7 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
     const scanInputRef = useRef<HTMLInputElement>(null);
+    const [allValidSerials, setAllValidSerials] = useState<any[]>([]);
 
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastId.current;
@@ -60,6 +61,7 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
             if (eligibleRes.ok) {
                 const eligibleData = await eligibleRes.json();
                 setTotalSerials(eligibleData.length);
+                setAllValidSerials(eligibleData);
             }
 
             const inspUrl = new URL('/api/smt/inspections', window.location.origin);
@@ -67,7 +69,7 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
             inspUrl.searchParams.set('process_step', 'Previous Soldering');
             const res = await fetch(inspUrl.toString());
             const data = res.ok ? await res.json() : [];
-            
+
             const visited = data.map((i: any) => ({
                 id: i.serial_id,
                 serial_number: i.serial_number,
@@ -103,7 +105,7 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
                 })
             });
             if (res.ok) {
-                setTableSerials(prev => prev.map(s => 
+                setTableSerials(prev => prev.map(s =>
                     s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'Previous Soldering' } : s
                 ));
                 addToast('Item marked as PASS.', 'success');
@@ -134,7 +136,7 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
                 })
             });
             if (res.ok) {
-                setTableSerials(prev => prev.map(s => 
+                setTableSerials(prev => prev.map(s =>
                     s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Previous Soldering', rework_reason: reason.trim() } : s
                 ));
                 addToast('Item marked as FAIL with rework.', 'info');
@@ -159,35 +161,38 @@ const PreviousSolderingDetail: React.FC<PreviousSolderingDetailProps> = ({ woId,
             return;
         }
 
-        try {
-            const url = new URL('/api/smt/serial-numbers', window.location.origin);
-            url.searchParams.set('work_order_id', woId);
-            url.searchParams.set('filter_step', 'SPI,Post AOI,rework');
-            url.searchParams.set('filter_status', 'PASS');
+        const match = allValidSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
 
-            const res = await fetch(url.toString());
-            if (!res.ok) { addToast('Server error during validation.', 'error'); return; }
-
-            const passedItems: any[] = await res.json();
-            const match = passedItems.find((s: any) =>
-                [s.serial_number, s.barcode].some(v =>
-                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-                )
-            );
-
-            if (!match) {
-                addToast(`Barcode ${barcodeInput} has not passed previous inspection stages.`, 'error');
-                setScanBarcode('');
-                return;
-            }
-
-            setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'Previous Soldering' }, ...prev]);
+        if (!match) {
+            addToast(`Barcode ${barcodeInput} has not passed previous inspection stages.`, 'error');
             setScanBarcode('');
-            addToast(`${match.serial_number} scanned successfully.`, 'success');
-        } catch {
-            addToast('Connection error.', 'error');
+            return;
         }
+
+        setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'Previous Soldering' }, ...prev]);
+        setScanBarcode('');
+        addToast(`${match.serial_number} scanned successfully.`, 'success');
     };
+
+    // Auto-scan effect
+    useEffect(() => {
+        const cleanInput = (scanBarcode || '').trim().replace(/-/g, '').toUpperCase();
+        if (cleanInput.length < 5) return;
+
+        const match = allValidSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+
+        if (match) {
+            processScan(scanBarcode);
+        }
+    }, [scanBarcode, allValidSerials]);
 
     return (
         <>
@@ -403,170 +408,170 @@ export const PreviousSoldering: React.FC = () => {
         <>
             <Toaster toasts={toasts} onRemove={removeToast} />
             <div className={styles.container}>
-            <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🔥 Previous Soldering</h2>
-                    <p style={{ color: '#64748b' }}>Manage Pre-Soldering tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
+                <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🔥 Previous Soldering</h2>
+                        <p style={{ color: '#64748b' }}>Manage Pre-Soldering tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to logout from SMT?")) {
+                                smtLogout();
+                            }
+                        }}
+                        className={styles.secondaryButton}
+                        style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <span>🔒</span> Logout SMT
+                    </button>
                 </div>
-                <button
-                    onClick={() => {
-                        if (window.confirm("Are you sure you want to logout from SMT?")) {
-                            smtLogout();
-                        }
-                    }}
-                    className={styles.secondaryButton}
-                    style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                    <span>🔒</span> Logout SMT
-                </button>
-            </div>
 
-            {viewingWoId ? (
-                <PreviousSolderingDetail
-                    woId={viewingWoId}
-                    onBack={() => setViewingWoId(null)}
-                    operatorName={smtUser?.name || 'System'}
-                />
-            ) : (
-                <>
-                    <div className={styles.card}>
-                        <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Soldering Setup Form</h3>
-                        <div className={styles.formGrid}>
-                            <div className={styles.inputGroup}>
-                                <label>Select Work Order *</label>
-                                <select
-                                    className={styles.input}
-                                    value={formWoId}
-                                    onChange={(e) => handleSelectWo(e.target.value)}
-                                >
-                                    <option value="">-- Select Work Order --</option>
-                                    {workOrders.map((wo) => (
-                                        <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
-                                            {wo.id || wo.work_order_id} - {wo.product_name}
-                                        </option>
-                                    ))}
-                                </select>
+                {viewingWoId ? (
+                    <PreviousSolderingDetail
+                        woId={viewingWoId}
+                        onBack={() => setViewingWoId(null)}
+                        operatorName={smtUser?.name || 'System'}
+                    />
+                ) : (
+                    <>
+                        <div className={styles.card}>
+                            <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Soldering Setup Form</h3>
+                            <div className={styles.formGrid}>
+                                <div className={styles.inputGroup}>
+                                    <label>Select Work Order *</label>
+                                    <select
+                                        className={styles.input}
+                                        value={formWoId}
+                                        onChange={(e) => handleSelectWo(e.target.value)}
+                                    >
+                                        <option value="">-- Select Work Order --</option>
+                                        {workOrders.map((wo) => (
+                                            <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
+                                                {wo.id || wo.work_order_id} - {wo.product_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Product Name (Auto-filled)</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={productName}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>WO Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        value={woQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Panel Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        value={panelQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Generated By *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={createdBy}
+                                        readOnly
+                                        style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}
+                                    />
+                                </div>
                             </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Product Name (Auto-filled)</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={productName}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>WO Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    value={woQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Panel Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    value={panelQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Generated By *</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={createdBy}
-                                    readOnly
-                                    style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}
-                                />
+                            <div style={{ marginTop: '30px' }}>
+                                <button className={styles.button} onClick={handleStartProcess}>
+                                    Start Soldering Process
+                                </button>
                             </div>
                         </div>
-                        <div style={{ marginTop: '30px' }}>
-                            <button className={styles.button} onClick={handleStartProcess}>
-                                Start Soldering Process
-                            </button>
-                        </div>
-                    </div>
 
-                    <div className={styles.card}>
-                        <h3>Recent Soldering Entries</h3>
-                        <div className={styles.tableContainer}>
-                            <table className={styles.table}>
-                                <thead>
-                                    <tr>
-                                        <th>WO NUMBER</th>
-                                        <th>PRODUCT NAME</th>
-                                        <th>WO QTY</th>
-                                        <th>PANEL QTY</th>
-                                        <th>TIME</th>
-                                        <th>ACTION</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {savedEntries.map((entry) => (
-                                        <tr key={entry.id}>
-                                            <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
-                                            <td>{(entry.product_name || '').toUpperCase()}</td>
-                                            <td>{entry.quantity || entry.wo_qty}</td>
-                                            <td>{entry.panel_qty || 'N/A'}</td>
-                                            <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                                {new Date(entry.timestamp).toLocaleTimeString()}
-                                            </td>
-                                            <td style={{ display: 'flex', gap: '5px' }}>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                    onClick={() => setViewingWoId(entry.work_order_id)}
-                                                >
-                                                    View
-                                                </button>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                    onClick={async () => {
-                                                        if (!isSuperAdmin) {
-                                                            addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                            return;
-                                                        }
-                                                        if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                            const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                            if (res.ok) {
-                                                                setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                                                                addToast("Entry deleted successfully.", "success");
-                                                            }
-                                                        }
-                                                    }}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {savedEntries.length === 0 && (
+                        <div className={styles.card}>
+                            <h3>Recent Soldering Entries</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
                                         <tr>
-                                            <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                No recent entries found.
-                                            </td>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>TIME</th>
+                                            <th>ACTION</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {savedEntries.map((entry) => (
+                                            <tr key={entry.id}>
+                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                                <td>{(entry.product_name || '').toUpperCase()}</td>
+                                                <td>{entry.quantity || entry.wo_qty}</td>
+                                                <td>{entry.panel_qty || 'N/A'}</td>
+                                                <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                    {new Date(entry.timestamp).toLocaleTimeString()}
+                                                </td>
+                                                <td style={{ display: 'flex', gap: '5px' }}>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                                        onClick={() => setViewingWoId(entry.work_order_id)}
+                                                    >
+                                                        View
+                                                    </button>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                        onClick={async () => {
+                                                            if (!isSuperAdmin) {
+                                                                addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                                return;
+                                                            }
+                                                            if (window.confirm("Are you sure you want to delete this entry?")) {
+                                                                const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                if (res.ok) {
+                                                                    setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                                    addToast("Entry deleted successfully.", "success");
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {savedEntries.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No recent entries found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
-                </>
-            )}
-        </div>
+                    </>
+                )}
+            </div>
         </>
     );
 };

@@ -42,6 +42,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
     const scanInputRef = useRef<HTMLInputElement>(null);
+    const [allValidSerials, setAllValidSerials] = useState<any[]>([]);
 
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastId.current;
@@ -61,6 +62,16 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             if (totalRes.ok) {
                 const totalData = await totalRes.json();
                 setTotalSerials(totalData.length);
+                
+                // For Post AOI, valid items are those that passed SPI
+                const validUrl = new URL('/api/smt/serial-numbers', window.location.origin);
+                validUrl.searchParams.set('work_order_id', woId);
+                validUrl.searchParams.set('filter_step', 'SPI');
+                validUrl.searchParams.set('filter_status', 'PASS');
+                const validRes = await fetch(validUrl.toString());
+                if (validRes.ok) {
+                    setAllValidSerials(await validRes.json());
+                }
             }
 
             // Fetch visited items
@@ -110,37 +121,39 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             return;
         }
 
-        try {
-            // Validate: must exist in SPI PASS records for this WO
-            const url = new URL('/api/smt/serial-numbers', window.location.origin);
-            url.searchParams.set('work_order_id', woId);
-            url.searchParams.set('filter_step', 'SPI');
-            url.searchParams.set('filter_status', 'PASS');
+        const match = allValidSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
 
-            const res = await fetch(url.toString());
-            if (!res.ok) { addToast('Server error during validation.', 'error'); return; }
-
-            const spiPassed: any[] = await res.json();
-            const match = spiPassed.find((s: any) =>
-                [s.serial_number, s.barcode].some(v =>
-                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-                )
-            );
-
-            if (!match) {
-                addToast(`Barcode ${barcodeInput} not found or has not passed SPI.`, 'error');
-                setScanBarcode('');
-                return;
-            }
-
-            // Successfully scanned - add to local list as PENDING
-            setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'Post AOI' }, ...prev]);
+        if (!match) {
+            addToast(`Barcode ${barcodeInput} not found or has not passed SPI.`, 'error');
             setScanBarcode('');
-            addToast(`${match.serial_number} scanned successfully.`, 'success');
-        } catch {
-            addToast('Connection error.', 'error');
+            return;
         }
+
+        // Successfully scanned - add to local list as PENDING
+        setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'Post AOI' }, ...prev]);
+        setScanBarcode('');
+        addToast(`${match.serial_number} scanned successfully.`, 'success');
     };
+
+    // Auto-scan effect
+    useEffect(() => {
+        const cleanInput = (scanBarcode || '').trim().replace(/-/g, '').toUpperCase();
+        if (cleanInput.length < 5) return;
+
+        const match = allValidSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+
+        if (match) {
+            processScan(scanBarcode);
+        }
+    }, [scanBarcode, allValidSerials]);
 
     // ── Pass / Fail ─────────────────────────────────────────────────────────
     const handleFailOnly = async (serialId: number) => {

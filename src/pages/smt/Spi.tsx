@@ -40,6 +40,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
     const scanInputRef = useRef<HTMLInputElement>(null);
+    const [allWoSerials, setAllWoSerials] = useState<any[]>([]);
 
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastId.current;
@@ -59,6 +60,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
             if (totalRes.ok) {
                 const totalData = await totalRes.json();
                 setTotalSerials(totalData.length);
+                setAllWoSerials(totalData);
             }
 
             // Fetch SPI history
@@ -116,7 +118,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
     const handleFailOnly = async (serialId: number) => {
         const reason = window.prompt('Please enter the reason for failure (rework):');
         if (reason === null) return;
-        if (!reason.trim()) { addToast('rework is required.', 'error'); return; }
+        if (!reason.trim()) { addToast('Remark is required.', 'error'); return; }
 
         try {
             const res = await fetch('/api/smt/inspections', {
@@ -150,37 +152,74 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
             )
         );
+        
         if (alreadyInTable) {
-            addToast(`Barcode ${barcodeInput} is already in the list.`, 'info');
+            // If it's already in the table but PENDING, we could auto-pass it here too
+            if (alreadyInTable.last_status !== 'PASS' && alreadyInTable.last_status !== 'FAIL') {
+                handlePass(alreadyInTable.id);
+            } else {
+                addToast(`Barcode ${barcodeInput} is already processed.`, 'info');
+            }
             setScanBarcode('');
             return;
         }
 
-        try {
-            const url = new URL('/api/smt/serial-numbers', window.location.origin);
-            url.searchParams.set('work_order_id', woId);
+        const match = allWoSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
 
-            const res = await fetch(url.toString());
-            if (!res.ok) { addToast('Server error.', 'error'); return; }
+        if (!match) {
+            // If not in local list, check server just in case
+            try {
+                const url = new URL('/api/smt/serial-numbers', window.location.origin);
+                url.searchParams.set('work_order_id', woId);
+                const res = await fetch(url.toString());
+                if (res.ok) {
+                    const latestSerials = await res.json();
+                    setAllWoSerials(latestSerials);
+                    const secondMatch = latestSerials.find((s: any) =>
+                        [s.serial_number, s.barcode].some(v =>
+                            (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+                        )
+                    );
+                    if (secondMatch) {
+                        setScanBarcode('');
+                        await handlePass(secondMatch.id);
+                        setTableSerials(prev => [{ ...secondMatch, last_status: 'PASS', last_step: 'SPI' }, ...prev]);
+                        return;
+                    }
+                }
+            } catch (e) { console.error(e); }
 
-            const allSerials: any[] = await res.json();
-            const match = allSerials.find((s: any) =>
-                [s.serial_number, s.barcode].some(v =>
-                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-                )
-            );
-
-            if (!match) {
-                addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
-                setScanBarcode('');
-                return;
-            }
-
-            setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'SPI' }, ...prev]);
+            // Still not found
+            addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
             setScanBarcode('');
-            addToast(`${match.serial_number} scanned successfully.`, 'success');
-        } catch { addToast('Connection error.', 'error'); }
+            return;
+        }
+
+        // Automatic Pass on Scan
+        setScanBarcode('');
+        await handlePass(match.id);
+        setTableSerials(prev => [{ ...match, last_status: 'PASS', last_step: 'SPI' }, ...prev]);
     };
+
+    // Auto-scan effect
+    useEffect(() => {
+        const cleanInput = (scanBarcode || '').trim().replace(/-/g, '').toUpperCase();
+        if (cleanInput.length < 5) return; // Min length for auto-trigger
+
+        const match = allWoSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+
+        if (match) {
+            processScan(scanBarcode);
+        }
+    }, [scanBarcode, allWoSerials]);
 
     const handleScan = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -244,6 +283,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                                     <th>SERIAL NUMBER</th>
                                     <th>BARCODE</th>
                                     <th>STATUS</th>
+                                    <th>REMARK</th>
                                     <th>ACTION</th>
                                 </tr>
                             </thead>
@@ -251,7 +291,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                                 {loading ? (
                                     <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
                                 ) : tableSerials.length === 0 ? (
-                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin inspection</td></tr>
+                                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin inspection</td></tr>
                                 ) : tableSerials.map((s, idx) => {
                                     const isPass = s.last_status === 'PASS';
                                     const isFail = s.last_status === 'FAIL';
@@ -274,6 +314,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                                                     {isPass ? '✓ PASSED' : isFail ? '● FAIL' : '🕒 PENDING'}
                                                 </span>
                                             </td>
+                                            <td style={{ color: '#64748b', fontSize: '0.85rem' }}>{s.rework_reason || '-'}</td>
                                             <td>
                                                 <div style={{ display: 'flex', gap: '8px' }}>
                                                     {!isPass && <button onClick={() => handlePass(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#059669' }}>PASS</button>}

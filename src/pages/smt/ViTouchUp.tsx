@@ -41,6 +41,7 @@ const ViTouchUpDetail: React.FC<ViTouchUpDetailProps> = ({ woId, onBack, operato
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
     const scanInputRef = useRef<HTMLInputElement>(null);
+    const [allValidSerials, setAllValidSerials] = useState<any[]>([]);
 
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastId.current;
@@ -61,6 +62,7 @@ const ViTouchUpDetail: React.FC<ViTouchUpDetailProps> = ({ woId, onBack, operato
             if (eligibleRes.ok) {
                 const eligibleData = await eligibleRes.json();
                 setTotalSerials(eligibleData.length);
+                setAllValidSerials(eligibleData);
             }
 
             const inspUrl = new URL('/api/smt/inspections', window.location.origin);
@@ -158,33 +160,38 @@ const ViTouchUpDetail: React.FC<ViTouchUpDetailProps> = ({ woId, onBack, operato
             return;
         }
 
-        try {
-            const url = new URL('/api/smt/serial-numbers', window.location.origin);
-            url.searchParams.set('work_order_id', woId);
-            url.searchParams.set('filter_step', 'Previous Soldering,Post-Work Soldering');
-            url.searchParams.set('filter_status', 'FAIL');
+        const match = allValidSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
 
-            const res = await fetch(url.toString());
-            if (!res.ok) { addToast('Server error.', 'error'); return; }
-
-            const failedItems: any[] = await res.json();
-            const match = failedItems.find((s: any) =>
-                [s.serial_number, s.barcode].some(v =>
-                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-                )
-            );
-
-            if (!match) {
-                addToast(`Barcode ${barcodeInput} did not FAIL at any soldering stage.`, 'error');
-                setScanBarcode('');
-                return;
-            }
-
-            setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'VI / Touch Up' }, ...prev]);
+        if (!match) {
+            addToast(`Barcode ${barcodeInput} did not FAIL at any soldering stage.`, 'error');
             setScanBarcode('');
-            addToast(`${match.serial_number} scanned successfully.`, 'success');
-        } catch { addToast('Connection error.', 'error'); }
+            return;
+        }
+
+        setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'VI / Touch Up' }, ...prev]);
+        setScanBarcode('');
+        addToast(`${match.serial_number} scanned successfully.`, 'success');
     };
+
+    // Auto-scan effect
+    useEffect(() => {
+        const cleanInput = (scanBarcode || '').trim().replace(/-/g, '').toUpperCase();
+        if (cleanInput.length < 5) return;
+
+        const match = allValidSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+
+        if (match) {
+            processScan(scanBarcode);
+        }
+    }, [scanBarcode, allValidSerials]);
 
     return (
         <>

@@ -508,6 +508,10 @@ export const Printing: React.FC = () => {
                                             <th>PRODUCT NAME</th>
                                             <th>WO QTY</th>
                                             <th>PANEL QTY</th>
+                                            <th>STENCIL NAME</th>
+                                            <th>SQUEEGEE NUMBER</th>
+                                            <th>SOLDER PASTE</th>
+                                            <th>SIDE</th>
                                             <th>TIME</th>
                                             <th>ACTION</th>
                                         </tr>
@@ -519,6 +523,10 @@ export const Printing: React.FC = () => {
                                                 <td>{(entry.product_name || '').toUpperCase()}</td>
                                                 <td>{entry.quantity || entry.wo_qty}</td>
                                                 <td>{entry.panel_qty || 'N/A'}</td>
+                                                <td>{entry.stencil_name || '-'}</td>
+                                                <td>{entry.squeegee_number || '-'}</td>
+                                                <td>{entry.solder_paste || '-'}</td>
+                                                <td>{entry.side || '-'}</td>
                                                 <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
                                                     {new Date(entry.timestamp).toLocaleTimeString()}
                                                 </td>
@@ -554,7 +562,7 @@ export const Printing: React.FC = () => {
                                         ))}
                                         {savedEntries.length === 0 && (
                                             <tr>
-                                                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                     No recent entries found.
                                                 </td>
                                             </tr>

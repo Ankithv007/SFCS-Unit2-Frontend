@@ -10,6 +10,7 @@ import { Search, CheckCircle, MessageSquare, AlertTriangle, ArrowLeft, Eye, Tras
 
 interface Batch {
     id: number;
+    work_order_id?: number;
     batch_number: string;
     customer_name?: string;
     model?: string;
@@ -27,6 +28,8 @@ interface Batch {
 interface ScanRecord {
     id: number | string;
     barcode: string;
+    unit_serial_number?: string;
+    usn_from_map?: string;
     scanned_by: string;
     scanned_at: string;
     status: string;
@@ -34,6 +37,76 @@ interface ScanRecord {
     remark_debug_time?: string;
     remark_debug_remarks?: string;
 }
+
+// Modal shown immediately after PCBA-FCT PASS — operator must scan Unit Serial Number sticker
+interface UnitSerialModalProps {
+    pcbBarcode: string;
+    batchId: number;
+    workOrderId?: number;
+    scannedBy: string;
+    onSuccess: (usn: string) => void;
+}
+const UnitSerialModal: React.FC<UnitSerialModalProps> = ({ pcbBarcode, batchId, workOrderId, scannedBy, onSuccess }) => {
+    const [usn, setUsn] = React.useState('');
+    const [submitting, setSubmitting] = React.useState(false);
+    const [error, setError] = React.useState('');
+    const inputRef = React.useRef<HTMLInputElement>(null);
+
+    React.useEffect(() => { inputRef.current?.focus(); }, []);
+
+    // Auto-submit when scanner delivers a long enough string
+    React.useEffect(() => {
+        if (usn.trim().length >= 6 && !submitting) handleLink();
+    }, [usn]);
+
+    const handleLink = async () => {
+        if (!usn.trim()) { setError('Please scan the Unit Serial Number sticker.'); return; }
+        setSubmitting(true); setError('');
+        try {
+            await apiFetch('/api/backend/pcba-fct/link-serial', {
+                method: 'POST',
+                body: JSON.stringify({ barcode: pcbBarcode, unit_serial_number: usn.trim().toUpperCase(), linked_by: scannedBy, batch_id: batchId, work_order_id: workOrderId })
+            });
+            onSuccess(usn.trim().toUpperCase());
+        } catch (e: any) { setError(e.message || 'Failed to link Unit Serial Number'); setUsn(''); inputRef.current?.focus(); }
+        finally { setSubmitting(false); }
+    };
+
+    return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ background:'#1e293b', borderRadius:'1rem', padding:'2rem', width:'480px', border:'2px solid #6366f1' }}>
+                <div style={{ marginBottom:'1rem' }}>
+                    <span style={{ fontSize:'0.8rem', color:'#6366f1', fontWeight:700, textTransform:'uppercase' }}>Step 2 of 2 – Mandatory</span>
+                    <h3 style={{ color:'#f8fafc', margin:'0.5rem 0 0' }}>Scan Unit Serial Number</h3>
+                </div>
+                <p style={{ color:'#94a3b8', fontSize:'0.9rem', margin:'0 0 1rem' }}>
+                    PCB <strong style={{ color:'#22c55e' }}>{pcbBarcode}</strong> passed PCBA-FCT.<br/>
+                    Now scan the <strong style={{ color:'#f59e0b' }}>Unit Serial Number sticker</strong> placed on the product.
+                </p>
+                {error && <p style={{ color:'#ef4444', fontSize:'0.85rem', marginBottom:'0.75rem' }}>{error}</p>}
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={usn}
+                    onChange={e => setUsn(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleLink(); } }}
+                    placeholder="Scan Unit Serial Number..."
+                    style={{ width:'100%', padding:'0.875rem 1rem', fontSize:'1.1rem', fontFamily:'monospace', background:'#0f172a', border:'1px solid #334155', borderRadius:'0.5rem', color:'#f8fafc', boxSizing:'border-box' }}
+                    disabled={submitting}
+                    autoFocus
+                />
+                <button
+                    onClick={handleLink}
+                    disabled={submitting || !usn.trim()}
+                    style={{ width:'100%', marginTop:'1rem', padding:'0.875rem', background:'#6366f1', color:'white', border:'none', borderRadius:'0.5rem', fontSize:'1rem', fontWeight:700, cursor:'pointer' }}
+                >
+                    {submitting ? 'Linking...' : 'Link Unit Serial Number'}
+                </button>
+                <p style={{ color:'#64748b', fontSize:'0.75rem', textAlign:'center', marginTop:'0.75rem' }}>This step is mandatory. The board cannot proceed to Assembly without a Unit Serial Number.</p>
+            </div>
+        </div>
+    );
+};
 
 interface ScanDecisionModalProps {
     barcode: string;
@@ -179,6 +252,8 @@ const PCBAFCT: React.FC = () => {
 
     const scanInputRef = useRef<HTMLInputElement>(null);
     const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
+    // State for mandatory second-scan (Unit Serial Number) after PCBA-FCT PASS
+    const [pendingUsnBarcode, setPendingUsnBarcode] = useState<string | null>(null);
 
     useEffect(() => {
         fetchBatches();
@@ -287,46 +362,52 @@ const PCBAFCT: React.FC = () => {
                 body: JSON.stringify({
                     batch_id: activeBatch.id,
                     barcode: pendingBarcode,
+                    work_order_id: activeBatch.work_order_id,
                     scanned_by: user?.name || 'Operator',
                     status: status,
                     remarks: remarks
                 })
             });
 
-            const { scan, counters } = response.data || {};
-            
-            if (scan) {
-                fetchScans(activeBatch.id, 1);
-            }
-            
-            if (counters) {
-                setActiveBatch(prev => prev ? { ...prev, ...counters } : null);
+            const { scan, counters, requiresUnitSerial, requiresUsnOnly } = response.data || {};
+
+            if (counters) setActiveBatch(prev => prev ? { ...prev, ...counters } : null);
+
+            // PASS → mandatory second scan for Unit Serial Number
+            if (requiresUnitSerial) {
+                if (requiresUsnOnly) {
+                    showToast('Unit Serial Number not yet linked. Please scan the sticker.', 'info');
+                } else {
+                    showToast('PCBA-FCT PASSED ✓ — Now scan the Unit Serial Number sticker', 'success');
+                }
+                setPendingBarcode(null);
+                setPendingUsnBarcode(pendingBarcode);
+                if (scan) fetchScans(activeBatch.id, 1);
+                return;
             }
 
+            if (scan) fetchScans(activeBatch.id, 1);
             showToast(`Item marked as ${(status || 'UNKNOWN').toUpperCase()}`, 'success');
             setPendingBarcode(null);
-            
-            // Refresh batches in background
             fetchBatches();
-            
-            // Check for batch completion using the updated counters
-            if (counters) {
-                const isCompleted = counters.passed === activeBatch.workOrderQty && 
-                                  counters.rework === 0 && 
-                                  counters.debug === 0;
-                
-                if (isCompleted) {
-                    showToast('Batch completed successfully!', 'success');
-                    setActiveBatch(null);
-                }
-            }
 
+            if (counters) {
+                const isCompleted = counters.passed === activeBatch.workOrderQty && counters.rework === 0 && counters.debug === 0;
+                if (isCompleted) { showToast('Batch completed successfully!', 'success'); setActiveBatch(null); }
+            }
         } catch (error: any) {
             showToast(error.message || 'Scan failed', 'error');
             setPendingBarcode(null);
         } finally {
             setIsScanning(false);
         }
+    };
+
+    const handleUsnLinked = (usn: string) => {
+        showToast(`✅ Unit Serial Number ${usn} linked. Board ready for Assembly.`, 'success');
+        setPendingUsnBarcode(null);
+        if (activeBatch) fetchScans(activeBatch.id, 1);
+        fetchBatches();
     };
 
     const handleDeleteBatch = async (batchId: number) => {
@@ -567,12 +648,13 @@ const PCBAFCT: React.FC = () => {
                                     <thead>
                                         <tr>
                                             <th>BARCODE</th>
+                                            <th>UNIT SERIAL NO</th>
                                             <th>SCANNED BY</th>
-                                            <th>DATE & TIME</th>
+                                            <th>DATE &amp; TIME</th>
                                             <th>STATUS</th>
                                             <th>REWORK/DEBUG TIME</th>
-                                            <th>Remarks</th>
-                                            <th>REWORK/DEBUG Remarks</th>
+                                            <th>REMARKS</th>
+                                            <th>REWORK/DEBUG REMARKS</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -580,6 +662,9 @@ const PCBAFCT: React.FC = () => {
                                             filteredItems.map((scan) => (
                                                 <tr key={scan.id}>
                                                     <td className={styles.barcodeCell}>{scan.barcode || '-'}</td>
+                                                    <td style={{ color: scan.unit_serial_number ? '#22c55e' : '#475569', fontWeight: scan.unit_serial_number ? 700 : 400, fontFamily: 'monospace' }}>
+                                                        {scan.unit_serial_number || scan.usn_from_map || '-'}
+                                                    </td>
                                                     <td>{scan.scanned_by || '-'}</td>
                                                     <td>{scan.scanned_at ? new Date(scan.scanned_at).toLocaleString() : '-'}</td>
                                                     <td>
@@ -634,6 +719,17 @@ const PCBAFCT: React.FC = () => {
                     barcode={pendingBarcode}
                     onFinalize={handleScanFinalize}
                     onClose={() => setPendingBarcode(null)}
+                />
+            )}
+
+            {/* Mandatory second scan after PCBA-FCT PASS */}
+            {pendingUsnBarcode && activeBatch && (
+                <UnitSerialModal
+                    pcbBarcode={pendingUsnBarcode}
+                    batchId={activeBatch.id}
+                    workOrderId={(activeBatch as any).work_order_id}
+                    scannedBy={user?.name || 'Operator'}
+                    onSuccess={handleUsnLinked}
                 />
             )}
         </div>

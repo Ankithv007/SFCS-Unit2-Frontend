@@ -25,6 +25,8 @@ interface ScanEntry {
 
 interface TrackResult {
     barcode: string;
+    unit_serial_number: string | null;
+    searched_by: string;
     batch_number: string;
     wo_number: string;
     customer_name: string;
@@ -151,7 +153,7 @@ const TrackItems: React.FC = () => {
                         <input
                             ref={inputRef}
                             className={styles.searchInput}
-                            placeholder="Scan or enter barcode serial number…"
+                            placeholder="Scan or enter PCB Barcode or Unit Serial Number…"
                             value={query}
                             onChange={e => setQuery(e.target.value)}
                         />
@@ -185,10 +187,21 @@ const TrackItems: React.FC = () => {
                                 <Package size={22} />
                             </div>
                             <div>
-                                <div className={styles.summaryLabel}>Barcode</div>
+                                <div className={styles.summaryLabel}>PCB Barcode</div>
                                 <div className={styles.summaryValue}>{data.barcode}</div>
                             </div>
                         </div>
+                        {data.unit_serial_number && (
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>
+                                    <Package size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Unit Serial No</div>
+                                    <div className={styles.summaryValue} style={{ color: '#22c55e' }}>{data.unit_serial_number}</div>
+                                </div>
+                            </div>
+                        )}
                         <div className={styles.summaryCard}>
                             <div className={styles.summaryIcon} style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}>
                                 <FileText size={22} />

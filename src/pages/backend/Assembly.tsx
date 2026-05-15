@@ -27,6 +27,7 @@ interface Batch {
 interface ScanRecord {
     id: number | string;
     barcode: string;
+    unit_serial_number?: string;
     scanned_by: string;
     scanned_at: string;
     status: string;
@@ -535,7 +536,7 @@ const Assembly: React.FC = () => {
                                             ref={scanInputRef}
                                             type="text"
                                             className={styles.largeScanInput}
-                                            placeholder="Scan Item Barcode..."
+                                            placeholder="Scan Unit Serial Number..."
                                             value={barcode}
                                             onChange={(e) => setBarcode(e.target.value)}
                                             autoFocus
@@ -567,12 +568,13 @@ const Assembly: React.FC = () => {
                                     <thead>
                                         <tr>
                                             <th>BARCODE</th>
+                                            <th>UNIT SERIAL NO</th>
                                             <th>SCANNED BY</th>
-                                            <th>DATE & TIME</th>
+                                            <th>DATE &amp; TIME</th>
                                             <th>STATUS</th>
                                             <th>REWORK/DEBUG TIME</th>
-                                            <th>Remarks</th>
-                                            <th>REWORK/DEBUG Remarks</th>
+                                            <th>REMARKS</th>
+                                            <th>REWORK/DEBUG REMARKS</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -580,6 +582,7 @@ const Assembly: React.FC = () => {
                                             filteredItems.map((scan) => (
                                                 <tr key={scan.id}>
                                                     <td className={styles.barcodeCell}>{scan.barcode || '-'}</td>
+                                                    <td style={{ color: scan.unit_serial_number ? '#22c55e' : '#475569', fontWeight: scan.unit_serial_number ? 700 : 400, fontFamily: 'monospace' }}>{scan.unit_serial_number || '-'}</td>
                                                     <td>{scan.scanned_by || '-'}</td>
                                                     <td>{scan.scanned_at ? new Date(scan.scanned_at).toLocaleString() : '-'}</td>
                                                     <td>

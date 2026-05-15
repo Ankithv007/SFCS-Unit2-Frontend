@@ -28,6 +28,7 @@ interface Batch {
 interface ScanRecord {
     id: number | string;
     barcode: string;
+    unit_serial_number?: string;
     scanned_by: string;
     scanned_at: string;
     status: string;
@@ -330,7 +331,7 @@ const Debug: React.FC = () => {
                                     ref={scanInputRef}
                                     type="text"
                                     className={styles.largeScanInput}
-                                    placeholder="Scan Repaired Barcode..."
+                                    placeholder="Scan Barcode or Unit Serial Number..."
                                     value={barcode}
                                     onChange={(e) => setBarcode(e.target.value)}
                                     autoFocus
@@ -360,18 +361,20 @@ const Debug: React.FC = () => {
                                     <thead>
                                         <tr>
                                             <th>BARCODE</th>
+                                            <th>UNIT SERIAL NO</th>
                                             <th>DEBUGGED BY</th>
-                                            <th>DEBUG DATE & TIME</th>
+                                            <th>DEBUG DATE &amp; TIME</th>
                                             <th>STATUS</th>
-                                            <th>FAILURE DATE & TIME</th>
+                                            <th>FAILURE DATE &amp; TIME</th>
                                             <th>FAILURE REMARK</th>
                                             <th>DEBUG REMARK</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {scannedItems.filter(s => s.barcode?.toLowerCase().includes(tableSearch.toLowerCase())).map((scan) => (
+                                        {scannedItems.filter(s => s.barcode?.toLowerCase().includes(tableSearch.toLowerCase()) || (s.unit_serial_number || '').toLowerCase().includes(tableSearch.toLowerCase())).map((scan) => (
                                             <tr key={scan.id}>
                                                 <td className={styles.barcodeCell}>{scan.barcode}</td>
+                                                <td style={{ color: scan.unit_serial_number ? '#22c55e' : '#475569', fontWeight: scan.unit_serial_number ? 700 : 400, fontFamily: 'monospace' }}>{scan.unit_serial_number || '-'}</td>
                                                 <td>{scan.scanned_by}</td>
                                                 <td>{new Date(scan.scanned_at).toLocaleString()}</td>
                                                 <td><span className={styles.acceptedBadge}>PASSED</span></td>

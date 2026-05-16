@@ -331,6 +331,10 @@ const Packing: React.FC = () => {
     };
 
     const handleDeleteBatch = async (batchId: number) => {
+        if (user?.role?.toLowerCase() !== 'superadmin') {
+            showToast('Only SuperAdmin can perform delete operations.', 'error');
+            return;
+        }
         if (!window.confirm('Are you sure you want to delete this batch? This action cannot be undone.')) return;
         try {
             await apiFetch(`/api/backend/packing/batch/${batchId}`, {

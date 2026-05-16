@@ -4,8 +4,10 @@ import styles from './TrackItems.module.css';
 import {
     Search, Package, CheckCircle, AlertTriangle,
     Clock, Activity, Zap, ArrowDown, RotateCcw, ChevronRight,
-    User, Calendar, FileText, Wrench, MapPin, TrendingUp
+    User, Calendar, FileText, Wrench, MapPin, TrendingUp, Download
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -100,7 +102,9 @@ const TrackItems: React.FC = () => {
     const [data, setData] = useState<TrackResult | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [appeared, setAppeared] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+    const printRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -117,6 +121,48 @@ const TrackItems: React.FC = () => {
             setError(err.message || 'Barcode not found in system.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDownloadPdf = async () => {
+        try {
+            const input = printRef.current;
+
+            if (!input) {
+                console.error("Track content not found");
+                return;
+            }
+
+            setIsDownloading(true);
+
+            const canvas = await html2canvas(input, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                backgroundColor: "#ffffff"
+            });
+
+            const imgData = canvas.toDataURL("image/png");
+            const pdf = new jsPDF("p", "mm", "a4");
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            pdf.addImage(
+                imgData,
+                "PNG",
+                0,
+                0,
+                pdfWidth,
+                pdfHeight
+            );
+
+            pdf.save(
+                `Traceability_Report_${data?.barcode || 'record'}.pdf`
+            );
+        } catch (error) {
+            console.error("PDF Download Failed:", error);
+        } finally {
+            setIsDownloading(false);
         }
     };
 
@@ -143,6 +189,24 @@ const TrackItems: React.FC = () => {
                         <p className={styles.headerSub}>Complete production lifecycle visibility</p>
                     </div>
                 </div>
+                {data && (
+                    <button 
+                        type="button"
+                        onClick={handleDownloadPdf}
+                        disabled={isDownloading}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            background: '#3b82f6', color: '#fff', border: 'none',
+                            padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
+                            cursor: isDownloading ? 'not-allowed' : 'pointer',
+                            opacity: isDownloading ? 0.7 : 1,
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        <Download size={18} />
+                        {isDownloading ? 'Generating PDF...' : 'Download PDF'}
+                    </button>
+                )}
             </div>
 
             {/* ── Search ── */}
@@ -178,7 +242,7 @@ const TrackItems: React.FC = () => {
 
             {/* ── Results ── */}
             {data && (
-                <div className={`${styles.resultsWrap} ${appeared ? styles.revealed : ''}`}>
+                <div ref={printRef} className={`${styles.resultsWrap} ${appeared ? styles.revealed : ''}`} style={{ padding: '20px', background: '#fff', borderRadius: '12px' }}>
 
                     {/* ── Summary Cards Row ── */}
                     <div className={styles.summaryRow}>

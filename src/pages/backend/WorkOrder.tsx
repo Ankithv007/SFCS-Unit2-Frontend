@@ -138,6 +138,10 @@ const WorkOrder: React.FC = () => {
     };
 
     const handleDeleteClick = (wo: WorkOrderRecord) => {
+        if (user?.role?.toLowerCase() !== 'superadmin') {
+            showToast('Only SuperAdmin can perform delete operations.', 'error');
+            return;
+        }
         console.log("DELETE CLICKED", wo);
         setWoToDelete(wo);
     };
@@ -160,8 +164,7 @@ const WorkOrder: React.FC = () => {
 
 
 
-    const isAdmin = ['admin', 'super admin'].includes((user?.role || '').toLowerCase());
-
+    
     return (
         <div className={styles.container}>
             <div className={styles.headerRow}>
@@ -293,15 +296,14 @@ const WorkOrder: React.FC = () => {
                                                     <Eye size={14} /> View
                                                 </button>
 
-                                                {isAdmin && (
-                                                    <button 
+                                                <button 
                                                         type="button"
                                                         className={styles.deleteBtn} 
                                                         onClick={() => handleDeleteClick(wo)}
                                                     >
                                                         <Trash2 size={14} /> Delete
                                                     </button>
-                                                )}
+                                                
                                             </div>
                                         </td>
                                     </tr>

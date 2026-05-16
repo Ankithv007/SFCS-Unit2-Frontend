@@ -6,6 +6,7 @@
     --text-primary: #111827;
     --text-secondary: #4b5563;
     --border-color: #e5e7eb;
+    --error-color: #ef4444;
 }
 
 .headerRow {

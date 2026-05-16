@@ -241,6 +241,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             </span> Serial Number
                         </div>
                         <div
+                            className={`${styles.submenuItem} ${isActive('/smt/pcb-generation') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/pcb-generation')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> PCB Generation
+                        </div>
+                        <div
                             className={`${styles.submenuItem} ${isActive('/smt/printing') ? styles.activeSubmenu : ''}`}
                             onClick={() => navigate('/smt/printing')}
                         >
@@ -255,6 +263,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             <span className={styles.menuIcon}>
                                 <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
                             </span> SPI
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/smt/pre-aoi') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/pre-aoi')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Pre AOI
                         </div>
                         <div
                             className={`${styles.submenuItem} ${isActive('/smt/post-aoi') ? styles.activeSubmenu : ''}`}
@@ -273,29 +289,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             </span> Rework
                         </div>
                         <div
-                            className={`${styles.submenuItem} ${isActive('/smt/previous-soldering') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/previous-soldering')}
+                            className={`${styles.submenuItem} ${isActive('/smt/smt-fg') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/smt-fg')}
                         >
                             <span className={styles.menuIcon}>
                                 <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Pre-Soldering
+                            </span> SMT FG
                         </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/post-work-soldering') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/post-work-soldering')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Post-Soldering
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/vi-touch-up') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/vi-touch-up')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> VI / Touch Up
-                        </div>
+
                     </div>
                 )}
             </div>

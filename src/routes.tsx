@@ -24,9 +24,10 @@ import { Printing } from './pages/smt/Printing';
 import Spi from './pages/smt/Spi';
 import PostAoi from './pages/smt/PostAoi';
 import Rework from './pages/smt/Rework';
-import { PreviousSoldering } from './pages/smt/PreviousSoldering';
-import { PostWorkSoldering } from './pages/smt/PostWorkSoldering';
-import { ViTouchUp } from './pages/smt/ViTouchUp';
+import PCBGeneration from './pages/smt/PCBGeneration';
+import PreAoi from './pages/smt/PreAoi';
+import SMTFG from './pages/smt/SMTFG';
+
 import WorkOrderBackend from './pages/backend/WorkOrder';
 import PTH from './pages/backend/PTH';
 import VI from './pages/backend/VI';
@@ -311,12 +312,20 @@ export const router = createBrowserRouter([
                         element: <SerialNumber />,
                     },
                     {
+                        path: 'pcb-generation',
+                        element: <PCBGeneration />,
+                    },
+                    {
                         path: 'printing',
                         element: <Printing />,
                     },
                     {
                         path: 'spi',
                         element: <Spi />,
+                    },
+                    {
+                        path: 'pre-aoi',
+                        element: <PreAoi />,
                     },
                     {
                         path: 'post-aoi',
@@ -327,17 +336,10 @@ export const router = createBrowserRouter([
                         element: <Rework />,
                     },
                     {
-                        path: 'previous-soldering',
-                        element: <PreviousSoldering />,
+                        path: 'smt-fg',
+                        element: <SMTFG />,
                     },
-                    {
-                        path: 'post-work-soldering',
-                        element: <PostWorkSoldering />,
-                    },
-                    {
-                        path: 'vi-touch-up',
-                        element: <ViTouchUp />,
-                    },
+
                 ]
             },
         ],

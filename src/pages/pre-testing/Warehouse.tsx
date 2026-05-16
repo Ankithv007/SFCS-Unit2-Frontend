@@ -453,38 +453,35 @@ export const Warehouse: React.FC = () => {
                                                     >
                                                         Resume
                                                     </button>
-                                                    <button
-                                                        className={styles.deleteTextButton}
-                                                        onClick={async () => {
-                                                            console.log('Current User:', user);
-                                                            if (user?.role !== 'Admin' && user?.role !== 'Super Admin' && user?.role !== 'Manager') {
-                                                                alert(`Only Admin, Super Admin, or Manager can delete this batch. Your role: ${user?.role}`);
-                                                                return;
-                                                            }
+                                                    {(() => {
+                                                        const role = (user?.role || '').toLowerCase();
+                                                        return role === 'admin' || role === 'super admin' || role === 'manager';
+                                                    })() && (
+                                                        <button
+                                                            className={styles.deleteTextButton}
+                                                            onClick={async () => {
+                                                                const confirm1 = window.confirm('Are you sure you want to delete this batch? This will remove all associated scans.');
+                                                                if (!confirm1) return;
 
-                                                            const confirm1 = window.confirm('Are you sure you want to delete this batch? This will remove all associated scans.');
-                                                            if (!confirm1) return;
+                                                                const confirm2 = window.confirm('⚠️ FINAL WARNING: This action cannot be undone. Are you absolutely sure?');
+                                                                if (!confirm2) return;
 
-                                                            const confirm2 = window.confirm('⚠️ FINAL WARNING: This action cannot be undone. Are you absolutely sure?');
-                                                            if (!confirm2) return;
+                                                                try {
+                                                                    await apiFetch(`/api/pretest/warehouse/batches/${batch.id}`, {
+                                                                        method: 'DELETE'
+                                                                    });
 
-                                                            try {
-                                                                console.log(`Attempting to delete batch ${batch.id}`);
-                                                                await apiFetch(`/api/pretest/warehouse/batches/${batch.id}`, {
-                                                                    method: 'DELETE'
-                                                                });
-
-                                                                showToast('Batch deleted successfully', 'success');
-                                                                fetchBatches();
-                                                            } catch (err: any) {
-                                                                console.error('Network error during deletion:', err);
-                                                                showToast('Error during deletion: ' + err.message, 'error');
-                                                                alert(`Delete Failed: ${err.message}`);
-                                                            }
-                                                        }}
-                                                    >
-                                                        Delete
-                                                    </button>
+                                                                    showToast('Batch deleted successfully', 'success');
+                                                                    fetchBatches();
+                                                                } catch (err: any) {
+                                                                    console.error('Deletion error:', err);
+                                                                    showToast(err.message || 'Failed to delete batch', 'error');
+                                                                }
+                                                            }}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -579,38 +576,35 @@ export const Warehouse: React.FC = () => {
                                                     >
                                                         View
                                                     </button>
-                                                    <button
-                                                        className={styles.deleteTextButton}
-                                                        onClick={async () => {
-                                                            console.log('Current User:', user);
-                                                            if (user?.role !== 'Admin' && user?.role !== 'Super Admin' && user?.role !== 'Manager') {
-                                                                alert(`Only Admin, Super Admin, or Manager can delete this batch. Your role: ${user?.role}`);
-                                                                return;
-                                                            }
+                                                    {(() => {
+                                                        const role = (user?.role || '').toLowerCase();
+                                                        return role === 'admin' || role === 'super admin' || role === 'manager';
+                                                    })() && (
+                                                        <button
+                                                            className={styles.deleteTextButton}
+                                                            onClick={async () => {
+                                                                const confirm1 = window.confirm('Are you sure you want to delete this batch? This will remove all associated scans.');
+                                                                if (!confirm1) return;
 
-                                                            const confirm1 = window.confirm('Are you sure you want to delete this batch? This will remove all associated scans.');
-                                                            if (!confirm1) return;
+                                                                const confirm2 = window.confirm('⚠️ FINAL WARNING: This action cannot be undone. Are you absolutely sure?');
+                                                                if (!confirm2) return;
 
-                                                            const confirm2 = window.confirm('⚠️ FINAL WARNING: This action cannot be undone. Are you absolutely sure?');
-                                                            if (!confirm2) return;
+                                                                try {
+                                                                    await apiFetch(`/api/pretest/warehouse/batches/${batch.id}`, {
+                                                                        method: 'DELETE'
+                                                                    });
 
-                                                            try {
-                                                                console.log(`Attempting to delete batch ${batch.id}`);
-                                                                await apiFetch(`/api/pretest/warehouse/batches/${batch.id}`, {
-                                                                    method: 'DELETE'
-                                                                });
-
-                                                                showToast('Batch deleted successfully', 'success');
-                                                                fetchBatches();
-                                                            } catch (err: any) {
-                                                                console.error('Network error during deletion:', err);
-                                                                showToast('Error during deletion: ' + err.message, 'error');
-                                                                alert(`Delete Failed: ${err.message}`);
-                                                            }
-                                                        }}
-                                                    >
-                                                        Delete
-                                                    </button>
+                                                                    showToast('Batch deleted successfully', 'success');
+                                                                    fetchBatches();
+                                                                } catch (err: any) {
+                                                                    console.error('Deletion error:', err);
+                                                                    showToast(err.message || 'Failed to delete batch', 'error');
+                                                                }
+                                                            }}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>

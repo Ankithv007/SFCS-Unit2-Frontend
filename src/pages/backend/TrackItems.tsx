@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { useAuth } from '../../hooks/useAuth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,7 @@ const StationIcon: React.FC<{ station: string }> = ({ station }) => {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const TrackItems: React.FC = () => {
+    const { user } = useAuth();
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState<TrackResult | null>(null);
@@ -136,7 +138,7 @@ const TrackItems: React.FC = () => {
             setIsDownloading(true);
 
             const canvas = await html2canvas(input, {
-                scale: 2,
+                scale: 2, // High-quality resolution
                 useCORS: true,
                 logging: false,
                 backgroundColor: "#ffffff"
@@ -145,20 +147,26 @@ const TrackItems: React.FC = () => {
             const imgData = canvas.toDataURL("image/png");
             const pdf = new jsPDF("p", "mm", "a4");
             const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const imgWidth = pdfWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-            pdf.addImage(
-                imgData,
-                "PNG",
-                0,
-                0,
-                pdfWidth,
-                pdfHeight
-            );
+            let heightLeft = imgHeight;
+            let position = 0;
 
-            pdf.save(
-                `Traceability_Report_${data?.barcode || 'record'}.pdf`
-            );
+            // Page 1
+            pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+            heightLeft -= pdfHeight;
+
+            // Multi-page splitting logic
+            while (heightLeft > 0) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+                heightLeft -= pdfHeight;
+            }
+
+            pdf.save(`Traceability_Report_${data?.barcode || 'record'}.pdf`);
         } catch (error) {
             console.error("PDF Download Failed:", error);
         } finally {
@@ -242,7 +250,8 @@ const TrackItems: React.FC = () => {
 
             {/* ── Results ── */}
             {data && (
-                <div ref={printRef} className={`${styles.resultsWrap} ${appeared ? styles.revealed : ''}`} style={{ padding: '20px', background: '#fff', borderRadius: '12px' }}>
+                <>
+                    <div className={`${styles.resultsWrap} ${appeared ? styles.revealed : ''}`} style={{ padding: '20px', background: '#fff', borderRadius: '12px' }}>
 
                     {/* ── Summary Cards Row ── */}
                     <div className={styles.summaryRow}>
@@ -549,6 +558,152 @@ const TrackItems: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Dedicated Hidden Printable PDF Section */}
+                    <div 
+                        ref={printRef} 
+                        id="hidden-pdf-report" 
+                        style={{ 
+                            position: 'absolute', 
+                            left: '-9999px', 
+                            top: '-9999px', 
+                            width: '800px', 
+                            background: '#ffffff', 
+                            padding: '40px', 
+                            color: '#1e293b', 
+                            fontFamily: 'system-ui, -apple-system, sans-serif',
+                            boxSizing: 'border-box'
+                        }}
+                    >
+                        {/* PDF Header Logo / Title */}
+                        <div style={{ borderBottom: '2px solid #3b82f6', paddingBottom: '15px', marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h2 style={{ margin: 0, fontSize: '20px', color: '#1e3a8a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                    Velankani Software MES
+                                </h2>
+                                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                                    PCB BARCODE TRACEABILITY AUDIT REPORT
+                                </p>
+                            </div>
+                            <div style={{ textAlign: 'right', fontSize: '10px', color: '#64748b' }}>
+                                <div>Report Date: {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}</div>
+                                <div>Generated By: {user?.name || 'Operator'}</div>
+                            </div>
+                        </div>
+
+                        {/* PDF Metadata Grid (PCB Barcode, Work Order, Model, Current Stage) */}
+                        <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: '1fr 1fr', 
+                            gap: '12px 24px', 
+                            marginBottom: '30px', 
+                            background: '#f8fafc', 
+                            padding: '16px', 
+                            borderRadius: '8px', 
+                            border: '1px solid #e2e8f0',
+                            fontSize: '12px'
+                        }}>
+                            <div>
+                                <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>PCB Barcode</span>
+                                <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.barcode}</span>
+                            </div>
+                            <div>
+                                <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Work Order</span>
+                                <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.wo_number}</span>
+                            </div>
+                            <div>
+                                <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Model</span>
+                                <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.model}</span>
+                            </div>
+                            <div>
+                                <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Current Stage</span>
+                                <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.current_stage}</span>
+                            </div>
+                            {data.unit_serial_number && (
+                                <div style={{ gridColumn: 'span 2' }}>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Unit Serial Number</span>
+                                    <span style={{ color: '#16a34a', fontWeight: 700 }}>: {data.unit_serial_number}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Table Title */}
+                        <h3 style={{ fontSize: '14px', color: '#0f172a', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Traceability Scan History (Audit Log)
+                        </h3>
+
+                        {/* Audit Log Table */}
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                            <thead>
+                                <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '30px' }}>#</th>
+                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '80px' }}>Stage</th>
+                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '80px' }}>Action</th>
+                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '90px' }}>Operator</th>
+                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '120px' }}>Date & Time</th>
+                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Remarks / Failure</th>
+                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Repair Note</th>
+                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '120px' }}>Repaired At</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {data.scan_history.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={8} style={{ padding: '12px', textAlign: 'center', color: '#64748b', border: '1px solid #cbd5e1' }}>
+                                            No scan events recorded yet.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    data.scan_history.map((row, idx) => {
+                                        const isRepair = row.station === 'Rework' || row.station === 'Debug';
+                                        return (
+                                            <tr 
+                                                key={idx} 
+                                                style={{ 
+                                                    background: isRepair ? '#fffbeb' : idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                                                    color: '#1e293b'
+                                                }}
+                                            >
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600, textAlign: 'center' }}>{idx + 1}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.station}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
+                                                    <span style={{
+                                                        display: 'inline-block',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px',
+                                                        fontWeight: 700,
+                                                        fontSize: '9px',
+                                                        background: statusBg(row.status),
+                                                        color: statusColor(row.status),
+                                                        border: `1px solid ${statusColor(row.status)}33`
+                                                    }}>
+                                                        {row.status.toUpperCase()}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>
+                                                    {row.remarks || row.failed_remarks || '—'}
+                                                </td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>
+                                                    {row.repair_remark || '—'}
+                                                </td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>
+                                                    {row.repair_time ? fmt(row.repair_time) : '—'}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+
+                        {/* PDF Footer Page Note */}
+                        <div style={{ marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '10px', textAlign: 'center', fontSize: '9px', color: '#94a3b8' }}>
+                            This report is an official computer-generated audit log from the Velankani Software Manufacturing Execution System (MES).
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );

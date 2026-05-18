@@ -68,6 +68,7 @@ export const SerialNumber: React.FC = () => {
     const [serialFormat, setSerialFormat] = useState('');
     const [startingNumber, setStartingNumber] = useState('');
     const [endNumber, setEndNumber] = useState('');
+    const [barcodeSource, setBarcodeSource] = useState('Generate Barcode');
 
     // Active batch state
     const [activeBatch, setActiveBatch] = useState<SmtBatch | null>(null);
@@ -265,40 +266,51 @@ export const SerialNumber: React.FC = () => {
             setWoQty(wo.quantity.toString());
             setPanelQty(wo.panel_quantity.toString());
         } else {
+            setProductName('');
             setWoQty('');
             setPanelQty('');
         }
     };
 
     const handleGenerateSerials = async () => {
-        if (!selectedWoId || !createdBy || !startingNumber || !endNumber || !serialFormat) {
-            alert('Please fill out all fields.');
+        if (!selectedWoId || !createdBy) {
+            alert('Please select a Work Order.');
             return;
         }
 
+        const isExisting = barcodeSource === 'Barcode Already Available';
         const start = parseInt(startingNumber);
         const end = parseInt(endNumber);
 
-        if (isNaN(start) || isNaN(end) || start > end) {
-            alert('Please enter a valid numeric range.');
-            return;
+        if (!isExisting) {
+            if (!startingNumber || !endNumber || !serialFormat) {
+                alert('Please fill out all fields for barcode generation.');
+                return;
+            }
+            if (isNaN(start) || isNaN(end) || start > end) {
+                alert('Please enter a valid numeric range.');
+                return;
+            }
         }
 
-        const formatStr = serialFormat.replace(/-/g, "").toUpperCase();
+        const formatStr = (serialFormat || '').replace(/-/g, "").toUpperCase();
         const newComponents: ScannedComponent[] = [];
-        for (let i = start; i <= end; i++) {
-            const serialNumber = `${formatStr}${i.toString().padStart(6, '0')}`;
-            newComponents.push({
-                id: Date.now().toString() + i,
-                barcode: serialNumber,
-                scanned_by: createdBy,
-                scanned_at: new Date().toISOString(),
-                product_name: productName,
-                wo_qty: parseInt(woQty),
-                panel_qty: parseInt(panelQty),
-                wo_number: selectedWoId,
-                status: 'ACCEPTED'
-            });
+        
+        if (!isExisting) {
+            for (let i = start; i <= end; i++) {
+                const serialNumber = `${formatStr}${i.toString().padStart(6, '0')}`;
+                newComponents.push({
+                    id: Date.now().toString() + i,
+                    barcode: serialNumber,
+                    scanned_by: createdBy,
+                    scanned_at: new Date().toISOString(),
+                    product_name: productName,
+                    wo_qty: parseInt(woQty),
+                    panel_qty: parseInt(panelQty),
+                    wo_number: selectedWoId,
+                    status: 'ACCEPTED'
+                });
+            }
         }
 
         try {
@@ -307,25 +319,30 @@ export const SerialNumber: React.FC = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     work_order_id: selectedWoId,
-                    format: formatStr,
-                    serials: newComponents.map(c => c.barcode),
-                    created_by: createdBy
+                    format: isExisting ? 'PRE-EXISTING' : formatStr,
+                    serials: isExisting ? [] : newComponents.map(c => c.barcode),
+                    created_by: createdBy,
+                    barcode_source: isExisting ? 'PRE_EXISTING' : 'GENERATED'
                 })
             });
 
             if (res.ok) {
                 const data = await res.json();
                 fetchBatches();
-                if (data.inserted === 0) {
-                    alert('All these serial numbers already exist in the system.');
-                } else if (data.inserted < data.total) {
-                    alert(`Generated ${data.inserted} new serials. ${data.total - data.inserted} already existed.`);
+                if (isExisting) {
+                    alert('Work Order successfully registered for existing barcodes!');
                 } else {
-                    alert(`Successfully generated all ${data.inserted} serials!`);
+                    if (data.inserted === 0) {
+                        alert('All these serial numbers already exist in the system.');
+                    } else if (data.inserted < data.total) {
+                        alert(`Generated ${data.inserted} new serials. ${data.total - data.inserted} already existed.`);
+                    } else {
+                        alert(`Successfully generated all ${data.inserted} serials!`);
+                    }
                 }
             } else {
                 const errorData = await res.json().catch(() => ({}));
-                alert(`Failed to generate serials: ${errorData.error || 'Unknown API error'}`);
+                alert(`Failed to register: ${errorData.error || 'Unknown API error'}`);
             }
         } catch (err) {
             console.error("API error:", err);
@@ -340,6 +357,7 @@ export const SerialNumber: React.FC = () => {
         setSerialFormat('');
         setStartingNumber('');
         setEndNumber('');
+        setBarcodeSource('Generate Barcode');
     };
 
     const handleDeleteBatch = async (woId: string) => {
@@ -523,6 +541,17 @@ export const SerialNumber: React.FC = () => {
                                     </select>
                                 </div>
                                 <div className={styles.inputGroup}>
+                                    <label>Barcode Source *</label>
+                                    <select
+                                        className={styles.batchSelect}
+                                        value={barcodeSource}
+                                        onChange={(e) => setBarcodeSource(e.target.value)}
+                                    >
+                                        <option value="Generate Barcode">Generate Barcode</option>
+                                        <option value="Barcode Already Available">Barcode Already Available</option>
+                                    </select>
+                                </div>
+                                <div className={styles.inputGroup}>
                                     <label>Product Name (Auto-filled)</label>
                                     <input
                                         type="text"
@@ -565,6 +594,8 @@ export const SerialNumber: React.FC = () => {
                                         maxLength={10}
                                         value={serialFormat}
                                         onChange={(e) => setSerialFormat(e.target.value.toUpperCase())}
+                                        disabled={barcodeSource === 'Barcode Already Available'}
+                                        style={barcodeSource === 'Barcode Already Available' ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                                     />
                                 </div>
                                 <div className={styles.inputGroup}>
@@ -575,6 +606,8 @@ export const SerialNumber: React.FC = () => {
                                         placeholder="e.g. 1"
                                         value={startingNumber}
                                         onChange={(e) => setStartingNumber(e.target.value)}
+                                        disabled={barcodeSource === 'Barcode Already Available'}
+                                        style={barcodeSource === 'Barcode Already Available' ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                                     />
                                 </div>
                                 <div className={styles.inputGroup}>
@@ -585,6 +618,8 @@ export const SerialNumber: React.FC = () => {
                                         placeholder="e.g. 100"
                                         value={endNumber}
                                         onChange={(e) => setEndNumber(e.target.value)}
+                                        disabled={barcodeSource === 'Barcode Already Available'}
+                                        style={barcodeSource === 'Barcode Already Available' ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                                     />
                                 </div>
                                 <div className={styles.inputGroup}>

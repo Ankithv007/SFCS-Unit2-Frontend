@@ -52,12 +52,14 @@ const UnitSerialModal: React.FC<UnitSerialModalProps> = ({ pcbBarcode, batchId, 
     const [error, setError] = React.useState('');
     const inputRef = React.useRef<HTMLInputElement>(null);
 
-    React.useEffect(() => { inputRef.current?.focus(); }, []);
-
-    // Auto-submit when scanner delivers a long enough string
     React.useEffect(() => {
-        if (usn.trim().length >= 6 && !submitting) handleLink();
-    }, [usn]);
+        const timer = setTimeout(() => {
+            inputRef.current?.focus();
+        }, 100);
+        return () => clearTimeout(timer);
+    }, []);
+
+
 
     const handleLink = async () => {
         if (!usn.trim()) { setError('Please scan the Unit Serial Number sticker.'); return; }
@@ -268,7 +270,7 @@ const PCBAFCT: React.FC = () => {
     }, [searchTermCompleted]);
 
     useEffect(() => {
-        if (activeBatch && scanInputRef.current && !pendingBarcode) {
+        if (activeBatch && scanInputRef.current && !pendingBarcode && !pendingUsnBarcode) {
             scanInputRef.current.focus();
         }
     });

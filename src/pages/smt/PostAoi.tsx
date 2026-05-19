@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'react-qr-code';
-import styles from './PostAoi.module.css';
+import styles from './Spi.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../utils/api';
@@ -25,7 +25,7 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
     </div>
 );
 
-// ─── Detail View ──────────────────────────────────────────────────────────────
+// ─── Detail View Component (Internal) ──────────────────────────────────────────
 interface PostAoiDetailProps {
     woId: string;
     onBack: () => void;
@@ -36,13 +36,11 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
     const [tableSerials, setTableSerials] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [totalSerials, setTotalSerials] = useState(0);
-    const [reworkTarget, setreworkTarget] = useState<number | null>(null);
-    const [reworkReason, setreworkReason] = useState('');
     const [scanBarcode, setScanBarcode] = useState('');
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
     const scanInputRef = useRef<HTMLInputElement>(null);
-    const [allValidSerials, setAllValidSerials] = useState<any[]>([]);
+    const [allWoSerials, setAllWoSerials] = useState<any[]>([]);
 
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastId.current;
@@ -55,26 +53,18 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // Fetch total serials available for this WO
+            // Fetch all serials for this WO with their latest Pre AOI step status
             const totalUrl = new URL('/api/smt/serial-numbers', window.location.origin);
             totalUrl.searchParams.set('work_order_id', woId);
+            totalUrl.searchParams.set('current_step', 'Pre AOI');
             const totalRes = await fetch(totalUrl.toString());
             if (totalRes.ok) {
                 const totalData = await totalRes.json();
                 setTotalSerials(totalData.length);
-                
-                // For Post AOI, valid items are those that passed SPI
-                const validUrl = new URL('/api/smt/serial-numbers', window.location.origin);
-                validUrl.searchParams.set('work_order_id', woId);
-                validUrl.searchParams.set('filter_step', 'SPI');
-                validUrl.searchParams.set('filter_status', 'PASS');
-                const validRes = await fetch(validUrl.toString());
-                if (validRes.ok) {
-                    setAllValidSerials(await validRes.json());
-                }
+                setAllWoSerials(totalData);
             }
 
-            // Fetch visited items
+            // Fetch Post AOI history
             const inspUrl = new URL('/api/smt/inspections', window.location.origin);
             inspUrl.searchParams.set('work_order_id', woId);
             inspUrl.searchParams.set('process_step', 'Post AOI');
@@ -87,13 +77,14 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                 barcode: i.serial_number,
                 last_status: i.status,
                 last_step: i.process_step,
-                rework_reason: i.rework_reason,
-                scanned_at: i.scanned_at
+                scanned_by: i.scanned_by,
+                scanned_at: i.scanned_at,
+                rework_reason: i.rework_reason
             }));
             setTableSerials(visited);
         } catch (err) {
-            console.error('Error fetching Post AOI history:', err);
-            addToast('Failed to load inspection history.', 'error');
+            console.error('Error fetching Post AOI data:', err);
+            addToast('Failed to load Post AOI data.', 'error');
         } finally {
             setLoading(false);
         }
@@ -104,63 +95,59 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
         scanInputRef.current?.focus();
     }, [fetchData]);
 
-    // ── Scan Logic ──────────────────────────────────────────────────────────
-    const processScan = async (barcodeInput: string) => {
-        const cleanInput = (barcodeInput || '').trim().replace(/-/g, '').toUpperCase();
-        if (!cleanInput) return;
-
-        // Duplicate check in current list
-        const alreadyInTable = tableSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-            )
-        );
-        if (alreadyInTable) {
-            addToast(`Barcode ${barcodeInput} is already in the list.`, 'info');
-            setScanBarcode('');
-            return;
+    const handlePass = async (serialId: number) => {
+        try {
+            const res = await fetch('/api/smt/inspections', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    serial_id: serialId,
+                    process_step: 'Post AOI',
+                    scanned_by: operatorName || 'System',
+                    status: 'PASS'
+                })
+            });
+            if (res.ok) {
+                const newInsp = await res.json();
+                setTableSerials(prev => {
+                    const exists = prev.find(s => s.id === serialId);
+                    if (exists) {
+                        return prev.map(s =>
+                            s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'Post AOI', scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at, rework_reason: null } : s
+                        );
+                    } else {
+                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
+                        return [{
+                            id: serialId,
+                            serial_number: sInfo.serial_number,
+                            barcode: sInfo.serial_number,
+                            last_status: 'PASS',
+                            last_step: 'Post AOI',
+                            scanned_by: newInsp.scanned_by,
+                            scanned_at: newInsp.scanned_at,
+                            barcode_source: sInfo.barcode_source,
+                            rework_reason: null
+                        }, ...prev];
+                    }
+                });
+                addToast('Item marked as PASS.', 'success');
+                return true;
+            } else {
+                addToast('Failed to save PASS status.', 'error');
+                return false;
+            }
+        } catch {
+            addToast('Network error.', 'error');
+            return false;
         }
-
-        const match = allValidSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-            )
-        );
-
-        if (!match) {
-            addToast(`Barcode ${barcodeInput} not found or has not passed SPI.`, 'error');
-            setScanBarcode('');
-            return;
-        }
-
-        // Successfully scanned - add to local list as PENDING
-        setTableSerials(prev => [{ ...match, last_status: 'PENDING', last_step: 'Post AOI' }, ...prev]);
-        setScanBarcode('');
-        addToast(`${match.serial_number} scanned successfully.`, 'success');
     };
 
-    // Auto-scan effect
-    useEffect(() => {
-        const cleanInput = (scanBarcode || '').trim().replace(/-/g, '').toUpperCase();
-        if (cleanInput.length < 5) return;
-
-        const match = allValidSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-            )
-        );
-
-        if (match) {
-            processScan(scanBarcode);
-        }
-    }, [scanBarcode, allValidSerials]);
-
-    // ── Pass / Fail ─────────────────────────────────────────────────────────
     const handleFailOnly = async (serialId: number) => {
-        const reason = window.prompt('Please enter the reason for failure (rework):');
-        if (reason === null) return; // User cancelled
+        const reason = window.prompt('Please enter the defect remark for Post AOI failure:');
+        if (reason === null) return;
         if (!reason.trim()) {
-            addToast('Failure reason is required.', 'error');
+            addToast('Defect remark is required.', 'error');
+            alert('Defect remark is required to fail a barcode.');
             return;
         }
 
@@ -177,41 +164,149 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                 })
             });
             if (res.ok) {
-                setTableSerials(prev => prev.map(s =>
-                    s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Post AOI', rework_reason: reason.trim() } : s
-                ));
-                addToast('Item marked as FAIL with rework.', 'info');
+                const newInsp = await res.json();
+                setTableSerials(prev => {
+                    const exists = prev.find(s => s.id === serialId);
+                    if (exists) {
+                        return prev.map(s =>
+                            s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Post AOI', rework_reason: reason.trim(), scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at } : s
+                        );
+                    } else {
+                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
+                        return [{
+                            id: serialId,
+                            serial_number: sInfo.serial_number,
+                            barcode: sInfo.serial_number,
+                            last_status: 'FAIL',
+                            last_step: 'Post AOI',
+                            rework_reason: reason.trim(),
+                            scanned_by: newInsp.scanned_by,
+                            scanned_at: newInsp.scanned_at,
+                            barcode_source: sInfo.barcode_source
+                        }, ...prev];
+                    }
+                });
+                addToast('Item marked as FAIL with defect remark.', 'info');
             } else {
                 addToast('Failed to save FAIL status.', 'error');
             }
-        } catch { addToast('Network error.', 'error'); }
+        } catch {
+            addToast('Network error.', 'error');
+        }
     };
 
-    const handlePass = async (serialId: number) => {
-        try {
-            const res = await fetch('/api/smt/inspections', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    serial_id: serialId,
-                    process_step: 'Post AOI',
-                    scanned_by: operatorName || 'System',
-                    status: 'PASS'
-                })
-            });
-            if (res.ok) {
-                setTableSerials(prev => prev.map(s =>
-                    s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'Post AOI' } : s
-                ));
-                addToast('Item marked as PASS.', 'success');
-            } else {
-                addToast('Failed to save PASS status.', 'error');
+    const processScan = async (barcodeInput: string) => {
+        const cleanInput = (barcodeInput || '').trim().replace(/-/g, '').toUpperCase();
+        if (!cleanInput) return;
+
+        const match = allWoSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+
+        if (!match) {
+            addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
+            alert(`Barcode "${barcodeInput}" not found in this Work Order.`);
+            setScanBarcode('');
+            return;
+        }
+
+        // Validate Pre AOI status
+        if (match.step_status === 'FAIL') {
+            addToast(`Previous stage failed: Barcode failed in Pre AOI. Cannot continue to Post AOI.`, 'error');
+            alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Pre AOI stage. Cannot continue to Post AOI.`);
+            setScanBarcode('');
+            return;
+        }
+
+        if (!match.step_status || match.step_status !== 'PASS') {
+            addToast(`Previous stage not completed: Barcode has not passed Pre AOI stage.`, 'error');
+            alert(`Previous stage not completed: Barcode "${barcodeInput}" has not passed Pre AOI stage. Cannot continue to Post AOI.`);
+            setScanBarcode('');
+            return;
+        }
+
+        // Check if barcode failed in its last inspection step (if that step was Post AOI)
+        if (match.last_step === 'Post AOI' && match.last_status === 'FAIL') {
+            addToast(`Previous stage failed: Barcode failed in Post AOI and must be reworked first.`, 'error');
+            alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Post AOI and has not been reworked. Please repair in Rework module first.`);
+            setScanBarcode('');
+            return;
+        }
+
+        // Check if already in table and passed (and not reworked since last Post AOI PASS)
+        const alreadyInTable = tableSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+
+        if (alreadyInTable) {
+            // It has already been scanned in Post AOI. Is it currently PASS?
+            if (alreadyInTable.last_status === 'PASS') {
+                // If it hasn't been reworked since then (which it shouldn't be since it passed), reject.
+                if (match.last_step !== 'Rework') {
+                    addToast(`Barcode ${barcodeInput} has already passed Post AOI.`, 'info');
+                    alert(`Barcode "${barcodeInput}" has already passed Post AOI.`);
+                    setScanBarcode('');
+                    return;
+                }
             }
-        } catch { addToast('Network error.', 'error'); }
+            // Auto-PASS on scan if it failed earlier or has been reworked
+            await handlePass(alreadyInTable.id);
+            setScanBarcode('');
+            return;
+        }
+
+        // Auto-PASS on scan
+        await handlePass(match.id);
+        setScanBarcode('');
     };
+
+    // Auto-scan effect
+    useEffect(() => {
+        const cleanInput = (scanBarcode || '').trim().replace(/-/g, '').toUpperCase();
+        if (cleanInput.length < 5) return;
+
+        const match = allWoSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+
+        if (match) {
+            const alreadyInTable = tableSerials.find((s: any) =>
+                [s.serial_number, s.barcode].some(v =>
+                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+                )
+            );
+            // Scan if not in table, or if it failed earlier, or if it has been reworked since last check
+            if (!alreadyInTable || alreadyInTable.last_status !== 'PASS' || match.last_step === 'Rework') {
+                processScan(scanBarcode);
+            }
+        }
+    }, [scanBarcode, allWoSerials, tableSerials]);
+
+    const handleScan = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await processScan(scanBarcode);
+    };
+
+    const sortedTableSerials = [...tableSerials].sort((a, b) => {
+        const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : Date.now();
+        const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : Date.now();
+        return timeB - timeA;
+    });
 
     return (
         <>
+            <style>{`
+                @keyframes rowHighlight {
+                    0% { box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.4); }
+                    100% { box-shadow: none; }
+                }
+            `}</style>
             <Toaster toasts={toasts} onRemove={removeToast} />
             <div className={styles.detailPage}>
                 <div className={styles.detailHeaderCard}>
@@ -220,8 +315,8 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🤖 Post AOI Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
                                 <span style={{ color: '#475569' }}>Total Scanned: <strong>{tableSerials.length} / {totalSerials}</strong></span>
-                                <span style={{ color: '#475569' }}>🏭 Serial Number Available: <strong style={{ color: '#2563eb' }}>{totalSerials}</strong></span>
-                                <span style={{ color: '#475569' }}>✅ completed: <strong style={{ color: '#059669' }}>{tableSerials.length}</strong></span>
+                                <span style={{ color: '#475569' }}>🏭 Available: <strong style={{ color: '#2563eb' }}>{totalSerials}</strong></span>
+                                <span style={{ color: '#475569' }}>✅ completed: <strong style={{ color: '#059669' }}>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                                 <span style={{ color: '#475569' }}>🔄 pending: <strong style={{ color: '#f59e0b' }}>{totalSerials - tableSerials.length}</strong></span>
                             </div>
                         </div>
@@ -236,9 +331,9 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                             <input type="text" className={styles.input} value={operatorName} readOnly style={{ backgroundColor: '#f9fafb', height: '42px' }} />
                         </div>
                         <div className={styles.inputGroup}>
-                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must have passed SPI)...</label>
+                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must have passed Pre AOI)...</label>
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
-                                <form onSubmit={(e) => { e.preventDefault(); processScan(scanBarcode); }} style={{ flex: 1 }}>
+                                <form onSubmit={handleScan} style={{ flex: 1 }}>
                                     <input
                                         ref={scanInputRef}
                                         type="text"
@@ -249,7 +344,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                                         style={{ width: '100%', borderColor: '#6366f1', borderWidth: '2px' }}
                                     />
                                 </form>
-                                <button className={styles.button} style={{ width: '140px', background: '#4f46e5' }} onClick={() => processScan(scanBarcode)}>SCAN</button>
+                                <button className={styles.button} style={{ width: '140px' }} onClick={() => processScan(scanBarcode)}>SCAN</button>
                             </div>
                         </div>
                     </div>
@@ -263,60 +358,76 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                         <table className={styles.table}>
                             <thead>
                                 <tr>
-                                    <th>#</th>
-                                    <th>SERIAL NUMBER</th>
-                                    <th>BARCODE</th>
+                                    <th style={{ textAlign: 'center' }}>BARCODE PREVIEW</th>
+                                    <th>BARCODE NUMBER</th>
                                     <th>STATUS</th>
+                                    <th>REMARK</th>
+                                    <th>SCANNED BY</th>
+                                    <th>SCANNED AT</th>
                                     <th>ACTION</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {loading ? (
-                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Loading data...</td></tr>
+                                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
                                 ) : tableSerials.length === 0 ? (
-                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin inspection</td></tr>
-                                ) : tableSerials.map((s, idx) => {
+                                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin Post AOI inspection</td></tr>
+                                ) : sortedTableSerials.map((s, idx) => {
                                     const isPass = s.last_status === 'PASS';
                                     const isFail = s.last_status === 'FAIL';
+                                    const showBarcodeImage = s.barcode_source === 'GENERATED' || !s.barcode_source || (s.barcode_source === 'PRE_EXISTING' && s.serial_number);
+                                    const isNew = Date.now() - new Date(s.scanned_at || 0).getTime() < 4000;
+
                                     return (
-                                        <tr key={s.id || idx}>
-                                            <td style={{ color: '#9ca3af', fontWeight: 500 }}>{tableSerials.length - idx}</td>
-                                            <td style={{ fontWeight: 600 }}>{(s.serial_number || '').toUpperCase()}</td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                <div style={{ display: 'grid', gap: '0.3rem', justifyItems: 'center' }}>
-                                                    <QRCode value={(s.serial_number || '').toUpperCase()} size={60} />
-                                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{(s.serial_number || '').toUpperCase()}</span>
-                                                </div>
+                                        <tr
+                                            key={s.id || idx}
+                                            style={{
+                                                transition: 'all 0.2s',
+                                                animation: isNew ? 'rowHighlight 4s ease-out' : undefined
+                                            }}
+                                        >
+                                            <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                                {showBarcodeImage ? (
+                                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                        <QRCode value={(s.serial_number || '').toUpperCase()} size={64} />
+                                                    </div>
+                                                ) : (
+                                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                                )}
                                             </td>
-                                            <td>
+                                            <td style={{ padding: '1rem', fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>
+                                                {(s.serial_number || '').toUpperCase()}
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
                                                 <span style={{
-                                                    padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                                                    padding: '6px 14px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 'bold',
+                                                    display: 'inline-flex', alignItems: 'center',
                                                     backgroundColor: isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7',
                                                     color: isPass ? '#166534' : isFail ? '#991b1b' : '#92400e'
                                                 }}>
-                                                    {isPass ? '✓ PASSED' : isFail ? '● FAIL' : '🕒 PENDING'}
+                                                    {isPass ? '✓ PASS' : isFail ? '● FAIL' : '🕒 PENDING'}
                                                 </span>
                                             </td>
-                                            <td>
-                                                {reworkTarget === s.id ? (
-                                                    <div style={{ display: 'flex', gap: '5px' }}>
-                                                        <input
-                                                            type="text"
-                                                            className={styles.input}
-                                                            style={{ height: '32px', fontSize: '0.8rem' }}
-                                                            placeholder="Reason..."
-                                                            value={reworkReason}
-                                                            onChange={e => setreworkReason(e.target.value)}
-                                                            autoFocus
-                                                        />
-                                                        <button onClick={() => handleFailOnly(s.id)} className={styles.button} style={{ height: '32px', padding: '0 10px', fontSize: '0.8rem' }}>Save</button>
-                                                        <button onClick={() => setreworkTarget(null)} className={styles.secondaryButton} style={{ height: '32px', padding: '0 10px', fontSize: '0.8rem' }}>X</button>
-                                                    </div>
+                                            <td style={{ padding: '1rem', fontWeight: 600, color: isFail ? '#ef4444' : '#64748b' }}>
+                                                {isFail ? (s.rework_reason || 'Defect Registered') : '-'}
+                                            </td>
+                                            <td style={{ padding: '1rem', fontWeight: 600, color: '#475569' }}>
+                                                {s.scanned_by || 'System'}
+                                            </td>
+                                            <td style={{ padding: '1rem', fontSize: '0.85rem', color: '#64748b' }}>
+                                                {s.scanned_at ? new Date(s.scanned_at).toLocaleString() : '-'}
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
+                                                {isPass ? (
+                                                    <button
+                                                        onClick={() => handleFailOnly(s.id)}
+                                                        className={styles.button}
+                                                        style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}
+                                                    >
+                                                        FAIL
+                                                    </button>
                                                 ) : (
-                                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                                        {!isPass && <button onClick={() => handlePass(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#059669' }}>PASS</button>}
-                                                        {!isFail && <button onClick={() => setreworkTarget(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}>FAIL</button>}
-                                                    </div>
+                                                    <span style={{ color: '#9ca3af' }}>-</span>
                                                 )}
                                             </td>
                                         </tr>
@@ -331,14 +442,14 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
     );
 };
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main Page Component ───────────────────────────────────────────────────────
 const PostAoi: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
     const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
+    const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
 
-    // Toast state
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
 
@@ -349,66 +460,75 @@ const PostAoi: React.FC = () => {
     }, []);
 
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
-    const [viewingWoId, setViewingWoId] = useState<string | null>(null);
 
-    // Form state
     const [formWoId, setFormWoId] = useState('');
     const [productName, setProductName] = useState('');
     const [woQty, setWoQty] = useState('');
     const [panelQty, setPanelQty] = useState('');
     const [createdBy, setCreatedBy] = useState('');
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
+    const [inspections, setInspections] = useState<any[]>([]);
 
-    // Track which WOs have already been opened (persisted to sessionStorage)
-    const openedWosKey = 'postAoi_openedWos';
-    const getOpenedWos = (): string[] => {
-        try { return JSON.parse(sessionStorage.getItem(openedWosKey) || '[]'); } catch { return []; }
-    };
-    const markWoOpened = (woId: string) => {
-        const opened = getOpenedWos();
-        if (!opened.includes(woId)) sessionStorage.setItem(openedWosKey, JSON.stringify([...opened, woId]));
-    };
+    const fetchData = useCallback(async () => {
+        try {
+            const woRes = await fetch('/api/smt/work-orders/registered');
+            if (woRes.ok) {
+                const data = await woRes.json();
+                setWorkOrders(data);
+            }
+
+            const setupRes = await fetch('/api/smt/process-setups?process_name=POST_AOI');
+            if (setupRes.ok) {
+                const data = await setupRes.json();
+                setSavedEntries(data);
+            }
+
+            const inspRes = await fetch('/api/smt/inspections?process_step=Post AOI');
+            if (inspRes.ok) {
+                const data = await inspRes.json();
+                setInspections(data);
+            }
+
+            if (smtUser) {
+                setCreatedBy(smtUser.name || smtUser.userId || 'System');
+            }
+        } catch (err) {
+            console.error("Failed to fetch Post AOI data:", err);
+        }
+    }, [smtUser]);
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const woRes = await fetch('/api/smt/work-orders/registered');
-                if (woRes.ok) setWorkOrders(await woRes.json());
-
-                const setupRes = await fetch('/api/smt/process-setups?process_name=POST_AOI');
-                if (setupRes.ok) setSavedEntries(await setupRes.json());
-
-                if (smtUser) setCreatedBy(smtUser.name || smtUser.userId || 'System');
-            } catch (err) {
-                console.error('Failed to fetch data:', err);
-            }
-        };
         fetchData();
-    }, [smtUser]);
+    }, [fetchData, smtUser]);
 
     const handleSelectWo = (woId: string) => {
         setFormWoId(woId);
-        const wo = workOrders.find(w => w.id === woId || w.work_order_id === woId);
+        const wo = workOrders.find(w => (w.id === woId || w.work_order_id === woId));
         if (wo) {
             setProductName(wo.product_name);
             setWoQty(wo.quantity.toString());
             setPanelQty(wo.panel_quantity.toString());
         } else {
-            setProductName(''); setWoQty(''); setPanelQty('');
+            setProductName('');
+            setWoQty('');
+            setPanelQty('');
         }
     };
 
     const getShift = () => {
-        const h = new Date().getHours();
-        if (h >= 23 || h < 7) return 'C (11PM – 07AM)';
-        if (h >= 15 && h < 23) return 'B (03PM – 11PM)';
-        if (h >= 8 && h < 17) return 'G (08AM – 05PM)';
-        if (h >= 6 && h < 15) return 'A (06AM – 03PM)';
+        const hour = new Date().getHours();
+        if (hour >= 23 || hour < 7) return 'C (11PM - 07AM)';
+        if (hour >= 15 && hour < 23) return 'B (03PM - 11PM)';
+        if (hour >= 8 && hour < 17) return 'G (08AM - 05PM)';
+        if (hour >= 6 && hour < 15) return 'A (06AM - 03PM)';
         return 'N/A';
     };
 
     const handleStartProcess = async () => {
-        if (!formWoId) { alert('Please select a Work Order.'); return; }
+        if (!formWoId) {
+            alert('Please select a Work Order.');
+            return;
+        }
 
         try {
             const res = await fetch('/api/smt/process-setups', {
@@ -424,50 +544,57 @@ const PostAoi: React.FC = () => {
 
             if (res.ok) {
                 const newEntry = await res.json();
-                setSavedEntries(prev => [newEntry, ...prev]);
-
-                const isFirstTime = !getOpenedWos().includes(formWoId);
-                markWoOpened(formWoId);
-
-                if (isFirstTime) {
-                    // Auto-redirect on first start
-                    setViewingWoId(formWoId);
-                } else {
-                    alert(`Post AOI Inspection started for WO: ${formWoId}`);
-                }
+                setSavedEntries([newEntry, ...savedEntries]);
+                setSelectedWoId(formWoId);
+                alert(`Starting Post AOI Inspection for WO: ${formWoId}`);
             } else {
-                alert('Failed to save Post AOI setup');
+                alert("Failed to save Post AOI setup");
             }
         } catch (err) {
-            console.error('Error saving setup:', err);
-            alert('Connection error while saving setup');
+            console.error("Error saving setup:", err);
+            alert("Connection error while saving setup");
         }
     };
 
-    if (viewingWoId) {
-        return (
-            <PostAoiDetail
-                woId={viewingWoId}
-                onBack={() => setViewingWoId(null)}
-                operatorName={smtUser?.name || 'System'}
-            />
-        );
-    }
+    const dropdownWorkOrders = workOrders.filter(wo => {
+        const woId = wo.id || wo.work_order_id;
+        const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase()).length;
+        const targetQty = wo.scanned_count || wo.quantity || 0;
+        const isCompleted = inspectedCount >= targetQty && targetQty > 0;
+        return !hasSetup && !isCompleted;
+    });
+
+    const pendingEntries = savedEntries.filter(entry => {
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
+        return inspectedCount < targetQty || targetQty === 0;
+    });
+
+    const completedEntries = savedEntries.filter(entry => {
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        if (!wo) return false;
+        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const targetQty = wo.scanned_count || wo.quantity;
+        return inspectedCount >= targetQty && targetQty > 0;
+    });
 
     return (
         <>
             <Toaster toasts={toasts} onRemove={removeToast} />
             <div className={styles.container}>
-                {/* Header */}
                 <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🤖 Post AOI Inspection</h2>
-                        <p style={{ color: '#64748b' }}>
-                            Manage SMT Automated Optical Inspection tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong>
-                        </p>
+                        <p style={{ color: '#64748b' }}>Manage SMT Post AOI Inspection tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
                     </div>
                     <button
-                        onClick={() => { if (window.confirm('Are you sure you want to logout from SMT?')) smtLogout(); }}
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to logout from SMT?")) {
+                                smtLogout();
+                            }
+                        }}
                         className={styles.secondaryButton}
                         style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                     >
@@ -475,115 +602,194 @@ const PostAoi: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Setup Form */}
-                <div className={styles.card}>
-                    <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Post AOI Setup Form</h3>
-                    <div className={styles.formGrid}>
-                        <div className={styles.inputGroup}>
-                            <label>Select Work Order *</label>
-                            <select className={styles.input} value={formWoId} onChange={(e) => handleSelectWo(e.target.value)}>
-                                <option value="">-- Select Work Order --</option>
-                                {workOrders.map((wo) => (
-                                    <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
-                                        {wo.id || wo.work_order_id} - {wo.product_name}
-                                    </option>
-                                ))}
-                            </select>
+                {selectedWoId ? (
+                    <PostAoiDetail
+                        woId={selectedWoId}
+                        onBack={() => {
+                            setSelectedWoId(null);
+                            fetchData();
+                        }}
+                        operatorName={smtUser?.name || 'System'}
+                    />
+                ) : (
+                    <>
+                        <div className={styles.card}>
+                            <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Post AOI Setup Form</h3>
+                            <div className={styles.formGrid}>
+                                <div className={styles.inputGroup}>
+                                    <label>Select Work Order *</label>
+                                    <select className={styles.input} value={formWoId} onChange={(e) => handleSelectWo(e.target.value)}>
+                                        <option value="">-- Select Work Order --</option>
+                                        {dropdownWorkOrders.map((wo) => (
+                                            <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
+                                                {wo.id || wo.work_order_id} - {wo.product_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Product Name (Auto-filled)</label>
+                                    <input type="text" className={styles.input} value={productName} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>WO Qty (Auto-filled)</label>
+                                    <input type="number" className={styles.input} value={woQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Panel Qty (Auto-filled)</label>
+                                    <input type="number" className={styles.input} value={panelQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Generated By *</label>
+                                    <input type="text" className={styles.input} value={createdBy} readOnly style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }} />
+                                </div>
+                            </div>
+                            <div style={{ marginTop: '30px' }}>
+                                <button className={styles.button} onClick={handleStartProcess}>
+                                    Start Post AOI Inspection
+                                </button>
+                            </div>
                         </div>
 
-                        <div className={styles.inputGroup}>
-                            <label>Product Name (Auto-filled)</label>
-                            <input type="text" className={styles.input} value={productName} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
+                        {/* Pending Sessions */}
+                        <div className={styles.card}>
+                            <h3>Pending Post AOI Sessions</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>TIME</th>
+                                            <th>ACTION</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {pendingEntries.map((entry) => (
+                                            <tr key={entry.id}>
+                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                                <td>{(entry.product_name || '').toUpperCase()}</td>
+                                                <td>{entry.quantity || entry.wo_qty}</td>
+                                                <td>{entry.panel_qty || 'N/A'}</td>
+                                                <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                    {new Date(entry.timestamp).toLocaleTimeString()}
+                                                </td>
+                                                <td style={{ display: 'flex', gap: '5px' }}>
+                                                    <button
+                                                        className={styles.button}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', height: 'auto', lineHeight: 'normal', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}
+                                                        onClick={() => setSelectedWoId(entry.work_order_id || entry.wo_id || entry.work_order)}
+                                                    >
+                                                        Resume
+                                                    </button>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                        onClick={async () => {
+                                                            if (!isSuperAdmin) {
+                                                                addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                                return;
+                                                            }
+                                                            if (window.confirm('Are you sure you want to delete this entry?')) {
+                                                                const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                if (res.ok) {
+                                                                    setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                                    addToast("Entry deleted successfully.", "success");
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {pendingEntries.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No pending sessions found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
-                        <div className={styles.inputGroup}>
-                            <label>WO Qty (Auto-filled)</label>
-                            <input type="number" className={styles.input} value={woQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
+                        {/* Completed Sessions */}
+                        <div className={styles.card}>
+                            <h3>Completed Post AOI Sessions</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>TIME</th>
+                                            <th>ACTION</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {completedEntries.map((entry) => (
+                                            <tr key={entry.id}>
+                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                                <td>{(entry.product_name || '').toUpperCase()}</td>
+                                                <td>{entry.quantity || entry.wo_qty}</td>
+                                                <td>{entry.panel_qty || 'N/A'}</td>
+                                                <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                    {new Date(entry.timestamp).toLocaleTimeString()}
+                                                </td>
+                                                <td style={{ display: 'flex', gap: '5px' }}>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                                        onClick={() => setSelectedWoId(entry.work_order_id || entry.wo_id || entry.work_order)}
+                                                    >
+                                                        View
+                                                    </button>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                        onClick={async () => {
+                                                            if (!isSuperAdmin) {
+                                                                addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                                return;
+                                                            }
+                                                            if (window.confirm('Are you sure you want to delete this entry?')) {
+                                                                const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                if (res.ok) {
+                                                                    setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                                    addToast("Entry deleted successfully.", "success");
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {completedEntries.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No completed sessions found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-
-                        <div className={styles.inputGroup}>
-                            <label>Panel Qty (Auto-filled)</label>
-                            <input type="number" className={styles.input} value={panelQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
-                        </div>
-
-                        <div className={styles.inputGroup}>
-                            <label>Generated By *</label>
-                            <input type="text" className={styles.input} value={createdBy} readOnly style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }} />
-                        </div>
-                    </div>
-                    <div style={{ marginTop: '30px' }}>
-                        <button className={styles.button} onClick={handleStartProcess}>
-                            Start Post AOI Inspection
-                        </button>
-                    </div>
-                </div>
-
-                {/* Recent Entries */}
-                <div className={styles.card}>
-                    <h3>Recent Post AOI Entries</h3>
-                    <div className={styles.tableContainer}>
-                        <table className={styles.table}>
-                            <thead>
-                                <tr>
-                                    <th>WO NUMBER</th>
-                                    <th>PRODUCT NAME</th>
-                                    <th>WO QTY</th>
-                                    <th>PANEL QTY</th>
-                                    <th>TIME</th>
-                                    <th>ACTION</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {savedEntries.map((entry) => (
-                                    <tr key={entry.id}>
-                                        <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
-                                        <td>{(entry.product_name || '').toUpperCase()}</td>
-                                        <td>{entry.quantity || entry.wo_qty}</td>
-                                        <td>{entry.panel_qty || 'N/A'}</td>
-                                        <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                            {new Date(entry.timestamp).toLocaleTimeString()}
-                                        </td>
-                                        <td style={{ display: 'flex', gap: '5px' }}>
-                                            <button
-                                                className={styles.secondaryButton}
-                                                style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                onClick={() => setViewingWoId(entry.work_order_id || entry.wo_id || entry.work_order)}
-                                            >
-                                                View
-                                            </button>
-                                            <button
-                                                className={styles.secondaryButton}
-                                                style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                onClick={async () => {
-                                                    if (!isSuperAdmin) {
-                                                        addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                        return;
-                                                    }
-                                                    if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                        const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                        if (res.ok) {
-                                                            setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
-                                                            addToast("Entry deleted successfully.", "success");
-                                                        }
-                                                    }
-                                                }}
-                                            >
-                                                Delete
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {savedEntries.length === 0 && (
-                                    <tr>
-                                        <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                            No recent entries found.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                    </>
+                )}
             </div>
         </>
     );

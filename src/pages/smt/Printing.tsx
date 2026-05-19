@@ -34,7 +34,6 @@ interface PrintingDetailProps {
 
 const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorName }) => {
     const [serials, setSerials] = useState<any[]>([]);
-    const [totalAvailable, setTotalAvailable] = useState(0);
     const [loading, setLoading] = useState(true);
     const [scanBarcode, setScanBarcode] = useState('');
     const [scannedBy, setScannedBy] = useState(operatorName);
@@ -50,20 +49,11 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
     const fetchSerials = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/smt/serial-numbers?work_order_id=${encodeURIComponent(woId)}&current_step=Printing`);
+            // Fetch only those that passed PCB Generation
+            const res = await fetch(`/api/smt/serial-numbers?work_order_id=${encodeURIComponent(woId)}&filter_step=PCB Generation&filter_status=PASS&current_step=Printing`);
             if (res.ok) {
                 const data = await res.json();
-                setTotalAvailable(data.length);
-
-                // Printing should show serials that completed Serial Number Scanning,
-                // plus any serial already completed in Printing.
-                const scannedOnly = data.filter((s: any) =>
-                    (s.status || '').toString().toUpperCase() === 'SCANNED' ||
-                    s.is_completed_here === true ||
-                    String(s.is_completed_here || '').toLowerCase() === 'true'
-                );
-
-                setSerials(scannedOnly);
+                setSerials(data);
             }
         } catch (err) {
             console.error("Error fetching serials:", err);
@@ -72,27 +62,13 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
         }
     };
 
-    const processScan = async (barcodeInput: string) => {
-        const cleanInput = barcodeInput.trim().replace(/-/g, "");
-        if (!cleanInput) return false;
-
+    const handlePass = async (serialId: number) => {
         try {
-            const serialObj = serials.find(s =>
-                (s.serial_number && s.serial_number.replace(/-/g, "") === cleanInput) ||
-                (s.barcode && s.barcode.replace(/-/g, "") === cleanInput)
-            );
-
-            if (!serialObj) {
-                alert(`Serial Number "${barcodeInput}" not found or not ready for printing!`);
-                setScanBarcode('');
-                return false;
-            }
-
             const res = await fetch('/api/smt/inspections', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    serial_id: serialObj.id,
+                    serial_id: serialId,
                     process_step: 'Printing',
                     scanned_by: scannedBy || 'System',
                     status: 'PASS'
@@ -100,17 +76,77 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
             });
 
             if (res.ok) {
-                setScanBarcode('');
                 fetchSerials();
-                return true;
             } else {
                 alert("Failed to save printing record");
-                return false;
             }
         } catch (err) {
-            console.error("Scan error:", err);
+            console.error("Pass error:", err);
+        }
+    };
+
+    const handleFail = async (serialId: number) => {
+        const remark = window.prompt("Please enter mandatory failure remark (e.g. Print mismatch, Smudged print, Barcode unreadable, Alignment issue):");
+        if (remark === null) return; // cancelled
+        if (!remark.trim()) {
+            alert("Error: Failure remark is MANDATORY. Status not updated.");
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/smt/inspections', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    serial_id: serialId,
+                    process_step: 'Printing',
+                    scanned_by: scannedBy || 'System',
+                    status: 'FAIL',
+                    rework_reason: remark.trim()
+                })
+            });
+
+            if (res.ok) {
+                fetchSerials();
+            } else {
+                alert("Failed to save printing failure record");
+            }
+        } catch (err) {
+            console.error("Fail error:", err);
+        }
+    };
+
+    const scannedSerials = serials
+        .filter(s => s.step_status !== null && s.step_status !== undefined)
+        .sort((a, b) => new Date(b.step_scanned_at || 0).getTime() - new Date(a.step_scanned_at || 0).getTime());
+
+    const processScan = async (barcodeInput: string) => {
+        const cleanInput = barcodeInput.trim().replace(/-/g, "");
+        if (!cleanInput) return false;
+
+        const serialObj = serials.find(s =>
+            (s.serial_number && s.serial_number.replace(/-/g, "") === cleanInput) ||
+            (s.barcode && s.barcode.replace(/-/g, "") === cleanInput)
+        );
+
+        if (!serialObj) {
+            alert(`Serial Number "${barcodeInput}" not found, does not belong to this Work Order, or has not passed PCB Generation stage!`);
+            setScanBarcode('');
             return false;
         }
+
+        // Check if already scanned and PASSed in Printing stage to prevent duplicates
+        const alreadyScanned = scannedSerials.find(s => s.id === serialObj.id);
+        if (alreadyScanned && alreadyScanned.step_status === 'PASS') {
+            alert(`Barcode "${barcodeInput}" has already been printed successfully (PASS)!`);
+            setScanBarcode('');
+            return false;
+        }
+
+        // Automatic PASS scan
+        await handlePass(serialObj.id);
+        setScanBarcode('');
+        return true;
     };
 
     const handleScan = async (e: React.FormEvent) => {
@@ -128,30 +164,36 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
                 (s.barcode && s.barcode.replace(/-/g, "") === cleanInput)
             );
 
+            // Only trigger auto scan if it has not been successfully processed yet (meaning it's not already PASS in scannedSerials)
             if (match) {
-                await processScan(scanBarcode);
+                const alreadyScanned = scannedSerials.find(s => s.id === match.id);
+                if (!alreadyScanned || alreadyScanned.step_status !== 'PASS') {
+                    await processScan(scanBarcode);
+                }
             }
         };
 
         tryAutoScan();
     }, [scanBarcode, serials]);
 
-    const completedSerials = serials.filter(s =>
-        s.is_completed_here === true ||
-        String(s.is_completed_here || '').toLowerCase() === 'true'
-    );
-
     return (
         <div className={styles.detailPage}>
+            <style>{`
+                @keyframes rowHighlight {
+                    0% { box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.4); }
+                    100% { box-shadow: none; }
+                }
+            `}</style>
             <div className={styles.detailHeaderCard}>
                 <div className={styles.detailHeaderRow}>
                     <div>
                         <h3>🖨️ Printing Batch Detail: {woId}</h3>
                         <div className={styles.detailStats} style={{ gap: '1.5rem' }}>
-                            <span style={{ color: '#475569' }}>Total Serial Number Available: <strong style={{ color: '#2563eb' }}>{totalAvailable}</strong></span>
-                            <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#059669' }}>{serials.length}</strong></span>
-                            <span style={{ color: '#059669' }}>Passed: <strong>{completedSerials.length}</strong></span>
-                            <span style={{ color: '#d97706' }}>Pending: <strong>{serials.length - completedSerials.length}</strong></span>
+                            <span style={{ color: '#475569' }}>Total Qty (PCB Passed): <strong style={{ color: '#2563eb' }}>{serials.length}</strong></span>
+                            <span style={{ color: '#475569' }}>Scanned Qty: <strong style={{ color: '#059669' }}>{scannedSerials.length}</strong></span>
+                            <span style={{ color: '#059669' }}>Passed: <strong>{scannedSerials.filter(s => s.step_status === 'PASS').length}</strong></span>
+                            <span style={{ color: '#ef4444' }}>Failed: <strong>{scannedSerials.filter(s => s.step_status === 'FAIL').length}</strong></span>
+                            <span style={{ color: '#d97706' }}>Pending Qty: <strong>{serials.length - scannedSerials.length}</strong></span>
                         </div>
                     </div>
                     <button onClick={onBack} className={styles.detailBackButton}>Back</button>
@@ -187,16 +229,17 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
 
             <div className={styles.detailItemsSection}>
                 <div className={styles.detailItemsHeader}>
-                    <h3>Items ({serials.length})</h3>
+                    <h3>Items ({scannedSerials.length})</h3>
                 </div>
 
                 <div className={styles.detailTableContainer}>
                     <table className={styles.table}>
                         <thead>
                             <tr>
-                                <th>SERIAL NUMBER</th>
-                                <th>BARCODE</th>
+                                <th style={{ textAlign: 'center' }}>BARCODE PREVIEW</th>
+                                <th>BARCODE NUMBER</th>
                                 <th>STATUS</th>
+                                <th>REMARK</th>
                                 <th>SCANNED BY</th>
                                 <th>SCANNED AT</th>
                                 <th>ACTION</th>
@@ -204,43 +247,100 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
-                            ) : serials.map((s, idx) => {
-                                const isDone = completedSerials.includes(s);
+                                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                            ) : scannedSerials.map((s, idx) => {
+                                const isDone = s.step_status === 'PASS';
+                                const isFailed = s.step_status === 'FAIL';
+                                const barcodeValue = (s.serial_number || s.barcode || '').toUpperCase();
+                                const isNew = Date.now() - new Date(s.step_scanned_at || 0).getTime() < 4000;
+
+                                let badgeBg = '#f3f4f6';
+                                let badgeColor = '#4b5563';
+                                let badgeText = 'PENDING';
+
+                                if (isDone) {
+                                    badgeBg = '#dcfce7';
+                                    badgeColor = '#15803d';
+                                    badgeText = 'PASS';
+                                } else if (isFailed) {
+                                    badgeBg = '#fee2e2';
+                                    badgeColor = '#b91c1c';
+                                    badgeText = 'FAIL';
+                                } else {
+                                    badgeBg = '#fffbeb';
+                                    badgeColor = '#d97706';
+                                    badgeText = 'PENDING';
+                                }
+
                                 return (
-                                    <tr key={s.id || idx} className={isDone ? styles.detailDoneRow : styles.detailPendingRow}>
-                                        <td className={styles.detailSerialCell}>{(s.serial_number || '').toUpperCase()}</td>
+                                    <tr 
+                                        key={s.id || idx} 
+                                        style={{ 
+                                            backgroundColor: isDone ? '#f0fdf4' : '#fee2e2',
+                                            transition: 'all 0.2s',
+                                            animation: isNew ? 'rowHighlight 4s ease-out' : undefined
+                                        }}
+                                    >
                                         <td className={styles.detailQrCell}>
-                                            <div className={styles.detailQrItem}>
-                                                <QRCode value={(s.serial_number || '').toUpperCase()} size={80} />
-                                                <p>{(s.serial_number || '').toUpperCase()}</p>
-                                            </div>
+                                            {barcodeValue ? (
+                                                <div className={styles.detailQrItem}>
+                                                    <QRCode value={barcodeValue} size={64} />
+                                                    <p>{barcodeValue}</p>
+                                                </div>
+                                            ) : (
+                                                <span style={{ color: '#9ca3af' }}>-</span>
+                                            )}
+                                        </td>
+                                        <td className={styles.detailSerialCell} style={{ fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>
+                                            {(s.serial_number || '').toUpperCase()}
                                         </td>
                                         <td>
-                                            <span className={isDone ? styles.detailPassedBadge : styles.detailPendingBadge}>
-                                                {isDone ? 'PASSED' : 'PENDING'}
+                                            <span style={{
+                                                padding: '6px 14px',
+                                                borderRadius: '999px',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 'bold',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                backgroundColor: badgeBg,
+                                                color: badgeColor
+                                            }}>
+                                                {badgeText === 'PASS' && '✓ '}
+                                                {badgeText === 'FAIL' && '● '}
+                                                {badgeText === 'PENDING' && '🕒 '}
+                                                {badgeText}
                                             </span>
                                         </td>
-                                        <td style={{ fontWeight: 600, color: '#475569' }}>{s.step_scanned_by || '-'}</td>
+                                        <td style={{ fontWeight: 500, color: isFailed ? '#b91c1c' : '#64748b' }}>
+                                            {isFailed ? (s.step_remark || '-') : '-'}
+                                        </td>
+                                        <td style={{ fontWeight: 600, color: '#475569' }}>
+                                            {s.step_scanned_by || 'System'}
+                                        </td>
                                         <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
                                             {s.step_scanned_at ? new Date(s.step_scanned_at).toLocaleString() : '-'}
                                         </td>
                                         <td>
-                                            <button
-                                                className={styles.secondaryButton}
-                                                style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
-                                                type="button"
-                                            >
-                                                View
-                                            </button>
+                                            {isDone ? (
+                                                <button
+                                                    onClick={() => handleFail(s.id)}
+                                                    className={styles.button}
+                                                    style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444', boxShadow: 'none' }}
+                                                    type="button"
+                                                >
+                                                    FAIL
+                                                </button>
+                                            ) : (
+                                                <span style={{ color: '#9ca3af' }}>-</span>
+                                            )}
                                         </td>
                                     </tr>
                                 );
                             })}
-                            {!loading && serials.length === 0 && (
+                            {!loading && scannedSerials.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                                        No items found.
+                                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                        No items scanned yet.
                                     </td>
                                 </tr>
                             )}
@@ -282,27 +382,35 @@ export const Printing: React.FC = () => {
     const [solderPaste, setSolderPaste] = useState('');
     const [side, setSide] = useState('TOP');
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
+    const [inspections, setInspections] = useState<any[]>([]);
+
+    const fetchData = useCallback(async () => {
+        try {
+            const woRes = await fetch('/api/smt/work-orders/registered');
+            if (woRes.ok) {
+                const data = await woRes.json();
+                setWorkOrders(data);
+            }
+
+            const setupRes = await fetch('/api/smt/process-setups?process_name=PRINTING');
+            if (setupRes.ok) {
+                const data = await setupRes.json();
+                setSavedEntries(data);
+            }
+
+            const inspRes = await fetch('/api/smt/inspections?process_step=Printing');
+            if (inspRes.ok) {
+                const data = await inspRes.json();
+                setInspections(data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch data:", err);
+        }
+    }, []);
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const woRes = await fetch('/api/smt/work-orders/registered');
-                if (woRes.ok) {
-                    const data = await woRes.json();
-                    setWorkOrders(data);
-                }
-
-                const setupRes = await fetch('/api/smt/process-setups?process_name=PRINTING');
-                if (setupRes.ok) {
-                    const data = await setupRes.json();
-                    setSavedEntries(data);
-                }
-            } catch (err) {
-                console.error("Failed to fetch data:", err);
-            }
-        };
         fetchData();
-    }, [smtUser]);
+    }, [fetchData, smtUser]);
 
     const handleSelectWo = (woId: string) => {
         setFormWoId(woId);
@@ -364,6 +472,30 @@ export const Printing: React.FC = () => {
         }
     };
 
+    const dropdownWorkOrders = workOrders.filter(wo => {
+        const woId = wo.id || wo.work_order_id;
+        const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase()).length;
+        const targetQty = wo.scanned_count || wo.quantity || 0;
+        const isCompleted = inspectedCount >= targetQty && targetQty > 0;
+        return !hasSetup && !isCompleted;
+    });
+
+    const pendingEntries = savedEntries.filter(entry => {
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
+        return inspectedCount < targetQty || targetQty === 0;
+    });
+
+    const completedEntries = savedEntries.filter(entry => {
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        if (!wo) return false;
+        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const targetQty = wo.scanned_count || wo.quantity;
+        return inspectedCount >= targetQty && targetQty > 0;
+    });
+
     return (
         <>
             <Toaster toasts={toasts} onRemove={removeToast} />
@@ -389,7 +521,10 @@ export const Printing: React.FC = () => {
                 {viewingWoId ? (
                     <PrintingDetail
                         woId={viewingWoId}
-                        onBack={() => setViewingWoId(null)}
+                        onBack={() => {
+                            setViewingWoId(null);
+                            fetchData();
+                        }}
                         operatorName={smtUser?.name || 'System'}
                     />
                 ) : (
@@ -405,7 +540,7 @@ export const Printing: React.FC = () => {
                                         onChange={(e) => handleSelectWo(e.target.value)}
                                     >
                                         <option value="">-- Select Work Order --</option>
-                                        {workOrders.map((wo) => (
+                                        {dropdownWorkOrders.map((wo) => (
                                             <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
                                                 {wo.id || wo.work_order_id} - {wo.product_name}
                                             </option>
@@ -499,7 +634,7 @@ export const Printing: React.FC = () => {
                         </div>
 
                         <div className={styles.card}>
-                            <h3>Recent Printing Entries</h3>
+                            <h3>Pending Printing Sessions</h3>
                             <div className={styles.tableContainer}>
                                 <table className={styles.table}>
                                     <thead>
@@ -517,7 +652,81 @@ export const Printing: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {savedEntries.map((entry) => (
+                                        {pendingEntries.map((entry) => (
+                                            <tr key={entry.id}>
+                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                                <td>{(entry.product_name || '').toUpperCase()}</td>
+                                                <td>{entry.quantity || entry.wo_qty}</td>
+                                                <td>{entry.panel_qty || 'N/A'}</td>
+                                                <td>{entry.stencil_name || '-'}</td>
+                                                <td>{entry.squeegee_number || '-'}</td>
+                                                <td>{entry.solder_paste || '-'}</td>
+                                                <td>{entry.side || '-'}</td>
+                                                <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                    {new Date(entry.timestamp).toLocaleTimeString()}
+                                                </td>
+                                                <td style={{ display: 'flex', gap: '5px' }}>
+                                                    <button
+                                                        className={styles.button}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', height: 'auto', lineHeight: 'normal', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}
+                                                        onClick={() => setViewingWoId(entry.work_order_id)}
+                                                    >
+                                                        Resume
+                                                    </button>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                        onClick={async () => {
+                                                            if (!isSuperAdmin) {
+                                                                addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                                return;
+                                                            }
+                                                            if (window.confirm("Are you sure you want to delete this entry?")) {
+                                                                const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                if (res.ok) {
+                                                                    setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                                    addToast("Entry deleted successfully.", "success");
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {pendingEntries.length === 0 && (
+                                            <tr>
+                                                <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No pending sessions found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className={styles.card}>
+                            <h3>Completed Printing Sessions</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>STENCIL NAME</th>
+                                            <th>SQUEEGEE NUMBER</th>
+                                            <th>SOLDER PASTE</th>
+                                            <th>SIDE</th>
+                                            <th>TIME</th>
+                                            <th>ACTION</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {completedEntries.map((entry) => (
                                             <tr key={entry.id}>
                                                 <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                                 <td>{(entry.product_name || '').toUpperCase()}</td>
@@ -560,10 +769,10 @@ export const Printing: React.FC = () => {
                                                 </td>
                                             </tr>
                                         ))}
-                                        {savedEntries.length === 0 && (
+                                        {completedEntries.length === 0 && (
                                             <tr>
                                                 <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                    No recent entries found.
+                                                    No completed sessions found.
                                                 </td>
                                             </tr>
                                         )}

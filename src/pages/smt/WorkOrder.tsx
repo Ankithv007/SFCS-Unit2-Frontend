@@ -508,7 +508,7 @@ export const WorkOrder: React.FC = () => {
                                         <td>
                                             <button
                                                 onClick={() => handleDeleteWorkOrder(wo.work_order_id)}
-                                                className={styles.deleteTextButton}
+                                                className={styles.deleteButton}
                                             >
                                                 Delete
                                             </button>

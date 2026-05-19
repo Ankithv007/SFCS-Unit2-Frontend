@@ -47,6 +47,7 @@ interface SmtBatch {
     serial_format: string;
     starting_number: number;
     end_number: number;
+    barcode_source?: string;
     created_by: string;
     created_at: string;
     is_registered: boolean;
@@ -74,10 +75,6 @@ export const SerialNumber: React.FC = () => {
     const [activeBatch, setActiveBatch] = useState<SmtBatch | null>(null);
     const [barcodeFilter, setBarcodeFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const [scannedBy, setScannedBy] = useState('');
-    const [scanInput, setScanInput] = useState('');
-    const [actuallyScanned, setActuallyScanned] = useState<string[]>([]);
-    const [viewMode, setViewMode] = useState<'GENERATED' | 'REGISTRATION_PENDING' | 'REGISTRATION_COMPLETED' | null>(null);
 
     const [batches, setBatches] = useState<SmtBatch[]>([]);
 
@@ -92,15 +89,6 @@ export const SerialNumber: React.FC = () => {
     }, []);
 
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
-
-    const scanInputRef = useRef<HTMLInputElement>(null);
-
-    // Auto-focus the input whenever we are in a scanning viewMode
-    useEffect(() => {
-        if ((viewMode === 'REGISTRATION_PENDING' || viewMode === 'REGISTRATION_COMPLETED') && scanInputRef.current) {
-            scanInputRef.current.focus();
-        }
-    }, [viewMode, activeBatch]);
 
     const fetchBatches = async (woId?: string) => {
         try {
@@ -122,6 +110,7 @@ export const SerialNumber: React.FC = () => {
                             starting_number: num,
                             end_number: num,
                             serial_format: curr.serial_format.replace(/-/g, ""),
+                            barcode_source: curr.barcode_source || (curr.serial_format.replace(/-/g, "") === 'PREEXISTING' ? 'PRE_EXISTING' : 'GENERATED'),
                             created_by: curr.created_by || curr.wo_created_by || "System",
                             created_at: curr.created_at,
                             is_registered: !!curr.is_registered,
@@ -170,7 +159,6 @@ export const SerialNumber: React.FC = () => {
                 if (smtUser) {
                     const name = smtUser.name || smtUser.userId || 'System';
                     setCreatedBy(name);
-                    setScannedBy(name);
                 }
             } catch (err) {
                 console.error("Failed to fetch data:", err);
@@ -386,110 +374,10 @@ export const SerialNumber: React.FC = () => {
         }
     };
 
-    const handleScan = useCallback(async () => {
-        const cleanScan = scanInput.trim();
-        if (!cleanScan) return;
-
-        // 1. If we have an active batch, check there first
-        let targetComponent = activeBatch?.components.find(c => c.barcode === cleanScan);
-        let targetBatch = activeBatch;
-
-        // 2. If no active batch OR not found in active batch, search all batches
-        if (!targetComponent) {
-            for (const b of batches) {
-                const comp = b.components.find(c => c.barcode === cleanScan);
-                if (comp) {
-                    targetComponent = comp;
-                    targetBatch = b;
-                    break;
-                }
-            }
-        }
-
-        if (targetComponent && targetBatch) {
-            if (targetComponent.status === 'SCANNED') {
-                alert(`Serial ${cleanScan} is already scanned.`);
-            } else {
-                try {
-                    const res = await fetch(`/api/smt/serial-numbers/${targetComponent.id}/status`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            status: 'SCANNED',
-                            scannedBy: scannedBy || 'System'
-                        })
-                    });
-
-                    if (res.ok) {
-                        // Update local batches state
-                        setBatches(prev => prev.map(b => {
-                            if (b.work_order_id === targetBatch!.work_order_id) {
-                                return {
-                                    ...b,
-                                    components: b.components.map(c => c.id === targetComponent!.id ? { ...c, status: 'SCANNED' } : c)
-                                };
-                            }
-                            return b;
-                        }));
-
-                        // If this was the active batch, update the scanning UI state too
-                        if (activeBatch && targetBatch.work_order_id === activeBatch.work_order_id) {
-                            setActuallyScanned(prev => [...prev, cleanScan]);
-                        } else {
-                            alert(`Successfully scanned ${cleanScan} for WO ${targetBatch.work_order_id}`);
-                        }
-                    }
-                } catch (err) {
-                    console.error("Scan error:", err);
-                    alert('Error connecting to backend.');
-                }
-            }
-        } else {
-            alert(`Serial ${cleanScan} not found in any pending Work Order.`);
-        }
-        setScanInput('');
-        // Keep focus on the input after scan
-        if (scanInputRef.current) {
-            scanInputRef.current.focus();
-        }
-    }, [scanInput, activeBatch, batches, scannedBy]);
-
-    // Auto-scan logic: Trigger handleScan automatically when input matches a valid barcode
-    useEffect(() => {
-        if (activeBatch && scanInput.trim()) {
-            const cleanScan = scanInput.trim();
-            const match = activeBatch.components.find(c => c.barcode === cleanScan);
-
-            // If we found a match that isn't scanned yet, trigger handleScan
-            if (match && match.status !== 'SCANNED') {
-                handleScan();
-            }
-        }
-    }, [scanInput, activeBatch]);
-
-    const isScannedComponent = (component: ScannedComponent) =>
-        (component.status || '').toString().trim().toUpperCase() === 'SCANNED';
-
-    const getScannedComponents = (batch: SmtBatch) => batch.components.filter(isScannedComponent);
-
-    const activeScannedComponents = activeBatch ? getScannedComponents(activeBatch) : [];
-    const activeAvailableCount = viewMode === 'REGISTRATION_COMPLETED'
-        ? activeScannedComponents.length
-        : activeBatch?.components.length || 0;
+    const activeAvailableCount = activeBatch?.components.length || 0;
 
     const filteredComponents = activeBatch?.components.filter(c => {
-        const matchesFilter = c.barcode.toLowerCase().includes(barcodeFilter.toLowerCase());
-
-        if (viewMode === 'REGISTRATION_PENDING') {
-            // Viewing from Pending: Show only items NOT yet scanned
-            return matchesFilter && !isScannedComponent(c);
-        }
-        if (viewMode === 'REGISTRATION_COMPLETED') {
-            // Viewing from Completed: Show only items that ARE scanned
-            return matchesFilter && isScannedComponent(c);
-        }
-
-        return matchesFilter;
+        return c.barcode.toLowerCase().includes(barcodeFilter.toLowerCase());
     }) || [];
 
     const itemsPerPage = 50;
@@ -651,6 +539,7 @@ export const SerialNumber: React.FC = () => {
                                             <th>WO QTY</th>
                                             <th>PANEL QTY</th>
                                             <th>WO NUMBER</th>
+                                            <th>BARCODE SOURCE</th>
                                             <th>START - END</th>
                                             <th>GENERATED AT</th>
                                             <th>CREATED BY</th>
@@ -658,168 +547,52 @@ export const SerialNumber: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {batches.filter(b => b.components.some(c => !isScannedComponent(c))).map((batch) => (
-                                            <tr key={batch.id}>
-                                                <td style={{ fontWeight: 600 }}>{(batch.product_name || '').toUpperCase()}</td>
-                                                <td>{batch.wo_qty}</td>
-                                                <td>{batch.panel_qty}</td>
-                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{(batch.work_order_id || '').toUpperCase()}</td>
-                                                <td>{batch.serial_format ? `${(batch.serial_format || '').toUpperCase()}${batch.starting_number.toString().padStart(6, '0')}` : batch.starting_number} to {batch.serial_format ? `${(batch.serial_format || '').toUpperCase()}${batch.end_number.toString().padStart(6, '0')}` : batch.end_number}</td>
-                                                <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>{new Date(batch.created_at).toLocaleString()}</td>
-                                                <td style={{ fontWeight: 500, color: '#374151' }}>{batch.created_by}</td>
-                                                <td>
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                        <button
-                                                            className={styles.secondaryButton}
-                                                            onClick={() => {
-                                                                setActiveBatch(batch);
-                                                                setCurrentPage(1);
-                                                                setBarcodeFilter('');
-                                                                setViewMode('GENERATED');
-                                                            }}
-                                                        >
-                                                            View Details
-                                                        </button>
-                                                        <button
-                                                            className={styles.deleteTextButton}
-                                                            onClick={() => handleDeleteBatch(batch.work_order_id)}
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {batches.filter(b => b.components.some(c => !isScannedComponent(c))).length === 0 && (
+                                        {batches.map((batch) => {
+                                            const isPreExisting = batch.barcode_source === 'PRE_EXISTING' || batch.serial_format === 'PREEXISTING';
+                                            const displaySource = isPreExisting ? 'PRE_EXISTING' : 'GENERATED';
+                                            return (
+                                                <tr key={batch.id}>
+                                                    <td style={{ fontWeight: 600 }}>{(batch.product_name || '').toUpperCase()}</td>
+                                                    <td>{batch.wo_qty}</td>
+                                                    <td>{batch.panel_qty}</td>
+                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{(batch.work_order_id || '').toUpperCase()}</td>
+                                                    <td style={{ fontWeight: 'bold', color: isPreExisting ? '#d97706' : '#2563eb' }}>{displaySource}</td>
+                                                    <td>
+                                                        {isPreExisting ? (
+                                                            "-"
+                                                        ) : (
+                                                            `${(batch.serial_format || '').toUpperCase()}${batch.starting_number.toString().padStart(6, '0')} to ${(batch.serial_format || '').toUpperCase()}${batch.end_number.toString().padStart(6, '0')}`
+                                                        )}
+                                                    </td>
+                                                    <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>{new Date(batch.created_at).toLocaleString()}</td>
+                                                    <td style={{ fontWeight: 500, color: '#374151' }}>{batch.created_by}</td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <button
+                                                                className={styles.secondaryButton}
+                                                                onClick={() => {
+                                                                    setActiveBatch(batch);
+                                                                    setCurrentPage(1);
+                                                                    setBarcodeFilter('');
+                                                                }}
+                                                            >
+                                                                View Details
+                                                            </button>
+                                                            <button
+                                                                className={styles.deleteTextButton}
+                                                                onClick={() => handleDeleteBatch(batch.work_order_id)}
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {batches.length === 0 && (
                                             <tr>
-                                                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                     No serials generated yet.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div className={styles.card}>
-                            <h3 style={{ color: '#d97706' }}>Pending Serial Number Scanning</h3>
-                            <div className={styles.tableContainer}>
-                                <table className={styles.table}>
-                                    <thead>
-                                        <tr>
-                                            <th>WO NUMBER</th>
-                                            <th>PRODUCT NAME</th>
-                                            <th>AVAILABLE</th>
-                                            <th>COMPLETED</th>
-                                            <th>PENDING</th>
-                                            <th>ACTION</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {batches.filter(b => b.components.some(c => !isScannedComponent(c))).map((batch) => {
-                                            const available = batch.components.length;
-                                            const completed = getScannedComponents(batch).length;
-                                            const pending = available - completed;
-                                            return (
-                                                <tr key={batch.id}>
-                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{(batch.work_order_id || '').toUpperCase()}</td>
-                                                    <td style={{ fontWeight: 600 }}>{(batch.product_name || '').toUpperCase()}</td>
-                                                    <td>{available}</td>
-                                                    <td style={{ color: '#059669', fontWeight: 700 }}>{completed}</td>
-                                                    <td style={{ color: '#d97706', fontWeight: 700 }}>{pending}</td>
-                                                    <td>
-                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                            <button
-                                                                className={styles.secondaryButton}
-                                                                onClick={() => {
-                                                                    setActiveBatch(batch);
-                                                                    setCurrentPage(1);
-                                                                    setBarcodeFilter('');
-                                                                    setViewMode('REGISTRATION_PENDING');
-                                                                    setActuallyScanned(getScannedComponents(batch).map(c => c.barcode));
-                                                                }}
-                                                                style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
-                                                            >
-                                                                View
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {batches.filter(b => b.components.some(c => !isScannedComponent(c))).length === 0 && (
-                                            <tr>
-                                                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                    No pending registrations.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div className={styles.card}>
-                            <h3 style={{ color: '#059669' }}>Completed Serial Number Scanning</h3>
-                            <div className={styles.tableContainer}>
-                                <table className={styles.table}>
-                                    <thead>
-                                        <tr>
-                                            <th>WO NUMBER</th>
-                                            <th>PRODUCT NAME</th>
-                                            <th>AVAILABLE</th>
-                                            <th>COMPLETED</th>
-                                            <th>PENDING</th>
-                                            <th>ACTION</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {batches.filter(b => b.components.some(isScannedComponent)).map((batch) => {
-                                            const scannedComponents = getScannedComponents(batch);
-                                            const available = scannedComponents.length;
-                                            const completed = scannedComponents.length;
-                                            const pending = 0;
-                                            return (
-                                                <tr key={batch.id}>
-                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{(batch.work_order_id || '').toUpperCase()}</td>
-                                                    <td style={{ fontWeight: 600 }}>{(batch.product_name || '').toUpperCase()}</td>
-                                                    <td>{available}</td>
-                                                    <td style={{ color: '#059669', fontWeight: 700 }}>{completed}</td>
-                                                    <td style={{ color: '#d97706', fontWeight: 700 }}>{pending}</td>
-                                                    <td>
-                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                            <button
-                                                                className={styles.secondaryButton}
-                                                                onClick={() => {
-                                                                    setActiveBatch(batch);
-                                                                    setCurrentPage(1);
-                                                                    setBarcodeFilter('');
-                                                                    setViewMode('REGISTRATION_COMPLETED');
-                                                                    setActuallyScanned(scannedComponents.map(c => c.barcode));
-                                                                }}
-                                                                style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
-                                                            >
-                                                                View Scanned Serials
-                                                            </button>
-                                                            <span style={{
-                                                                color: '#059669',
-                                                                fontSize: '0.85rem',
-                                                                fontWeight: 700,
-                                                                display: 'flex',
-                                                                alignItems: 'center'
-                                                            }}>
-                                                                SCANNED
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {batches.filter(b => b.components.some(isScannedComponent)).length === 0 && (
-                                            <tr>
-                                                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                    No completed registrations.
                                                 </td>
                                             </tr>
                                         )}
@@ -836,15 +609,8 @@ export const SerialNumber: React.FC = () => {
                                 <p style={{ margin: '4px 0', fontSize: '0.9rem', color: '#6b7280' }}>Created by: {activeBatch.created_by}</p>
 
                                 <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', fontSize: '1rem', color: '#4b5563', marginTop: '1rem' }}>
-                                    <span>Total Scanned: <strong>{actuallyScanned.length} / {activeAvailableCount}</strong></span>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         🏭 Serial Number Available: <strong style={{ color: '#2563eb' }}>{activeAvailableCount}</strong>
-                                    </span>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        ✅ completed: <strong style={{ color: '#059669' }}>{actuallyScanned.length}</strong>
-                                    </span>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        🔄 pending: <strong style={{ color: '#d97706' }}>{Math.max(activeAvailableCount - actuallyScanned.length, 0)}</strong>
                                     </span>
                                 </div>
                             </div>
@@ -858,7 +624,7 @@ export const SerialNumber: React.FC = () => {
                                 </button>
                                 <button
                                     className={styles.secondaryButton}
-                                    onClick={() => { setActiveBatch(null); setActuallyScanned([]); setViewMode(null); }}
+                                    onClick={() => { setActiveBatch(null); }}
                                     style={{ padding: '0.5rem 1rem' }}
                                 >
                                     Back to Batches
@@ -866,45 +632,10 @@ export const SerialNumber: React.FC = () => {
                             </div>
                         </div>
 
-                        {(viewMode === 'REGISTRATION_PENDING' || viewMode === 'REGISTRATION_COMPLETED') && (
-                            <div className={styles.card} style={{ border: '1px dashed #d1d5db', backgroundColor: '#f9fafb' }}>
-                                <div className={styles.inputGroup} style={{ maxWidth: '300px', marginBottom: '1.5rem' }}>
-                                    <label style={{ fontWeight: 'bold' }}>Scanned By *</label>
-                                    <input
-                                        type="text"
-                                        className={styles.input}
-                                        value={scannedBy}
-                                        onChange={(e) => setScannedBy(e.target.value)}
-                                        placeholder="Enter Your Name"
-                                    />
-                                </div>
-
-                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                    <input
-                                        ref={scanInputRef}
-                                        type="text"
-                                        className={styles.input}
-                                        style={{ flex: 1, height: '50px', fontSize: '1.2rem', borderColor: '#6366f1' }}
-                                        placeholder="Scan Item Barcode..."
-                                        value={scanInput}
-                                        onChange={(e) => setScanInput(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && handleScan()}
-                                    />
-                                    <button
-                                        className={styles.button}
-                                        style={{ height: '50px', padding: '0 2rem', backgroundColor: '#10b981' }}
-                                        onClick={handleScan}
-                                    >
-                                        SCAN
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
                         <div className={styles.scanSection}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                                 <h3 style={{ margin: 0, padding: 0, border: 'none' }}>
-                                    {(viewMode === 'REGISTRATION_PENDING' || viewMode === 'REGISTRATION_COMPLETED') ? `Items (${actuallyScanned.length})` : 'Generated Serial Numbers'}
+                                    Generated Serial Numbers
                                 </h3>
                                 <input
                                     type="text"
@@ -922,16 +653,14 @@ export const SerialNumber: React.FC = () => {
                                         <tr>
                                             <th>SERIAL NUMBER</th>
                                             <th>BARCODE</th>
-                                            <th>STATUS</th>
                                             <th>GENERATED AT</th>
                                             <th>ACTION</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {paginatedComponents.map((component) => {
-                                            const isScanned = actuallyScanned.includes(component.barcode) || isScannedComponent(component);
                                             return (
-                                                <tr key={component.id} style={{ height: '100px', backgroundColor: isScanned ? '#f0fdf4' : '#fff7ed' }}>
+                                                <tr key={component.id} style={{ height: '100px' }}>
                                                     <td style={{ fontWeight: 'bold', fontSize: '1rem', letterSpacing: '1px' }}>
                                                         {(component.barcode || '').toUpperCase()}
                                                     </td>
@@ -946,18 +675,6 @@ export const SerialNumber: React.FC = () => {
                                                                 {(component.barcode || '').replace(/-/g, "").toUpperCase()}
                                                             </p>
                                                         </div>
-                                                    </td>
-                                                    <td>
-                                                        <span style={{
-                                                            padding: '0.25rem 0.75rem',
-                                                            borderRadius: '1rem',
-                                                            fontSize: '0.8rem',
-                                                            fontWeight: 700,
-                                                            backgroundColor: isScanned ? '#dcfce7' : '#f3f4f6',
-                                                            color: isScanned ? '#15803d' : '#6b7280'
-                                                        }}>
-                                                            {isScanned ? '✓ SCANNED' : 'PENDING'}
-                                                        </span>
                                                     </td>
                                                     <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>
                                                         {new Date(component.scanned_at).toLocaleString()}
@@ -976,10 +693,8 @@ export const SerialNumber: React.FC = () => {
                                         })}
                                         {filteredComponents.length === 0 && (
                                             <tr>
-                                                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                                                    {actuallyScanned.length === 0
-                                                        ? "No items scanned yet. Please scan a serial number to see it here."
-                                                        : "No scanned items match your search filter."}
+                                                <td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                                    No generated items match your search filter.
                                                 </td>
                                             </tr>
                                         )}

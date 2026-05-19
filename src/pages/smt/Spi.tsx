@@ -53,9 +53,10 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // Fetch total registered serials for this WO
+            // Fetch all serials for this WO with their latest Printing step status
             const totalUrl = new URL('/api/smt/serial-numbers', window.location.origin);
             totalUrl.searchParams.set('work_order_id', woId);
+            totalUrl.searchParams.set('current_step', 'Printing');
             const totalRes = await fetch(totalUrl.toString());
             if (totalRes.ok) {
                 const totalData = await totalRes.json();
@@ -76,7 +77,9 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 barcode: i.serial_number,
                 last_status: i.status,
                 last_step: i.process_step,
-                scanned_at: i.scanned_at
+                scanned_by: i.scanned_by,
+                scanned_at: i.scanned_at,
+                rework_reason: i.rework_reason
             }));
             setTableSerials(visited);
         } catch (err) {
@@ -105,14 +108,39 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 })
             });
             if (res.ok) {
-                setTableSerials(prev => prev.map(s => 
-                    s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'SPI' } : s
-                ));
+                const newInsp = await res.json();
+                
+                // Update tableSerials
+                setTableSerials(prev => {
+                    const exists = prev.find(s => s.id === serialId);
+                    if (exists) {
+                        return prev.map(s => 
+                            s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'SPI', scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at } : s
+                        );
+                    } else {
+                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
+                        return [{
+                            id: serialId,
+                            serial_number: sInfo.serial_number,
+                            barcode: sInfo.serial_number,
+                            last_status: 'PASS',
+                            last_step: 'SPI',
+                            scanned_by: newInsp.scanned_by,
+                            scanned_at: newInsp.scanned_at,
+                            barcode_source: sInfo.barcode_source
+                        }, ...prev];
+                    }
+                });
                 addToast('Item marked as PASS.', 'success');
+                return true;
             } else {
                 addToast('Failed to save status.', 'error');
+                return false;
             }
-        } catch { addToast('Network error.', 'error'); }
+        } catch { 
+            addToast('Network error.', 'error'); 
+            return false;
+        }
     };
 
     const handleFailOnly = async (serialId: number) => {
@@ -133,9 +161,30 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 })
             });
             if (res.ok) {
-                setTableSerials(prev => prev.map(s => 
-                    s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'SPI', rework_reason: reason.trim() } : s
-                ));
+                const newInsp = await res.json();
+                
+                // Update tableSerials
+                setTableSerials(prev => {
+                    const exists = prev.find(s => s.id === serialId);
+                    if (exists) {
+                        return prev.map(s => 
+                            s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'SPI', rework_reason: reason.trim(), scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at } : s
+                        );
+                    } else {
+                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
+                        return [{
+                            id: serialId,
+                            serial_number: sInfo.serial_number,
+                            barcode: sInfo.serial_number,
+                            last_status: 'FAIL',
+                            last_step: 'SPI',
+                            rework_reason: reason.trim(),
+                            scanned_by: newInsp.scanned_by,
+                            scanned_at: newInsp.scanned_at,
+                            barcode_source: sInfo.barcode_source
+                        }, ...prev];
+                    }
+                });
                 addToast('Item marked as FAIL.', 'info');
             } else {
                 addToast('Failed to save status.', 'error');
@@ -147,23 +196,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
         const cleanInput = (barcodeInput || '').trim().replace(/-/g, '').toUpperCase();
         if (!cleanInput) return;
 
-        const alreadyInTable = tableSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-            )
-        );
-        
-        if (alreadyInTable) {
-            // If it's already in the table but PENDING, we could auto-pass it here too
-            if (alreadyInTable.last_status !== 'PASS' && alreadyInTable.last_status !== 'FAIL') {
-                handlePass(alreadyInTable.id);
-            } else {
-                addToast(`Barcode ${barcodeInput} is already processed.`, 'info');
-            }
-            setScanBarcode('');
-            return;
-        }
-
+        // Find match in our WO serials list (which includes the Printing step status)
         const match = allWoSerials.find((s: any) =>
             [s.serial_number, s.barcode].some(v =>
                 (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
@@ -171,38 +204,51 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
         );
 
         if (!match) {
-            // If not in local list, check server just in case
-            try {
-                const url = new URL('/api/smt/serial-numbers', window.location.origin);
-                url.searchParams.set('work_order_id', woId);
-                const res = await fetch(url.toString());
-                if (res.ok) {
-                    const latestSerials = await res.json();
-                    setAllWoSerials(latestSerials);
-                    const secondMatch = latestSerials.find((s: any) =>
-                        [s.serial_number, s.barcode].some(v =>
-                            (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-                        )
-                    );
-                    if (secondMatch) {
-                        setScanBarcode('');
-                        await handlePass(secondMatch.id);
-                        setTableSerials(prev => [{ ...secondMatch, last_status: 'PASS', last_step: 'SPI' }, ...prev]);
-                        return;
-                    }
-                }
-            } catch (e) { console.error(e); }
-
-            // Still not found
             addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
+            alert(`Barcode "${barcodeInput}" not found in this Work Order.`);
+            setScanBarcode('');
+            return;
+        }
+
+        // Validate SMT Printing status: must exist and be PASS
+        if (match.step_status === 'FAIL') {
+            addToast(`Previous stage failed: Barcode failed in Printing stage. Cannot continue to SPI.`, 'error');
+            alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Printing stage. Cannot continue to SPI.`);
+            setScanBarcode('');
+            return;
+        }
+
+        if (!match.step_status || match.step_status !== 'PASS') {
+            addToast(`Previous stage not completed: Barcode has not passed Printing stage.`, 'error');
+            alert(`Previous stage not completed: Barcode "${barcodeInput}" has not passed SMT Printing stage. Cannot continue to SPI.`);
+            setScanBarcode('');
+            return;
+        }
+
+        // Check if already in the SPI scanned table
+        const alreadyInTable = tableSerials.find((s: any) =>
+            [s.serial_number, s.barcode].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+        
+        if (alreadyInTable) {
+            if (alreadyInTable.last_status === 'PASS') {
+                addToast(`Barcode ${barcodeInput} has already passed SPI.`, 'info');
+                alert(`Barcode "${barcodeInput}" has already passed SPI.`);
+                setScanBarcode('');
+                return;
+            }
+
+            // If it failed SPI, scanning it again will automatically PASS it
+            await handlePass(alreadyInTable.id);
             setScanBarcode('');
             return;
         }
 
         // Automatic Pass on Scan
-        setScanBarcode('');
         await handlePass(match.id);
-        setTableSerials(prev => [{ ...match, last_status: 'PASS', last_step: 'SPI' }, ...prev]);
+        setScanBarcode('');
     };
 
     // Auto-scan effect
@@ -217,17 +263,36 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
         );
 
         if (match) {
-            processScan(scanBarcode);
+            const alreadyInTable = tableSerials.find((s: any) =>
+                [s.serial_number, s.barcode].some(v =>
+                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+                )
+            );
+            if (!alreadyInTable || alreadyInTable.last_status !== 'PASS') {
+                processScan(scanBarcode);
+            }
         }
-    }, [scanBarcode, allWoSerials]);
+    }, [scanBarcode, allWoSerials, tableSerials]);
 
     const handleScan = async (e: React.FormEvent) => {
         e.preventDefault();
         await processScan(scanBarcode);
     };
 
+    const sortedTableSerials = [...tableSerials].sort((a, b) => {
+        const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : Date.now();
+        const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : Date.now();
+        return timeB - timeA;
+    });
+
     return (
         <>
+            <style>{`
+                @keyframes rowHighlight {
+                    0% { box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.4); }
+                    100% { box-shadow: none; }
+                }
+            `}</style>
             <Toaster toasts={toasts} onRemove={removeToast} />
             <div className={styles.detailPage}>
                 <div className={styles.detailHeaderCard}>
@@ -279,47 +344,74 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                         <table className={styles.table}>
                             <thead>
                                 <tr>
-                                    <th>#</th>
-                                    <th>SERIAL NUMBER</th>
-                                    <th>BARCODE</th>
+                                    <th style={{ textAlign: 'center' }}>BARCODE PREVIEW</th>
+                                    <th>BARCODE NUMBER</th>
                                     <th>STATUS</th>
-                                    <th>REMARK</th>
+                                    <th>SCANNED BY</th>
+                                    <th>SCANNED AT</th>
                                     <th>ACTION</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {loading ? (
-                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
                                 ) : tableSerials.length === 0 ? (
                                     <tr><td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin inspection</td></tr>
-                                ) : tableSerials.map((s, idx) => {
+                                ) : sortedTableSerials.map((s, idx) => {
                                     const isPass = s.last_status === 'PASS';
                                     const isFail = s.last_status === 'FAIL';
+                                    const showBarcodeImage = s.barcode_source === 'GENERATED' || !s.barcode_source || (s.barcode_source === 'PRE_EXISTING' && s.serial_number);
+                                    const isNew = Date.now() - new Date(s.scanned_at || 0).getTime() < 4000;
+                                    
                                     return (
-                                        <tr key={s.id || idx}>
-                                            <td style={{ color: '#9ca3af', fontWeight: 500 }}>{tableSerials.length - idx}</td>
-                                            <td style={{ fontWeight: 600 }}>{(s.serial_number || '').toUpperCase()}</td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                <div style={{ display: 'grid', gap: '0.3rem', justifyItems: 'center' }}>
-                                                    <QRCode value={(s.serial_number || '').toUpperCase()} size={60} />
-                                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{(s.serial_number || '').toUpperCase()}</span>
-                                                </div>
+                                        <tr 
+                                            key={s.id || idx}
+                                            style={{ 
+                                                backgroundColor: isPass ? '#f0fdf4' : '#fee2e2',
+                                                transition: 'all 0.2s',
+                                                animation: isNew ? 'rowHighlight 4s ease-out' : undefined
+                                            }}
+                                        >
+                                            <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                                {showBarcodeImage ? (
+                                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                        <QRCode value={(s.serial_number || '').toUpperCase()} size={64} />
+                                                    </div>
+                                                ) : (
+                                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                                )}
                                             </td>
-                                            <td>
+                                            <td style={{ padding: '1rem', fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>
+                                                {(s.serial_number || '').toUpperCase()}
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
                                                 <span style={{
-                                                    padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                                                    padding: '6px 14px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 'bold',
+                                                    display: 'inline-flex', alignItems: 'center',
                                                     backgroundColor: isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7',
                                                     color: isPass ? '#166534' : isFail ? '#991b1b' : '#92400e'
                                                 }}>
-                                                    {isPass ? '✓ PASSED' : isFail ? '● FAIL' : '🕒 PENDING'}
+                                                    {isPass ? '✓ PASS' : isFail ? '● FAIL' : '🕒 PENDING'}
                                                 </span>
                                             </td>
-                                            <td style={{ color: '#64748b', fontSize: '0.85rem' }}>{s.rework_reason || '-'}</td>
-                                            <td>
-                                                <div style={{ display: 'flex', gap: '8px' }}>
-                                                    {!isPass && <button onClick={() => handlePass(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#059669' }}>PASS</button>}
-                                                    {!isFail && <button onClick={() => handleFailOnly(s.id)} className={styles.button} style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}>FAIL</button>}
-                                                </div>
+                                            <td style={{ padding: '1rem', fontWeight: 600, color: '#475569' }}>
+                                                {s.scanned_by || 'System'}
+                                            </td>
+                                            <td style={{ padding: '1rem', fontSize: '0.85rem', color: '#64748b' }}>
+                                                {s.scanned_at ? new Date(s.scanned_at).toLocaleString() : '-'}
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
+                                                {isPass ? (
+                                                    <button 
+                                                        onClick={() => handleFailOnly(s.id)} 
+                                                        className={styles.button} 
+                                                        style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}
+                                                    >
+                                                        FAIL
+                                                    </button>
+                                                ) : (
+                                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -360,31 +452,39 @@ const Spi: React.FC = () => {
     const [panelQty, setPanelQty] = useState('');
     const [createdBy, setCreatedBy] = useState('');
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
+    const [inspections, setInspections] = useState<any[]>([]);
+
+    const fetchData = useCallback(async () => {
+        try {
+            const woRes = await fetch('/api/smt/work-orders/registered');
+            if (woRes.ok) {
+                const data = await woRes.json();
+                setWorkOrders(data);
+            }
+
+            const setupRes = await fetch('/api/smt/process-setups?process_name=SPI');
+            if (setupRes.ok) {
+                const data = await setupRes.json();
+                setSavedEntries(data);
+            }
+
+            const inspRes = await fetch('/api/smt/inspections?process_step=SPI');
+            if (inspRes.ok) {
+                const data = await inspRes.json();
+                setInspections(data);
+            }
+
+            if (smtUser) {
+                setCreatedBy(smtUser.name || smtUser.userId || 'System');
+            }
+        } catch (err) {
+            console.error("Failed to fetch data:", err);
+        }
+    }, [smtUser]);
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const woRes = await fetch('/api/smt/work-orders/registered');
-                if (woRes.ok) {
-                    const data = await woRes.json();
-                    setWorkOrders(data);
-                }
-
-                const setupRes = await fetch('/api/smt/process-setups?process_name=SPI');
-                if (setupRes.ok) {
-                    const data = await setupRes.json();
-                    setSavedEntries(data);
-                }
-
-                if (smtUser) {
-                    setCreatedBy(smtUser.name || smtUser.userId || 'System');
-                }
-            } catch (err) {
-                console.error("Failed to fetch data:", err);
-            }
-        };
         fetchData();
-    }, [smtUser]);
+    }, [fetchData, smtUser]);
 
     const handleSelectWo = (woId: string) => {
         setFormWoId(woId);
@@ -440,32 +540,59 @@ const Spi: React.FC = () => {
         }
     };
 
+    const dropdownWorkOrders = workOrders.filter(wo => {
+        const woId = wo.id || wo.work_order_id;
+        const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase()).length;
+        const targetQty = wo.scanned_count || wo.quantity || 0;
+        const isCompleted = inspectedCount >= targetQty && targetQty > 0;
+        return !hasSetup && !isCompleted;
+    });
+
+    const pendingEntries = savedEntries.filter(entry => {
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
+        return inspectedCount < targetQty || targetQty === 0;
+    });
+
+    const completedEntries = savedEntries.filter(entry => {
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        if (!wo) return false;
+        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const targetQty = wo.scanned_count || wo.quantity;
+        return inspectedCount >= targetQty && targetQty > 0;
+    });
+
     return (
         <>
             <Toaster toasts={toasts} onRemove={removeToast} />
             <div className={styles.container}>
-            <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🔍 SPI Inspection</h2>
-                    <p style={{ color: '#64748b' }}>Manage SMT Solder Paste Inspection tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
+                <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🔍 SPI Inspection</h2>
+                        <p style={{ color: '#64748b' }}>Manage SMT Solder Paste Inspection tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to logout from SMT?")) {
+                                smtLogout();
+                            }
+                        }}
+                        className={styles.secondaryButton}
+                        style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <span>🔒</span> Logout SMT
+                    </button>
                 </div>
-                <button
-                    onClick={() => {
-                        if (window.confirm("Are you sure you want to logout from SMT?")) {
-                            smtLogout();
-                        }
-                    }}
-                    className={styles.secondaryButton}
-                    style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                    <span>🔒</span> Logout SMT
-                </button>
-            </div>
 
             {selectedWoId ? (
                 <SpiDetail
                     woId={selectedWoId}
-                    onBack={() => setSelectedWoId(null)}
+                    onBack={() => {
+                        setSelectedWoId(null);
+                        fetchData();
+                    }}
                     operatorName={smtUser?.name || 'System'}
                 />
             ) : (
@@ -481,7 +608,7 @@ const Spi: React.FC = () => {
                                     onChange={(e) => handleSelectWo(e.target.value)}
                                 >
                                     <option value="">-- Select Work Order --</option>
-                                    {workOrders.map((wo) => (
+                                    {dropdownWorkOrders.map((wo) => (
                                         <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
                                             {wo.id || wo.work_order_id} - {wo.product_name}
                                         </option>
@@ -541,7 +668,7 @@ const Spi: React.FC = () => {
                     </div>
 
                     <div className={styles.card}>
-                        <h3>Recent SPI Entries</h3>
+                        <h3>Pending SPI Sessions</h3>
                         <div className={styles.tableContainer}>
                             <table className={styles.table}>
                                 <thead>
@@ -555,7 +682,73 @@ const Spi: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {savedEntries.map((entry) => (
+                                    {pendingEntries.map((entry) => (
+                                        <tr key={entry.id}>
+                                            <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                            <td>{(entry.product_name || '').toUpperCase()}</td>
+                                            <td>{entry.quantity || entry.wo_qty}</td>
+                                            <td>{entry.panel_qty || 'N/A'}</td>
+                                            <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                {new Date(entry.timestamp).toLocaleTimeString()}
+                                            </td>
+                                            <td style={{ display: 'flex', gap: '5px' }}>
+                                                <button
+                                                    className={styles.button}
+                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', height: 'auto', lineHeight: 'normal', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}
+                                                    onClick={() => setSelectedWoId(entry.work_order_id)}
+                                                >
+                                                    Resume
+                                                </button>
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                    onClick={async () => {
+                                                        if (!isSuperAdmin) {
+                                                            addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                            return;
+                                                        }
+                                                        if (window.confirm("Are you sure you want to delete this entry?")) {
+                                                            const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                            if (res.ok) {
+                                                                setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                                addToast("Entry deleted successfully.", "success");
+                                                            }
+                                                        }
+                                                    }}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {pendingEntries.length === 0 && (
+                                        <tr>
+                                            <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                No pending sessions found.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div className={styles.card}>
+                        <h3>Completed SPI Sessions</h3>
+                        <div className={styles.tableContainer}>
+                            <table className={styles.table}>
+                                <thead>
+                                    <tr>
+                                        <th>WO NUMBER</th>
+                                        <th>PRODUCT NAME</th>
+                                        <th>WO QTY</th>
+                                        <th>PANEL QTY</th>
+                                        <th>TIME</th>
+                                        <th>ACTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {completedEntries.map((entry) => (
                                         <tr key={entry.id}>
                                             <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                             <td>{(entry.product_name || '').toUpperCase()}</td>
@@ -594,10 +787,10 @@ const Spi: React.FC = () => {
                                             </td>
                                         </tr>
                                     ))}
-                                    {savedEntries.length === 0 && (
+                                    {completedEntries.length === 0 && (
                                         <tr>
                                             <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                No recent entries found.
+                                                No completed sessions found.
                                             </td>
                                         </tr>
                                     )}

@@ -28,11 +28,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
 
     const handleMouseLeave = () => {
         onMouseLeave();
-        if (location.pathname.startsWith('/pre-testing')) setExpandedModule('pre-testing');
-        else if (location.pathname.startsWith('/smt')) setExpandedModule('smt');
-        else if (location.pathname.startsWith('/backend')) setExpandedModule('backend');
-        else if (location.pathname === '/purchase-order' || location.pathname === '/wip-stack' || location.pathname === '/return-wip' || location.pathname === '/report') setExpandedModule('inventory-report');
-        else setExpandedModule(null);
     };
 
     return (
@@ -82,7 +77,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                 <div
                     className={`${styles.menuItem} ${expandedModule === 'inventory-report' ? styles.active : ''}`}
                     onClick={() => toggleModule('inventory-report')}
-                    onMouseEnter={() => setExpandedModule('inventory-report')}
                     title="Inventory & Report"
                 >
                     <span className={styles.menuIcon}>📦</span>
@@ -134,7 +128,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                 <div
                     className={`${styles.menuItem} ${expandedModule === 'pre-testing' ? styles.active : ''}`}
                     onClick={() => toggleModule('pre-testing')}
-                    onMouseEnter={() => setExpandedModule('pre-testing')}
                     title="Pre testing (E2E)"
                 >
                     <span className={styles.menuIcon}>🧪</span>
@@ -200,7 +193,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                 <div
                     className={`${styles.menuItem} ${expandedModule === 'smt' ? styles.active : ''}`}
                     onClick={() => toggleModule('smt')}
-                    onMouseEnter={() => setExpandedModule('smt')}
                     title="SMT"
                 >
                     <span className={styles.menuIcon}>
@@ -306,7 +298,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                 <div
                     className={`${styles.menuItem} ${expandedModule === 'backend' ? styles.active : ''}`}
                     onClick={() => toggleModule('backend')}
-                    onMouseEnter={() => setExpandedModule('backend')}
                     title="Backend"
                 >
                     <span className={styles.menuIcon}>

@@ -284,12 +284,12 @@ export const SerialNumber: React.FC = () => {
             }
         }
 
-        const formatStr = (serialFormat || '').replace(/-/g, "").toUpperCase();
+        const formatStr = (serialFormat || '').toUpperCase();
         const newComponents: ScannedComponent[] = [];
         
         if (!isExisting) {
             for (let i = start; i <= end; i++) {
-                const serialNumber = `${formatStr}${i.toString().padStart(6, '0')}`;
+                const serialNumber = `${formatStr}${i.toString()}`;
                 newComponents.push({
                     id: Date.now().toString() + i,
                     barcode: serialNumber,
@@ -591,7 +591,7 @@ export const SerialNumber: React.FC = () => {
                                                         {isPreExisting ? (
                                                             "-"
                                                         ) : (
-                                                            `${(batch.serial_format || '').toUpperCase()}${batch.starting_number.toString().padStart(6, '0')} to ${(batch.serial_format || '').toUpperCase()}${batch.end_number.toString().padStart(6, '0')}`
+                                                            `${(batch.serial_format || '').toUpperCase()}${batch.starting_number.toString()} to ${(batch.serial_format || '').toUpperCase()}${batch.end_number.toString()}`
                                                         )}
                                                     </td>
                                                     <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>{new Date(batch.created_at).toLocaleString()}</td>

@@ -134,19 +134,29 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 addToast('Item marked as PASS.', 'success');
                 return true;
             } else {
-                addToast('Failed to save status.', 'error');
+                const errData = await res.json().catch(() => ({}));
+                addToast(errData.error || 'Failed to save status.', 'error');
                 return false;
             }
         } catch { 
             addToast('Network error.', 'error'); 
             return false;
+        } finally {
+            scanInputRef.current?.focus();
         }
     };
 
     const handleFailOnly = async (serialId: number) => {
         const reason = window.prompt('Please enter the reason for failure (rework):');
-        if (reason === null) return;
-        if (!reason.trim()) { addToast('Remark is required.', 'error'); return; }
+        if (reason === null) {
+            scanInputRef.current?.focus();
+            return;
+        }
+        if (!reason.trim()) { 
+            addToast('Remark is required.', 'error'); 
+            scanInputRef.current?.focus();
+            return; 
+        }
 
         try {
             const res = await fetch('/api/smt/inspections', {
@@ -189,7 +199,11 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
             } else {
                 addToast('Failed to save status.', 'error');
             }
-        } catch { addToast('Network error.', 'error'); }
+        } catch { 
+            addToast('Network error.', 'error'); 
+        } finally {
+            scanInputRef.current?.focus();
+        }
     };
 
     const processScan = async (barcodeInput: string) => {
@@ -207,6 +221,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
             addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
             alert(`Barcode "${barcodeInput}" not found in this Work Order.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -215,6 +230,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
             addToast(`Previous stage failed: Barcode failed in Printing stage. Cannot continue to SPI.`, 'error');
             alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Printing stage. Cannot continue to SPI.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -222,6 +238,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
             addToast(`Previous stage not completed: Barcode has not passed Printing stage.`, 'error');
             alert(`Previous stage not completed: Barcode "${barcodeInput}" has not passed SMT Printing stage. Cannot continue to SPI.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -237,18 +254,21 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 addToast(`Barcode ${barcodeInput} has already passed SPI.`, 'info');
                 alert(`Barcode "${barcodeInput}" has already passed SPI.`);
                 setScanBarcode('');
+                scanInputRef.current?.focus();
                 return;
             }
 
             // If it failed SPI, scanning it again will automatically PASS it
             await handlePass(alreadyInTable.id);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
         // Automatic Pass on Scan
         await handlePass(match.id);
         setScanBarcode('');
+        scanInputRef.current?.focus();
     };
 
     // Auto-scan effect
@@ -300,10 +320,10 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🔍 SPI Inspection Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#475569' }}>Total Scanned: <strong>{tableSerials.length} / {totalSerials}</strong></span>
-                                <span style={{ color: '#475569' }}>🏭 Available: <strong style={{ color: '#2563eb' }}>{totalSerials}</strong></span>
-                                <span style={{ color: '#475569' }}>✅ completed: <strong style={{ color: '#059669' }}>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
-                                <span style={{ color: '#475569' }}>🔄 pending: <strong style={{ color: '#f59e0b' }}>{totalSerials - tableSerials.length}</strong></span>
+                                <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {totalSerials}</strong></span>
+                                <span style={{ color: '#059669' }}>Passed: <strong>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#ef4444' }}>Failed: <strong>{tableSerials.filter(s => s.last_status === 'FAIL').length}</strong></span>
+                                <span style={{ color: '#d97706' }}>Pending: <strong>{totalSerials - tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                             </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={onBack}>Back</button>
@@ -540,28 +560,40 @@ const Spi: React.FC = () => {
         }
     };
 
+    const getPassedCount = (woId: string) => {
+        const woInspections = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const latestBySerial: { [key: number]: string } = {};
+        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
+        sorted.forEach(i => {
+            latestBySerial[i.serial_id] = i.status;
+        });
+        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    };
+
     const dropdownWorkOrders = workOrders.filter(wo => {
         const woId = wo.id || wo.work_order_id;
         const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase()).length;
+        const passedCount = getPassedCount(woId);
         const targetQty = wo.scanned_count || wo.quantity || 0;
-        const isCompleted = inspectedCount >= targetQty && targetQty > 0;
+        const isCompleted = passedCount >= targetQty && targetQty > 0;
         return !hasSetup && !isCompleted;
     });
 
     const pendingEntries = savedEntries.filter(entry => {
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const woId = entry.work_order_id;
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
+        const passedCount = getPassedCount(woId);
         const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
-        return inspectedCount < targetQty || targetQty === 0;
+        return passedCount < targetQty || targetQty === 0;
     });
 
     const completedEntries = savedEntries.filter(entry => {
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        const woId = entry.work_order_id;
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
         if (!wo) return false;
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const passedCount = getPassedCount(woId);
         const targetQty = wo.scanned_count || wo.quantity;
-        return inspectedCount >= targetQty && targetQty > 0;
+        return passedCount >= targetQty && targetQty > 0;
     });
 
     return (

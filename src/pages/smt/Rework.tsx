@@ -48,6 +48,8 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
     }, []);
 
+    const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
     const fetchSerials = useCallback(async () => {
@@ -56,16 +58,92 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
             const url = new URL('/api/smt/serial-numbers', window.location.origin);
             url.searchParams.set('work_order_id', woId);
             const res = await fetch(url.toString());
-            if (res.ok) {
-                const data = await res.json();
-                setAllWoSerials(data);
+            const data = res.ok ? await res.json() : [];
+            setAllWoSerials(data);
 
-                // Filter for items whose LATEST overall inspection state is FAIL and process step was Post AOI
-                const reworkItems = data.filter((s: any) =>
-                    s.last_status === 'FAIL' && s.last_step === 'Post AOI'
+            // Fetch all inspections for this Work Order to reconstruct full repair audit history
+            const inspRes = await fetch(`/api/smt/inspections?work_order_id=${woId}`);
+            const inspections = inspRes.ok ? await inspRes.json() : [];
+
+            // Group inspections by serial_id
+            const inspBySerial: Record<number, any[]> = {};
+            inspections.forEach((insp: any) => {
+                if (!inspBySerial[insp.serial_id]) {
+                    inspBySerial[insp.serial_id] = [];
+                }
+                inspBySerial[insp.serial_id].push(insp);
+            });
+
+            const processedItems: any[] = [];
+            for (const serialIdStr in inspBySerial) {
+                const serialId = Number(serialIdStr);
+                const sorted = [...inspBySerial[serialId]].sort(
+                    (a: any, b: any) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
                 );
-                setSerials(reworkItems);
+
+                // Find the latest Post AOI failure in sorted records
+                let latestFailure: any = null;
+                for (let i = sorted.length - 1; i >= 0; i--) {
+                    if (sorted[i].process_step === 'Post AOI' && sorted[i].status === 'FAIL') {
+                        latestFailure = sorted[i];
+                        break;
+                    }
+                }
+
+                if (!latestFailure) continue;
+
+                // Find the latest Rework scan logged AFTER the latest failure
+                let latestRepair: any = null;
+                for (let i = sorted.length - 1; i >= 0; i--) {
+                    if (
+                        sorted[i].process_step === 'Rework' &&
+                        sorted[i].status === 'PASS' &&
+                        new Date(sorted[i].scanned_at).getTime() > new Date(latestFailure.scanned_at).getTime()
+                    ) {
+                        latestRepair = sorted[i];
+                        break;
+                    }
+                }
+
+                // Find the latest Post AOI scan logged AFTER the latest repair
+                let latestRevalidation: any = null;
+                if (latestRepair) {
+                    for (let i = sorted.length - 1; i >= 0; i--) {
+                        if (
+                            sorted[i].process_step === 'Post AOI' &&
+                            new Date(sorted[i].scanned_at).getTime() > new Date(latestRepair.scanned_at).getTime()
+                        ) {
+                            latestRevalidation = sorted[i];
+                            break;
+                        }
+                    }
+                }
+
+                let currentStatus = 'FAILED';
+                if (latestRevalidation) {
+                    currentStatus = latestRevalidation.status === 'PASS' ? 'REVALIDATED_PASS' : 'FAILED_AGAIN';
+                } else if (latestRepair) {
+                    currentStatus = 'READY_FOR_RECHECK';
+                }
+
+                const sInfo = data.find((x: any) => x.id === serialId) || {};
+
+                processedItems.push({
+                    id: serialId,
+                    serial_number: sInfo.serial_number || latestFailure.serial_number,
+                    barcode: sInfo.serial_number || latestFailure.serial_number,
+                    barcode_source: sInfo.barcode_source || 'GENERATED',
+                    failure_remark: latestFailure.rework_reason || 'Defect Registered',
+                    failed_time: latestFailure.scanned_at,
+                    failed_by: latestFailure.scanned_by || 'System',
+                    repair_remark: latestRepair ? latestRepair.rework_reason : null,
+                    repair_time: latestRepair ? latestRepair.scanned_at : null,
+                    repaired_by: latestRepair ? latestRepair.scanned_by : null,
+                    status: currentStatus
+                });
             }
+
+            setSerials(processedItems);
         } catch (err) {
             console.error('Error fetching rework serials:', err);
             addToast('Failed to load rework data.', 'error');
@@ -82,7 +160,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
         scanInputRef.current?.focus();
     }, []);
 
-    const handleMarkPass = async (serialId: number) => {
+    const handleMarkPass = async (serialId: number, remark: string) => {
         try {
             const res = await fetch('/api/smt/inspections', {
                 method: 'POST',
@@ -91,19 +169,13 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                     serial_id: serialId,
                     process_step: 'Rework',
                     scanned_by: operatorName || 'System',
-                    status: 'PASS'
+                    status: 'PASS',
+                    rework_reason: remark
                 })
             });
             if (res.ok) {
-                const newInsp = await res.json();
-                setSerials(prev => prev.map(s =>
-                    s.id === serialId
-                        ? { ...s, last_status: 'PASS', last_step: 'Rework', scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at, rework_reason: null }
-                        : s
-                ));
                 addToast('Item marked as PASS/REPAIRED in rework.', 'success');
-                // Refresh list
-                fetchSerials();
+                await fetchSerials();
                 return true;
             } else {
                 addToast('Failed to save PASS status.', 'error');
@@ -159,8 +231,23 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
             return;
         }
 
+        // Prompt for repair remark - MUST be mandatory!
+        const remark = window.prompt(`Please enter Repair Action taken for barcode "${barcodeInput}" (Mandatory):`);
+        if (remark === null) {
+            processingRef.current = false;
+            scanInputRef.current?.focus();
+            return;
+        }
+        if (!remark.trim()) {
+            addToast('Repair action remark is required.', 'error');
+            alert('Repair action remark is required to complete rework.');
+            processingRef.current = false;
+            scanInputRef.current?.focus();
+            return;
+        }
+
         // Valid for rework scan! Marks as pass automatically
-        await handleMarkPass(match.id);
+        await handleMarkPass(match.id, remark.trim());
         processingRef.current = false;
         scanInputRef.current?.focus();
     };
@@ -184,11 +271,11 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
         processScan(scanBarcode);
     };
 
-    const sortedSerials = [...serials].sort((a, b) => {
-        const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : Date.now();
-        const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : Date.now();
-        return timeB - timeA;
-    });
+    const pendingItems = serials.filter(s => s.status === 'FAILED' || s.status === 'FAILED_AGAIN')
+        .sort((a, b) => new Date(b.failed_time).getTime() - new Date(a.failed_time).getTime());
+
+    const historyItems = serials.filter(s => s.status === 'READY_FOR_RECHECK' || s.status === 'REVALIDATED_PASS')
+        .sort((a, b) => new Date(b.repair_time || 0).getTime() - new Date(a.repair_time || 0).getTime());
 
     return (
         <>
@@ -203,11 +290,11 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                 <div className={styles.detailHeaderCard} style={{ background: 'linear-gradient(to right, #fffbeb, #fef3c7)', border: '1px solid #fde68a' }}>
                     <div className={styles.detailHeaderRow}>
                         <div>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#92400e', marginBottom: '0.5rem' }}>🛠️ Rework Detail: {woId}</h3>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#92400e', marginBottom: '0.5rem' }}>🛠️ SMT Rework Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#b45309' }}>Pending Rework: <strong>{serials.length}</strong></span>
-                                <span style={{ color: '#b45309' }}>🏭 Work Order Total: <strong style={{ color: '#d97706' }}>{allWoSerials.length}</strong></span>
-                                <span style={{ color: '#b45309' }}>✅ completed: <strong style={{ color: '#059669' }}>{allWoSerials.filter(s => s.last_step === 'Rework' && s.last_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#b45309' }}>Pending Rework: <strong>{pendingItems.length}</strong></span>
+                                <span style={{ color: '#b45309' }}>🛠️ Total Failed Ever: <strong style={{ color: '#d97706' }}>{serials.length}</strong></span>
+                                <span style={{ color: '#b45309' }}>✅ Repaired & Revalidated: <strong style={{ color: '#059669' }}>{historyItems.filter(h => h.status === 'REVALIDATED_PASS').length}</strong></span>
                             </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={onBack}>Back</button>
@@ -217,11 +304,11 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                 <div className={styles.card} style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                         <div className={styles.inputGroup} style={{ maxWidth: '300px' }}>
-                            <label>Scanned By *</label>
+                            <label>Rework Technician *</label>
                             <input type="text" className={styles.input} value={operatorName} readOnly style={{ backgroundColor: '#f9fafb', height: '42px' }} />
                         </div>
                         <div className={styles.inputGroup}>
-                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must have FAILED in Post AOI)...</label>
+                            <label style={{ marginBottom: '0.25rem' }}>Scan Failed Board Barcode...</label>
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <form onSubmit={handleScan} style={{ flex: 1 }}>
                                     <input
@@ -240,87 +327,166 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                     </div>
                 </div>
 
-                <div className={styles.card}>
-                    <div className={styles.tableHeader}>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Rework Items ({serials.length})</h3>
-                    </div>
-                    <div className={styles.tableContainer}>
-                        <table className={styles.table}>
-                            <thead>
-                                <tr>
-                                    <th style={{ textAlign: 'center' }}>BARCODE PREVIEW</th>
-                                    <th>BARCODE NUMBER</th>
-                                    <th>DEFECT REASON</th>
-                                    <th>STATUS</th>
-                                    <th>SCANNED BY</th>
-                                    <th>SCANNED AT</th>
-                                    <th>ACTION</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {loading ? (
-                                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
-                                ) : serials.length === 0 ? (
-                                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 No failed items waiting for rework</td></tr>
-                                ) : sortedSerials.map((s, idx) => {
-                                    const isPass = s.last_status === 'PASS';
-                                    const isFail = s.last_status === 'FAIL';
-                                    const isNew = Date.now() - new Date(s.scanned_at || 0).getTime() < 4000;
-                                    const showBarcodeImage = s.barcode_source === 'GENERATED' || !s.barcode_source || (s.barcode_source === 'PRE_EXISTING' && s.serial_number);
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <button
+                        onClick={() => setActiveTab('pending')}
+                        style={{
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: '8px',
+                            fontWeight: 600,
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            backgroundColor: activeTab === 'pending' ? '#d97706' : '#e2e8f0',
+                            color: activeTab === 'pending' ? 'white' : '#475569',
+                            boxShadow: activeTab === 'pending' ? '0 4px 6px -1px rgba(217, 119, 6, 0.2)' : 'none'
+                        }}
+                    >
+                        Pending Rework Queue ({pendingItems.length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('history')}
+                        style={{
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: '8px',
+                            fontWeight: 600,
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            backgroundColor: activeTab === 'history' ? '#d97706' : '#e2e8f0',
+                            color: activeTab === 'history' ? 'white' : '#475569',
+                            boxShadow: activeTab === 'history' ? '0 4px 6px -1px rgba(217, 119, 6, 0.2)' : 'none'
+                        }}
+                    >
+                        Rework History / Audit Trail ({historyItems.length})
+                    </button>
+                </div>
 
-                                    return (
-                                        <tr 
-                                            key={s.id || idx}
-                                            style={{
-                                                transition: 'all 0.2s',
-                                                animation: isNew ? 'rowHighlight 4s ease-out' : undefined
-                                            }}
-                                        >
-                                            <td style={{ padding: '0.5rem', textAlign: 'center' }}>
-                                                {showBarcodeImage ? (
-                                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                                                        <QRCode value={(s.serial_number || '').toUpperCase()} size={64} />
-                                                    </div>
-                                                ) : (
-                                                    <span style={{ color: '#9ca3af' }}>-</span>
-                                                )}
-                                            </td>
-                                            <td style={{ fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>
-                                                {(s.serial_number || '').toUpperCase()}
-                                            </td>
-                                            <td style={{ color: '#64748b', fontSize: '0.9rem', fontWeight: 600 }}>
-                                                {s.rework_reason || 'Defect Registered'}
-                                            </td>
-                                            <td>
-                                                <span style={{
-                                                    padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
-                                                    backgroundColor: isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7',
-                                                    color: isPass ? '#166534' : isFail ? '#991b1b' : '#92400e'
-                                                }}>
-                                                    {isPass ? '✓ REWORKED' : isFail ? '● FAILED (Post AOI)' : '🕒 WAITING'}
-                                                </span>
-                                            </td>
-                                            <td style={{ fontWeight: 600, color: '#475569' }}>
-                                                {s.scanned_by || 'System'}
-                                            </td>
-                                            <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                                {s.scanned_at ? new Date(s.scanned_at).toLocaleString() : '-'}
-                                            </td>
-                                            <td>
-                                                <button
-                                                    onClick={() => handleMarkPass(s.id)}
-                                                    className={styles.button}
-                                                    style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#059669' }}
-                                                >
-                                                    REPAIR PASS
-                                                </button>
-                                            </td>
+                <div className={styles.card}>
+                    {activeTab === 'pending' ? (
+                        <>
+                            <div className={styles.tableHeader}>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#92400e' }}>Pending Rework ({pendingItems.length})</h3>
+                            </div>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th style={{ textAlign: 'center' }}>BARCODE PREVIEW</th>
+                                            <th>BARCODE NUMBER</th>
+                                            <th>DEFECT REASON</th>
+                                            <th>FAILED BY</th>
+                                            <th>FAILED AT</th>
+                                            <th>STATUS</th>
                                         </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
+                                    </thead>
+                                    <tbody>
+                                        {loading ? (
+                                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                                        ) : pendingItems.length === 0 ? (
+                                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 No failed items waiting for rework</td></tr>
+                                        ) : pendingItems.map((s, idx) => {
+                                            const showBarcodeImage = s.barcode_source === 'GENERATED' || !s.barcode_source || (s.barcode_source === 'PRE_EXISTING' && s.serial_number);
+                                            return (
+                                                <tr key={s.id || idx}>
+                                                    <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                                        {showBarcodeImage ? (
+                                                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                                <QRCode value={(s.serial_number || '').toUpperCase()} size={64} />
+                                                            </div>
+                                                        ) : (
+                                                            <span style={{ color: '#9ca3af' }}>-</span>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>
+                                                        {(s.serial_number || '').toUpperCase()}
+                                                    </td>
+                                                    <td style={{ color: '#64748b', fontSize: '0.9rem', fontWeight: 600 }}>
+                                                        {s.failure_remark}
+                                                    </td>
+                                                    <td style={{ fontWeight: 600, color: '#475569' }}>
+                                                        {s.failed_by}
+                                                    </td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                        {s.failed_time ? new Date(s.failed_time).toLocaleString() : '-'}
+                                                    </td>
+                                                    <td>
+                                                        <span style={{
+                                                            padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                                                            backgroundColor: s.status === 'FAILED_AGAIN' ? '#fee2e2' : '#fef3c7',
+                                                            color: s.status === 'FAILED_AGAIN' ? '#991b1b' : '#92400e'
+                                                        }}>
+                                                            {s.status === 'FAILED_AGAIN' ? '● FAILED AGAIN' : '🕒 PENDING REPAIR'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className={styles.tableHeader}>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#059669' }}>Rework History / Audit Trail ({historyItems.length})</h3>
+                            </div>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>BARCODE NUMBER</th>
+                                            <th>DEFECT REASON</th>
+                                            <th>FAILED AT</th>
+                                            <th>REPAIR ACTION</th>
+                                            <th>REPAIR TECHNICIAN</th>
+                                            <th>REPAIRED AT</th>
+                                            <th>STATUS</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {loading ? (
+                                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                                        ) : historyItems.length === 0 ? (
+                                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 No repaired items in history</td></tr>
+                                        ) : historyItems.map((s, idx) => {
+                                            return (
+                                                <tr key={s.id || idx}>
+                                                    <td style={{ fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>
+                                                        {(s.serial_number || '').toUpperCase()}
+                                                    </td>
+                                                    <td style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                                                        {s.failure_remark}
+                                                    </td>
+                                                    <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                                        {s.failed_time ? new Date(s.failed_time).toLocaleString() : '-'}
+                                                    </td>
+                                                    <td style={{ color: '#0f766e', fontWeight: 600, fontSize: '0.9rem' }}>
+                                                        {s.repair_remark || '-'}
+                                                    </td>
+                                                    <td style={{ fontWeight: 600, color: '#475569' }}>
+                                                        {s.repaired_by || '-'}
+                                                    </td>
+                                                    <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                                        {s.repair_time ? new Date(s.repair_time).toLocaleString() : '-'}
+                                                    </td>
+                                                    <td>
+                                                        <span style={{
+                                                            padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                                                            backgroundColor: s.status === 'REVALIDATED_PASS' ? '#dcfce7' : '#fef3c7',
+                                                            color: s.status === 'REVALIDATED_PASS' ? '#166534' : '#92400e'
+                                                        }}>
+                                                            {s.status === 'REVALIDATED_PASS' ? '✓ PASSED RECHECK' : '● READY FOR RECHECK'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </>
@@ -352,7 +518,6 @@ const Rework: React.FC = () => {
     const [panelQty, setPanelQty] = useState('');
     const [createdBy, setCreatedBy] = useState('');
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
-    const [inspections, setInspections] = useState<any[]>([]);
 
     const fetchData = useCallback(async () => {
         try {
@@ -361,12 +526,6 @@ const Rework: React.FC = () => {
 
             const setupRes = await fetch('/api/smt/process-setups?process_name=rework');
             if (setupRes.ok) setSavedEntries(await setupRes.json());
-
-            const inspRes = await fetch('/api/smt/inspections?process_step=Rework');
-            if (inspRes.ok) {
-                const data = await inspRes.json();
-                setInspections(data);
-            }
 
             if (smtUser) setCreatedBy(smtUser.name || smtUser.userId || 'System');
         } catch (err) {
@@ -423,25 +582,22 @@ const Rework: React.FC = () => {
     const dropdownWorkOrders = workOrders.filter(wo => {
         const woId = wo.id || wo.work_order_id;
         const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase()).length;
-        const targetQty = wo.scanned_count || wo.quantity || 0;
-        const isCompleted = inspectedCount >= targetQty && targetQty > 0;
-        return !hasSetup && !isCompleted;
+        const activeFailed = parseInt(wo.active_failed_count || '0');
+        return !hasSetup && activeFailed > 0;
     });
 
     const pendingEntries = savedEntries.filter(entry => {
         const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
-        const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
-        return inspectedCount < targetQty || targetQty === 0;
+        if (!wo) return true;
+        const activeFailed = parseInt(wo.active_failed_count || '0');
+        return activeFailed > 0;
     });
 
     const completedEntries = savedEntries.filter(entry => {
         const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
         if (!wo) return false;
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
-        const targetQty = wo.scanned_count || wo.quantity;
-        return inspectedCount >= targetQty && targetQty > 0;
+        const activeFailed = parseInt(wo.active_failed_count || '0');
+        return activeFailed === 0;
     });
 
     if (viewingWoId) {

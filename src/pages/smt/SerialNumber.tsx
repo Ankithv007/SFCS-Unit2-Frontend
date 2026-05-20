@@ -137,7 +137,10 @@ export const SerialNumber: React.FC = () => {
 
                     return acc;
                 }, {});
-                setBatches(Object.values(grouped));
+                const sortedBatches = Object.values(grouped).sort((a: any, b: any) => 
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+                setBatches(sortedBatches as SmtBatch[]);
             }
         } catch (err) {
             console.error("Failed to fetch batches:", err);
@@ -316,25 +319,52 @@ export const SerialNumber: React.FC = () => {
 
             if (res.ok) {
                 const data = await res.json();
+                
+                // 1. Instantly update local state
+                const newBatchObj: SmtBatch = {
+                    id: Date.now(),
+                    work_order_id: selectedWoId,
+                    product_name: productName || "Unknown Product",
+                    wo_qty: parseInt(woQty) || 0,
+                    panel_qty: parseInt(panelQty) || 0,
+                    starting_number: isNaN(start) ? 0 : start,
+                    end_number: isNaN(end) ? 0 : end,
+                    serial_format: formatStr,
+                    barcode_source: isExisting ? 'PRE_EXISTING' : 'GENERATED',
+                    created_by: createdBy,
+                    created_at: new Date().toISOString(),
+                    is_registered: true,
+                    components: newComponents
+                };
+
+                const updatedBatches = [newBatchObj, ...batches].sort((a, b) => 
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+                
+                setBatches(updatedBatches);
+                
+                // 2. Fetch silently in background
                 fetchBatches();
+                
+                // 3. Show non-blocking toasts instead of alerts
                 if (isExisting) {
-                    alert('Work Order successfully registered for existing barcodes!');
+                    addToast('Work Order successfully registered for existing barcodes!', 'success');
                 } else {
                     if (data.inserted === 0) {
-                        alert('All these serial numbers already exist in the system.');
+                        addToast('All these serial numbers already exist in the system.', 'info');
                     } else if (data.inserted < data.total) {
-                        alert(`Generated ${data.inserted} new serials. ${data.total - data.inserted} already existed.`);
+                        addToast(`Generated ${data.inserted} new serials. ${data.total - data.inserted} already existed.`, 'success');
                     } else {
-                        alert(`Successfully generated all ${data.inserted} serials!`);
+                        addToast(`Successfully generated all ${data.inserted} serials!`, 'success');
                     }
                 }
             } else {
                 const errorData = await res.json().catch(() => ({}));
-                alert(`Failed to register: ${errorData.error || 'Unknown API error'}`);
+                addToast(`Failed to register: ${errorData.error || 'Unknown API error'}`, 'error');
             }
         } catch (err) {
             console.error("API error:", err);
-            alert('Error connecting to backend API.');
+            addToast('Error connecting to backend API.', 'error');
         }
 
         // Reset form

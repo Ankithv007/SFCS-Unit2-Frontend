@@ -56,6 +56,7 @@ const PCBGeneration: React.FC = () => {
     // Scan State
     const [barcode, setBarcode] = useState('');
     const scanLock = useRef(false);
+    const scanInputRef = useRef<HTMLInputElement>(null);
 
     // Search / Filter
     const [barcodeFilter, setBarcodeFilter] = useState("");
@@ -141,6 +142,7 @@ const PCBGeneration: React.FC = () => {
         fetchAllSerials(selectedWo.id);
         setSelectedWoId('');
         showToast(`Started PCB Generation for ${selectedWo.id}`, 'success');
+        setTimeout(() => { scanInputRef.current?.focus(); }, 100);
     };
 
     const handleViewBatch = (batch: SmtWorkOrder) => {
@@ -148,6 +150,7 @@ const PCBGeneration: React.FC = () => {
         setActiveBatch(batch);
         fetchComponents(batch.id);
         fetchAllSerials(batch.id);
+        setTimeout(() => { scanInputRef.current?.focus(); }, 100);
     };
 
     const handleDeleteBatch = async (batchId: string) => {
@@ -175,9 +178,37 @@ const PCBGeneration: React.FC = () => {
         }
     };
 
+    const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const trimmedBarcode = e.currentTarget.value.trim().toUpperCase();
+            if (!trimmedBarcode || !activeBatch) return;
+
+            if (!scannerName.trim()) {
+                showToast('Please enter Scanner Name', 'error');
+                return;
+            }
+
+            const targetLimit = activeBatch.barcode_source !== 'PRE_EXISTING'
+                ? Number(activeBatch.generated_qty || allSerials.length)
+                : activeBatch.quantity;
+
+            if (scannedComponents.length >= targetLimit) {
+                showToast(`Target quantity (${targetLimit}) already reached.`, 'error');
+                setBarcode('');
+                return;
+            }
+
+            // Sync the state immediately just in case
+            setBarcode(trimmedBarcode);
+            await submitScan(trimmedBarcode);
+        }
+    };
+
     const handleScan = async (e: React.FormEvent) => {
         e.preventDefault();
-        const trimmedBarcode = barcode.trim().toUpperCase();
+        const currentVal = scanInputRef.current?.value || barcode;
+        const trimmedBarcode = currentVal.trim().toUpperCase();
         if (!trimmedBarcode || !activeBatch) return;
 
         if (!scannerName.trim()) {
@@ -195,6 +226,7 @@ const PCBGeneration: React.FC = () => {
             return;
         }
 
+        setBarcode(trimmedBarcode);
         await submitScan(trimmedBarcode);
     };
 
@@ -205,11 +237,12 @@ const PCBGeneration: React.FC = () => {
         if (scannedComponents.some(c => c.serial_number === code)) {
             showToast(`Barcode ${code} has already been scanned for this Work Order.`, 'error');
             setBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
         scanLock.current = true;
-        setTimeout(() => { scanLock.current = false; }, 2000);
+        setTimeout(() => { scanLock.current = false; }, 300);
 
         try {
             let serialIdToInspect: number | null = null;
@@ -250,6 +283,7 @@ const PCBGeneration: React.FC = () => {
                     showToast(`Barcode ${code} does not belong to this Work Order!`, 'error');
                     setBarcode('');
                     scanLock.current = false;
+                    scanInputRef.current?.focus();
                     return;
                 }
                 serialIdToInspect = existingSerial.id;
@@ -272,6 +306,7 @@ const PCBGeneration: React.FC = () => {
 
             showToast('PCB Scanned Successfully', 'success');
             setBarcode('');
+            scanInputRef.current?.focus();
             
             // Refresh counts
             await fetchComponents(activeBatch!.id);
@@ -283,8 +318,32 @@ const PCBGeneration: React.FC = () => {
             console.error('Error scanning component:', error);
             showToast(error.message || 'Scan failed', 'error');
             setBarcode('');
+            scanInputRef.current?.focus();
         }
     };
+
+    // Automatic Scanner Submit Behavior (exactly like Spi.tsx)
+    useEffect(() => {
+        if (!activeBatch) return;
+        const cleanInput = (barcode || '').trim().replace(/-/g, '').toUpperCase();
+        if (cleanInput.length < 5) return; // Min length for auto-trigger
+
+        const match = allSerials.find((s: any) =>
+            [s.serial_number].some(v =>
+                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+            )
+        );
+
+        if (match) {
+            const alreadyScanned = scannedComponents.some(c => c.serial_number === match.serial_number);
+            if (!alreadyScanned) {
+                if (scannerName.trim()) {
+                    submitScan(match.serial_number);
+                }
+            }
+        }
+    }, [barcode, allSerials, scannedComponents, activeBatch, scannerName]);
+
 
     // const handlePrintAll = async () => {
     //     if (allSerials.length === 0) {
@@ -580,6 +639,7 @@ const PCBGeneration: React.FC = () => {
     };
 
     const selectedWoDetails = batches.find(b => b.id === selectedWoId);
+    const targetLimit = activeBatch ? (activeBatch.barcode_source !== 'PRE_EXISTING' ? Number(activeBatch.generated_qty || allSerials.length) : activeBatch.quantity) : 0;
 
     return (
         <div className={styles.container}>
@@ -866,16 +926,18 @@ const PCBGeneration: React.FC = () => {
                         <form className={styles.scanForm} onSubmit={handleScan}>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 <input
+                                    ref={scanInputRef}
                                     type="text"
                                     className={styles.scanInput}
                                     placeholder="Scan PCB Barcode..."
                                     value={barcode}
                                     onChange={(e) => setBarcode(e.target.value)}
+                                    onKeyDown={handleKeyDown}
                                     autoFocus
-                                    disabled={scannedComponents.length >= activeBatch.quantity}
+                                    disabled={scannedComponents.length >= targetLimit}
                                 />
                             </div>
-                            <button type="submit" className={styles.scanButton} disabled={scannedComponents.length >= activeBatch.quantity}>
+                            <button type="submit" className={styles.scanButton} disabled={scannedComponents.length >= targetLimit}>
                                 SCAN
                             </button>
                         </form>

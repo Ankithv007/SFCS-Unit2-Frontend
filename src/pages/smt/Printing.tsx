@@ -30,13 +30,27 @@ interface PrintingDetailProps {
     woId: string;
     onBack: () => void;
     operatorName: string;
+    workOrderQty: number;
 }
 
-const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorName }) => {
+const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorName, workOrderQty }) => {
     const [serials, setSerials] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [scanBarcode, setScanBarcode] = useState('');
     const [scannedBy, setScannedBy] = useState(operatorName);
+    const scanInputRef = useRef<HTMLInputElement>(null);
+
+    // Toast state
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastId = useRef(0);
+
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastId.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
+
+    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
     useEffect(() => {
         setScannedBy(operatorName);
@@ -57,6 +71,7 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
             }
         } catch (err) {
             console.error("Error fetching serials:", err);
+            addToast("Failed to load serials list.", "error");
         } finally {
             setLoading(false);
         }
@@ -76,20 +91,29 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
             });
 
             if (res.ok) {
+                addToast('Item marked as PASS.', 'success');
                 fetchSerials();
             } else {
-                alert("Failed to save printing record");
+                const errData = await res.json().catch(() => ({}));
+                addToast(errData.error || "Failed to save printing record", 'error');
             }
         } catch (err) {
             console.error("Pass error:", err);
+            addToast("Network error.", "error");
+        } finally {
+            scanInputRef.current?.focus();
         }
     };
 
     const handleFail = async (serialId: number) => {
         const remark = window.prompt("Please enter mandatory failure remark (e.g. Print mismatch, Smudged print, Barcode unreadable, Alignment issue):");
-        if (remark === null) return; // cancelled
+        if (remark === null) {
+            scanInputRef.current?.focus();
+            return; // cancelled
+        }
         if (!remark.trim()) {
-            alert("Error: Failure remark is MANDATORY. Status not updated.");
+            addToast("Error: Failure remark is MANDATORY. Status not updated.", "error");
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -107,12 +131,16 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
             });
 
             if (res.ok) {
+                addToast('Item marked as FAIL.', 'info');
                 fetchSerials();
             } else {
-                alert("Failed to save printing failure record");
+                addToast("Failed to save printing failure record", "error");
             }
         } catch (err) {
             console.error("Fail error:", err);
+            addToast("Network error.", "error");
+        } finally {
+            scanInputRef.current?.focus();
         }
     };
 
@@ -121,25 +149,27 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
         .sort((a, b) => new Date(b.step_scanned_at || 0).getTime() - new Date(a.step_scanned_at || 0).getTime());
 
     const processScan = async (barcodeInput: string) => {
-        const cleanInput = barcodeInput.trim().replace(/-/g, "");
+        const cleanInput = barcodeInput.trim().replace(/-/g, "").toUpperCase();
         if (!cleanInput) return false;
 
         const serialObj = serials.find(s =>
-            (s.serial_number && s.serial_number.replace(/-/g, "") === cleanInput) ||
-            (s.barcode && s.barcode.replace(/-/g, "") === cleanInput)
+            (s.serial_number && s.serial_number.replace(/-/g, "").toUpperCase() === cleanInput) ||
+            (s.barcode && s.barcode.replace(/-/g, "").toUpperCase() === cleanInput)
         );
 
         if (!serialObj) {
-            alert(`Serial Number "${barcodeInput}" not found, does not belong to this Work Order, or has not passed PCB Generation stage!`);
+            addToast(`Serial Number "${barcodeInput}" not found, does not belong to this Work Order, or has not passed PCB Generation stage!`, "error");
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return false;
         }
 
         // Check if already scanned and PASSed in Printing stage to prevent duplicates
         const alreadyScanned = scannedSerials.find(s => s.id === serialObj.id);
         if (alreadyScanned && alreadyScanned.step_status === 'PASS') {
-            alert(`Barcode "${barcodeInput}" has already been printed successfully (PASS)!`);
+            addToast(`Barcode "${barcodeInput}" has already been printed successfully (PASS)!`, "info");
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return false;
         }
 
@@ -155,13 +185,17 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
     };
 
     useEffect(() => {
+        scanInputRef.current?.focus();
+    }, []);
+
+    useEffect(() => {
         const tryAutoScan = async () => {
-            const cleanInput = scanBarcode.trim().replace(/-/g, "");
-            if (!cleanInput) return;
+            const cleanInput = scanBarcode.trim().replace(/-/g, "").toUpperCase();
+            if (cleanInput.length < 5) return; // Min length for auto-trigger
 
             const match = serials.find(s =>
-                (s.serial_number && s.serial_number.replace(/-/g, "") === cleanInput) ||
-                (s.barcode && s.barcode.replace(/-/g, "") === cleanInput)
+                (s.serial_number && s.serial_number.replace(/-/g, "").toUpperCase() === cleanInput) ||
+                (s.barcode && s.barcode.replace(/-/g, "").toUpperCase() === cleanInput)
             );
 
             // Only trigger auto scan if it has not been successfully processed yet (meaning it's not already PASS in scannedSerials)
@@ -176,8 +210,13 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
         tryAutoScan();
     }, [scanBarcode, serials]);
 
+    const passedQty = scannedSerials.filter(s => s.step_status === 'PASS').length;
+    const failedQty = scannedSerials.filter(s => s.step_status === 'FAIL').length;
+    const pendingQty = workOrderQty - passedQty;
+
     return (
         <div className={styles.detailPage}>
+            <Toaster toasts={toasts} onRemove={removeToast} />
             <style>{`
                 @keyframes rowHighlight {
                     0% { box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.4); }
@@ -189,11 +228,10 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
                     <div>
                         <h3>🖨️ Printing Batch Detail: {woId}</h3>
                         <div className={styles.detailStats} style={{ gap: '1.5rem' }}>
-                            <span style={{ color: '#475569' }}>Total Qty (PCB Passed): <strong style={{ color: '#2563eb' }}>{serials.length}</strong></span>
-                            <span style={{ color: '#475569' }}>Scanned Qty: <strong style={{ color: '#059669' }}>{scannedSerials.length}</strong></span>
-                            <span style={{ color: '#059669' }}>Passed: <strong>{scannedSerials.filter(s => s.step_status === 'PASS').length}</strong></span>
-                            <span style={{ color: '#ef4444' }}>Failed: <strong>{scannedSerials.filter(s => s.step_status === 'FAIL').length}</strong></span>
-                            <span style={{ color: '#d97706' }}>Pending Qty: <strong>{serials.length - scannedSerials.length}</strong></span>
+                            <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{passedQty} / {workOrderQty}</strong></span>
+                            <span style={{ color: '#059669' }}>Passed: <strong>{passedQty}</strong></span>
+                            <span style={{ color: '#ef4444' }}>Failed: <strong>{failedQty}</strong></span>
+                            <span style={{ color: '#d97706' }}>Pending: <strong>{pendingQty}</strong></span>
                         </div>
                     </div>
                     <button onClick={onBack} className={styles.detailBackButton}>Back</button>
@@ -201,8 +239,8 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
             </div>
 
             <div className={styles.detailScanCard}>
-                <form onSubmit={handleScan} className={styles.detailScanForm}>
-                    <div className={styles.detailOperatorGroup}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div className={styles.detailOperatorGroup} style={{ maxWidth: '300px' }}>
                         <label>Scanned By *</label>
                         <input
                             type="text"
@@ -211,20 +249,24 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
                             placeholder="Operator name"
                             className={styles.detailOperatorInput}
                             readOnly
+                            style={{ backgroundColor: '#f9fafb', height: '42px' }}
                         />
                     </div>
                     <div className={styles.detailScanRow}>
-                        <input
-                            type="text"
-                            value={scanBarcode}
-                            onChange={e => setScanBarcode(e.target.value)}
-                            placeholder="Scan Item Barcode..."
-                            className={styles.detailScanInput}
-                            autoFocus
-                        />
-                        <button type="submit" className={styles.detailScanButton}>SCAN</button>
+                        <form onSubmit={handleScan} style={{ flex: 1 }}>
+                            <input
+                                ref={scanInputRef}
+                                type="text"
+                                value={scanBarcode}
+                                onChange={e => setScanBarcode(e.target.value)}
+                                placeholder="Scan Item Barcode..."
+                                className={styles.detailScanInput}
+                                style={{ width: '100%', borderColor: '#3b82f6', borderWidth: '2px' }}
+                            />
+                        </form>
+                        <button type="button" onClick={() => processScan(scanBarcode)} className={styles.detailScanButton}>SCAN</button>
                     </div>
-                </form>
+                </div>
             </div>
 
             <div className={styles.detailItemsSection}>
@@ -472,28 +514,40 @@ export const Printing: React.FC = () => {
         }
     };
 
+    const getPassedCount = (woId: string) => {
+        const woInspections = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const latestBySerial: { [key: number]: string } = {};
+        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
+        sorted.forEach(i => {
+            latestBySerial[i.serial_id] = i.status;
+        });
+        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    };
+
     const dropdownWorkOrders = workOrders.filter(wo => {
         const woId = wo.id || wo.work_order_id;
         const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase()).length;
+        const passedCount = getPassedCount(woId);
         const targetQty = wo.scanned_count || wo.quantity || 0;
-        const isCompleted = inspectedCount >= targetQty && targetQty > 0;
+        const isCompleted = passedCount >= targetQty && targetQty > 0;
         return !hasSetup && !isCompleted;
     });
 
     const pendingEntries = savedEntries.filter(entry => {
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const woId = entry.work_order_id;
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
+        const passedCount = getPassedCount(woId);
         const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
-        return inspectedCount < targetQty || targetQty === 0;
+        return passedCount < targetQty || targetQty === 0;
     });
 
     const completedEntries = savedEntries.filter(entry => {
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        const woId = entry.work_order_id;
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
         if (!wo) return false;
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const passedCount = getPassedCount(woId);
         const targetQty = wo.scanned_count || wo.quantity;
-        return inspectedCount >= targetQty && targetQty > 0;
+        return passedCount >= targetQty && targetQty > 0;
     });
 
     return (
@@ -526,6 +580,7 @@ export const Printing: React.FC = () => {
                             fetchData();
                         }}
                         operatorName={smtUser?.name || 'System'}
+                        workOrderQty={workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (viewingWoId || '').toUpperCase())?.quantity || 0}
                     />
                 ) : (
                     <>

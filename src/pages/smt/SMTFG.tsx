@@ -133,21 +133,28 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
                 addToast('Item marked as PASS.', 'success');
                 return true;
             } else {
-                addToast('Failed to save SMT FG PASS status.', 'error');
+                const errData = await res.json().catch(() => ({}));
+                addToast(errData.error || 'Failed to save SMT FG PASS status.', 'error');
                 return false;
             }
         } catch {
             addToast('Network error.', 'error');
             return false;
+        } finally {
+            scanInputRef.current?.focus();
         }
     };
 
     const handleFailOnly = async (serialId: number) => {
         const reason = window.prompt('Please enter the defect remark for SMT FG failure:');
-        if (reason === null) return;
+        if (reason === null) {
+            scanInputRef.current?.focus();
+            return;
+        }
         if (!reason.trim()) {
             addToast('Defect remark is required.', 'error');
             alert('Defect remark is required to fail a barcode.');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -192,6 +199,8 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
             }
         } catch {
             addToast('Network error.', 'error');
+        } finally {
+            scanInputRef.current?.focus();
         }
     };
 
@@ -209,6 +218,7 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
             addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
             alert(`Barcode "${barcodeInput}" not found in this Work Order.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -217,6 +227,7 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
             addToast(`Previous stage not passed: Barcode has not passed Post AOI stage.`, 'error');
             alert(`Previous stage not passed: Barcode "${barcodeInput}" has not passed the Post AOI stage (current status: ${match.step_status || 'PENDING'}). Cannot continue to SMT Finished Goods release.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -232,17 +243,20 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
                 addToast(`Barcode ${barcodeInput} has already passed SMT FG.`, 'info');
                 alert(`Barcode "${barcodeInput}" has already passed SMT Finished Goods release.`);
                 setScanBarcode('');
+                scanInputRef.current?.focus();
                 return;
             }
             // Auto-PASS on scan if it failed earlier
             await handlePass(alreadyInTable.id);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
         // Auto-PASS on scan
         await handlePass(match.id);
         setScanBarcode('');
+        scanInputRef.current?.focus();
     };
 
     // Auto-scan effect
@@ -294,10 +308,10 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#0369a1', marginBottom: '0.5rem' }}>📦 SMT FG Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#0369a1' }}>Total Released: <strong>{tableSerials.length} / {totalSerials}</strong></span>
-                                <span style={{ color: '#0369a1' }}>🏭 Available: <strong style={{ color: '#0284c7' }}>{totalSerials}</strong></span>
-                                <span style={{ color: '#0369a1' }}>✅ completed: <strong style={{ color: '#059669' }}>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
-                                <span style={{ color: '#0369a1' }}>🔄 pending: <strong style={{ color: '#d97706' }}>{totalSerials - tableSerials.length}</strong></span>
+                                <span style={{ color: '#0369a1' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {totalSerials}</strong></span>
+                                <span style={{ color: '#0369a1' }}>Passed: <strong>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#0369a1' }}>Failed: <strong>{tableSerials.filter(s => s.last_status === 'FAIL').length}</strong></span>
+                                <span style={{ color: '#0369a1' }}>Pending: <strong>{totalSerials - tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                             </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={onBack}>Back</button>
@@ -539,28 +553,40 @@ const SMTFG: React.FC = () => {
         }
     };
 
+    const getPassedCount = (woId: string) => {
+        const woInspections = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const latestBySerial: { [key: number]: string } = {};
+        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
+        sorted.forEach(i => {
+            latestBySerial[i.serial_id] = i.status;
+        });
+        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    };
+
     const dropdownWorkOrders = workOrders.filter(wo => {
         const woId = wo.id || wo.work_order_id;
         const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase()).length;
+        const passedCount = getPassedCount(woId);
         const targetQty = wo.scanned_count || wo.quantity || 0;
-        const isCompleted = inspectedCount >= targetQty && targetQty > 0;
+        const isCompleted = passedCount >= targetQty && targetQty > 0;
         return !hasSetup && !isCompleted;
     });
 
     const pendingEntries = savedEntries.filter(entry => {
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const woId = entry.work_order_id;
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
+        const passedCount = getPassedCount(woId);
         const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
-        return inspectedCount < targetQty || targetQty === 0;
+        return passedCount < targetQty || targetQty === 0;
     });
 
     const completedEntries = savedEntries.filter(entry => {
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        const woId = entry.work_order_id;
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
         if (!wo) return false;
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const passedCount = getPassedCount(woId);
         const targetQty = wo.scanned_count || wo.quantity;
-        return inspectedCount >= targetQty && targetQty > 0;
+        return passedCount >= targetQty && targetQty > 0;
     });
 
     return (

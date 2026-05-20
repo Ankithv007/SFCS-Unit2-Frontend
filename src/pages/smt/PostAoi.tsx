@@ -71,7 +71,16 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             const res = await fetch(inspUrl.toString());
             const data = res.ok ? await res.json() : [];
 
-            const visited = data.map((i: any) => ({
+            // Filter to keep only the absolute latest Post AOI inspection per unique serial_id
+            const uniqueMap = new Map();
+            data.forEach((i: any) => {
+                if (!uniqueMap.has(i.serial_id)) {
+                    uniqueMap.set(i.serial_id, i);
+                }
+            });
+            const latestInspections = Array.from(uniqueMap.values());
+
+            const visited = latestInspections.map((i: any) => ({
                 id: i.serial_id,
                 serial_number: i.serial_number,
                 barcode: i.serial_number,
@@ -108,46 +117,32 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                 })
             });
             if (res.ok) {
-                const newInsp = await res.json();
-                setTableSerials(prev => {
-                    const exists = prev.find(s => s.id === serialId);
-                    if (exists) {
-                        return prev.map(s =>
-                            s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'Post AOI', scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at, rework_reason: null } : s
-                        );
-                    } else {
-                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
-                        return [{
-                            id: serialId,
-                            serial_number: sInfo.serial_number,
-                            barcode: sInfo.serial_number,
-                            last_status: 'PASS',
-                            last_step: 'Post AOI',
-                            scanned_by: newInsp.scanned_by,
-                            scanned_at: newInsp.scanned_at,
-                            barcode_source: sInfo.barcode_source,
-                            rework_reason: null
-                        }, ...prev];
-                    }
-                });
                 addToast('Item marked as PASS.', 'success');
+                await fetchData();
                 return true;
             } else {
-                addToast('Failed to save PASS status.', 'error');
+                const errData = await res.json().catch(() => ({}));
+                addToast(errData.error || 'Failed to save PASS status.', 'error');
                 return false;
             }
         } catch {
             addToast('Network error.', 'error');
             return false;
+        } finally {
+            scanInputRef.current?.focus();
         }
     };
 
     const handleFailOnly = async (serialId: number) => {
         const reason = window.prompt('Please enter the defect remark for Post AOI failure:');
-        if (reason === null) return;
+        if (reason === null) {
+            scanInputRef.current?.focus();
+            return;
+        }
         if (!reason.trim()) {
             addToast('Defect remark is required.', 'error');
             alert('Defect remark is required to fail a barcode.');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -164,34 +159,15 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                 })
             });
             if (res.ok) {
-                const newInsp = await res.json();
-                setTableSerials(prev => {
-                    const exists = prev.find(s => s.id === serialId);
-                    if (exists) {
-                        return prev.map(s =>
-                            s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Post AOI', rework_reason: reason.trim(), scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at } : s
-                        );
-                    } else {
-                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
-                        return [{
-                            id: serialId,
-                            serial_number: sInfo.serial_number,
-                            barcode: sInfo.serial_number,
-                            last_status: 'FAIL',
-                            last_step: 'Post AOI',
-                            rework_reason: reason.trim(),
-                            scanned_by: newInsp.scanned_by,
-                            scanned_at: newInsp.scanned_at,
-                            barcode_source: sInfo.barcode_source
-                        }, ...prev];
-                    }
-                });
                 addToast('Item marked as FAIL with defect remark.', 'info');
+                await fetchData();
             } else {
                 addToast('Failed to save FAIL status.', 'error');
             }
         } catch {
             addToast('Network error.', 'error');
+        } finally {
+            scanInputRef.current?.focus();
         }
     };
 
@@ -209,6 +185,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
             alert(`Barcode "${barcodeInput}" not found in this Work Order.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -217,6 +194,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             addToast(`Previous stage failed: Barcode failed in Pre AOI. Cannot continue to Post AOI.`, 'error');
             alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Pre AOI stage. Cannot continue to Post AOI.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -224,6 +202,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             addToast(`Previous stage not completed: Barcode has not passed Pre AOI stage.`, 'error');
             alert(`Previous stage not completed: Barcode "${barcodeInput}" has not passed Pre AOI stage. Cannot continue to Post AOI.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -232,6 +211,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             addToast(`Previous stage failed: Barcode failed in Post AOI and must be reworked first.`, 'error');
             alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Post AOI and has not been reworked. Please repair in Rework module first.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -250,18 +230,21 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                     addToast(`Barcode ${barcodeInput} has already passed Post AOI.`, 'info');
                     alert(`Barcode "${barcodeInput}" has already passed Post AOI.`);
                     setScanBarcode('');
+                    scanInputRef.current?.focus();
                     return;
                 }
             }
             // Auto-PASS on scan if it failed earlier or has been reworked
             await handlePass(alreadyInTable.id);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
         // Auto-PASS on scan
         await handlePass(match.id);
         setScanBarcode('');
+        scanInputRef.current?.focus();
     };
 
     // Auto-scan effect
@@ -314,10 +297,10 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🤖 Post AOI Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#475569' }}>Total Scanned: <strong>{tableSerials.length} / {totalSerials}</strong></span>
-                                <span style={{ color: '#475569' }}>🏭 Available: <strong style={{ color: '#2563eb' }}>{totalSerials}</strong></span>
-                                <span style={{ color: '#475569' }}>✅ completed: <strong style={{ color: '#059669' }}>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
-                                <span style={{ color: '#475569' }}>🔄 pending: <strong style={{ color: '#f59e0b' }}>{totalSerials - tableSerials.length}</strong></span>
+                                <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {totalSerials}</strong></span>
+                                <span style={{ color: '#059669' }}>Passed: <strong>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#ef4444' }}>Failed: <strong>{tableSerials.filter(s => s.last_status === 'FAIL').length}</strong></span>
+                                <span style={{ color: '#d97706' }}>Pending: <strong>{totalSerials - tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                             </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={onBack}>Back</button>
@@ -467,7 +450,6 @@ const PostAoi: React.FC = () => {
     const [panelQty, setPanelQty] = useState('');
     const [createdBy, setCreatedBy] = useState('');
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
-    const [inspections, setInspections] = useState<any[]>([]);
 
     const fetchData = useCallback(async () => {
         try {
@@ -481,12 +463,6 @@ const PostAoi: React.FC = () => {
             if (setupRes.ok) {
                 const data = await setupRes.json();
                 setSavedEntries(data);
-            }
-
-            const inspRes = await fetch('/api/smt/inspections?process_step=Post AOI');
-            if (inspRes.ok) {
-                const data = await inspRes.json();
-                setInspections(data);
             }
 
             if (smtUser) {
@@ -559,25 +535,26 @@ const PostAoi: React.FC = () => {
     const dropdownWorkOrders = workOrders.filter(wo => {
         const woId = wo.id || wo.work_order_id;
         const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase()).length;
-        const targetQty = wo.scanned_count || wo.quantity || 0;
-        const isCompleted = inspectedCount >= targetQty && targetQty > 0;
+        const passedCount = parseInt(wo.passed_count || '0');
+        const targetQty = parseInt(wo.quantity || '0');
+        const isCompleted = passedCount >= targetQty && targetQty > 0;
         return !hasSetup && !isCompleted;
     });
 
     const pendingEntries = savedEntries.filter(entry => {
         const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
-        const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
-        return inspectedCount < targetQty || targetQty === 0;
+        if (!wo) return true;
+        const passedCount = parseInt(wo.passed_count || '0');
+        const targetQty = parseInt(wo.quantity || '0');
+        return passedCount < targetQty || targetQty === 0;
     });
 
     const completedEntries = savedEntries.filter(entry => {
         const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
         if (!wo) return false;
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
-        const targetQty = wo.scanned_count || wo.quantity;
-        return inspectedCount >= targetQty && targetQty > 0;
+        const passedCount = parseInt(wo.passed_count || '0');
+        const targetQty = parseInt(wo.quantity || '0');
+        return passedCount >= targetQty && targetQty > 0;
     });
 
     return (

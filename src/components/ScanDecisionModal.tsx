@@ -103,6 +103,14 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                                 placeholder={repairMode ? "Enter repair steps taken..." : `Enter ${status} details...`}
                                 value={text}
                                 onChange={(e) => setText(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        if (text.trim()) {
+                                            onFinalize(status, text.trim());
+                                        }
+                                    }
+                                }}
                             />
                             <div className={styles.modalFooter}>
                                 {!repairMode && <button className={styles.secondaryBtn} onClick={() => setMode('select')}>Back</button>}

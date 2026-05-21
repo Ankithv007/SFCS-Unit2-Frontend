@@ -98,7 +98,7 @@ export const SmtLogin: React.FC = () => {
 
         try {
             if ((userId || '').toUpperCase() === 'ADMIN' && password === '1234') {
-                smtLogin({ id: 'admin', name: 'System Admin', userId: 'ADMIN' });
+                smtLogin({ id: 'admin', name: 'System Admin', userId: 'ADMIN' }, from);
                 navigate(from, { replace: true });
                 return;
             }
@@ -119,7 +119,7 @@ export const SmtLogin: React.FC = () => {
                         id: validEmp.id.toString(), 
                         name: validEmp.name, 
                         userId: validEmp.user_id 
-                    });
+                    }, from);
                     navigate(from, { replace: true });
                 }
                 return;
@@ -141,7 +141,7 @@ export const SmtLogin: React.FC = () => {
                         id: globalUser.id.toString(),
                         name: globalUser.name,
                         userId: globalUser.email
-                    });
+                    }, from);
                     navigate(from, { replace: true });
                 } else {
                     setError('Access Denied: Only Admins or Managers can access SMT tools.');

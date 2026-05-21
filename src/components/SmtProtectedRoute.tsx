@@ -7,7 +7,7 @@ interface SmtProtectedRouteProps {
 }
 
 export const SmtProtectedRoute: React.FC<SmtProtectedRouteProps> = ({ children }) => {
-    const { isSmtAuthenticated, smtLoading } = useSmtAuth();
+    const { isSmtAuthenticated, smtLoading, authenticatedPath } = useSmtAuth();
     const location = useLocation();
 
     if (smtLoading) {
@@ -18,7 +18,10 @@ export const SmtProtectedRoute: React.FC<SmtProtectedRouteProps> = ({ children }
         );
     }
 
-    if (!isSmtAuthenticated) {
+    // Check if not authenticated, or if the current path doesn't start with the authenticated path
+    const isAuthorizedPath = authenticatedPath && location.pathname.startsWith(authenticatedPath);
+
+    if (!isSmtAuthenticated || !isAuthorizedPath) {
         // Redirect to SMT login but save the current location they were trying to go to
         return <Navigate to="/smt/login" state={{ from: location }} replace />;
     }

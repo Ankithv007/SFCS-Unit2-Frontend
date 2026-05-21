@@ -10,7 +10,8 @@ interface SmtAuthContextType {
     smtUser: SmtUser | null;
     isSmtAuthenticated: boolean;
     smtLoading: boolean;
-    smtLogin: (user: SmtUser) => void;
+    authenticatedPath: string | null;
+    smtLogin: (user: SmtUser, path: string) => void;
     smtLogout: () => void;
 }
 
@@ -18,18 +19,21 @@ const SmtAuthContext = createContext<SmtAuthContextType | undefined>(undefined);
 
 export const SmtAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [smtUser, setSmtUser] = useState<SmtUser | null>(null);
+    const [authenticatedPath, setAuthenticatedPath] = useState<string | null>(null);
     const [smtLoading, setSmtLoading] = useState(true);
 
     useEffect(() => {
         setSmtLoading(false);
     }, []);
 
-    const smtLogin = (user: SmtUser) => {
+    const smtLogin = (user: SmtUser, path: string) => {
         setSmtUser(user);
+        setAuthenticatedPath(path);
     };
 
     const smtLogout = () => {
         setSmtUser(null);
+        setAuthenticatedPath(null);
     };
 
     return (
@@ -37,6 +41,7 @@ export const SmtAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
             smtUser, 
             isSmtAuthenticated: !!smtUser, 
             smtLoading, 
+            authenticatedPath,
             smtLogin, 
             smtLogout 
         }}>

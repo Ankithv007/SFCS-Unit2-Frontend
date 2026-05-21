@@ -7,13 +7,16 @@ import { router } from './routes'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './components/Toast'
 import { SmtAuthProvider } from './context/SmtAuthContext'
+import { BackendAuthProvider } from './context/BackendAuthContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <ToastProvider>
         <SmtAuthProvider>
-          <RouterProvider router={router} />
+          <BackendAuthProvider>
+            <RouterProvider router={router} />
+          </BackendAuthProvider>
         </SmtAuthProvider>
       </ToastProvider>
     </ThemeProvider>

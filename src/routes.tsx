@@ -44,6 +44,9 @@ import TrackItems from './pages/backend/TrackItems';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
+import { BackendProtectedRoute } from './components/BackendProtectedRoute';
+import { BackendLogin } from './pages/backend/BackendLogin';
+
 import { SmtProtectedRoute } from './components/SmtProtectedRoute';
 import { SmtLogin } from './pages/smt/SmtLogin';
 
@@ -188,108 +191,66 @@ export const router = createBrowserRouter([
                 ),
             },
             {
-                path: '/backend/work-order',
-                element: (
-                    <ProtectedRoute>
-                        <WorkOrderBackend />
-                    </ProtectedRoute>
-                ),
+                path: '/backend/login',
+                element: <BackendLogin />,
             },
             {
-                path: '/backend/pth',
-                element: (
-                    <ProtectedRoute>
-                        <PTH />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/vi',
-                element: (
-                    <ProtectedRoute>
-                        <VI />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/qa',
-                element: (
-                    <ProtectedRoute>
-                        <QA />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/flashing',
-                element: (
-                    <ProtectedRoute>
-                        <Flashing />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/pcba-fct',
-                element: (
-                    <ProtectedRoute>
-                        <PCBAFCT />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/assembly',
-                element: (
-                    <ProtectedRoute>
-                        <Assembly />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/unit-testing',
-                element: (
-                    <ProtectedRoute>
-                        <UnitTesting />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/qi',
-                element: (
-                    <ProtectedRoute>
-                        <QI />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/packing',
-                element: (
-                    <ProtectedRoute>
-                        <Packing />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/rework',
-                element: (
-                    <ProtectedRoute>
-                        <ReworkBackend />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/debug',
-                element: (
-                    <ProtectedRoute>
-                        <DebugBackend />
-                    </ProtectedRoute>
-                ),
-            },
-            {
-                path: '/backend/track-items',
-                element: (
-                    <ProtectedRoute>
-                        <TrackItems />
-                    </ProtectedRoute>
-                ),
+                path: '/backend',
+                element: <BackendProtectedRoute children={<Outlet />} />,
+                children: [
+                    {
+                        path: 'work-order',
+                        element: <WorkOrderBackend />,
+                    },
+                    {
+                        path: 'pth',
+                        element: <PTH />,
+                    },
+                    {
+                        path: 'vi',
+                        element: <VI />,
+                    },
+                    {
+                        path: 'qa',
+                        element: <QA />,
+                    },
+                    {
+                        path: 'flashing',
+                        element: <Flashing />,
+                    },
+                    {
+                        path: 'pcba-fct',
+                        element: <PCBAFCT />,
+                    },
+                    {
+                        path: 'assembly',
+                        element: <Assembly />,
+                    },
+                    {
+                        path: 'unit-testing',
+                        element: <UnitTesting />,
+                    },
+                    {
+                        path: 'qi',
+                        element: <QI />,
+                    },
+                    {
+                        path: 'packing',
+                        element: <Packing />,
+                    },
+                    {
+                        path: 'rework',
+                        element: <ReworkBackend />,
+                    },
+                    {
+                        path: 'debug',
+                        element: <DebugBackend />,
+                    },
+                    {
+                        path: 'track-items',
+                        element: <TrackItems />,
+                    },
+                ]
             },
             {
                 path: '/smt/login',

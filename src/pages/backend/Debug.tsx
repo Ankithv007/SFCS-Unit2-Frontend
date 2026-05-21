@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
+import { formatScanError } from '../../utils/errorFormatter';
 import styles from './Debug.module.css';
 import sharedStyles from '../smt/WorkOrder.module.css';
 
@@ -18,6 +19,8 @@ interface Batch {
     model?: string;
     workOrderQty: number;
     sourceStage?: string;
+    failedStageId?: number;
+    pending: number;
     scanned: number;
     rework: number;
     debug: number;
@@ -95,9 +98,12 @@ const Debug: React.FC = () => {
         }
     };
 
-    const fetchScans = async (batchId: number, page = 1) => {
+    const fetchScans = async (batchId: number, failedStageId?: number, page = 1) => {
         try {
-            const data = await apiFetch(`/api/backend/debug/scan/${batchId}?page=${page}&limit=50`);
+            const url = failedStageId 
+                ? `/api/backend/debug/scan/${batchId}?failedStageId=${failedStageId}&page=${page}&limit=50`
+                : `/api/backend/debug/scan/${batchId}?page=${page}&limit=50`;
+            const data = await apiFetch(url);
             setScannedItems(data.data || []);
             setScanTotalRecords(data.total || 0);
         } catch (error) {
@@ -108,7 +114,7 @@ const Debug: React.FC = () => {
 
     const handleStartScanning = async (batch: Batch) => {
         try {
-            await fetchScans(batch.id);
+            await fetchScans(batch.id, batch.failedStageId);
             setActiveBatch(batch);
             setBarcode('');
             showToast(`Debug session started for ${batch.batch_number}`, 'success');
@@ -143,6 +149,7 @@ const Debug: React.FC = () => {
                 body: JSON.stringify({
                     batch_id: activeBatch.id,
                     work_order_id: activeBatch.work_order_id,
+                    failed_stage_id: activeBatch.failedStageId,
                     barcode: pendingBarcode,
                     scanned_by: user?.name || 'Operator',
                     status: 'ACCEPTED',
@@ -167,7 +174,7 @@ const Debug: React.FC = () => {
                 }
             }
         } catch (error: any) {
-            showToast(error.message || 'Scan failed', 'error');
+            showToast(formatScanError(error), 'error');
             setPendingBarcode(null);
         } finally {
             setIsScanning(false);
@@ -204,17 +211,17 @@ const Debug: React.FC = () => {
                     <tbody>
                         {activeFailureBatches.length > 0 ? (
                             activeFailureBatches.map(batch => (
-                                <tr key={`${batch.id}-${batch.sourceStage}`}>
+                                <tr key={`${batch.id}-${batch.failedStageId}`}>
                                     <td style={{ fontWeight: 700 }}>{batch.batch_number}</td>
                                     <td>{batch.customer_name || "-"}</td>
                                     <td>{batch.model || "-"}</td>
                                     <td style={{ fontWeight: 600 }}>{batch.workOrderQty}</td>
-                                    <td style={{ color: '#6366f1', fontWeight: 700 }}>{batch.sourceStage}</td>
-                                    <td className={styles.statusBlue}>0</td>
-                                    <td style={{ color: 'orange', fontWeight: 700 }}>{batch.debug}</td>
-                                    <td className={styles.statusGreen}>0</td>
-                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>0</td>
-                                    <td style={{ color: '#ef4444', fontWeight: 700 }}>{batch.debug}</td>
+                                    <td style={{ color: '#6366f1', fontWeight: 700 }}>{batch.sourceStage || "-"}</td>
+                                    <td className={styles.statusBlue}>{batch.scanned || 0}</td>
+                                    <td style={{ color: 'orange', fontWeight: 700 }}>{batch.pending || 0}</td>
+                                    <td className={styles.statusGreen}>{batch.passed || 0}</td>
+                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.rework || 0}</td>
+                                    <td style={{ color: '#ef4444', fontWeight: 700 }}>{batch.debug || 0}</td>
                                     <td className={styles.actionColumn}>
                                         <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
                                             <Search size={14} /> Start Debugging
@@ -295,7 +302,7 @@ const Debug: React.FC = () => {
                                         <Clock size={16} />
                                     </div>
                                 </div>
-                                <div className={sharedStyles.statValue}>{activeBatch.debug}</div>
+                                <div className={sharedStyles.statValue}>{activeBatch.pending}</div>
                                 <div className={sharedStyles.statLabel}>Waiting for debug</div>
                             </div>
                             <div className={sharedStyles.statCard}>

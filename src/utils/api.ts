@@ -47,10 +47,11 @@ export async function apiFetch(
         let errorMsg = `API Error (${response.status})`;
         let errorCode: string | null = null;
 
+        let data: any;
         try {
             const text = await response.text();
             try {
-                const data = JSON.parse(text);
+                data = JSON.parse(text);
                 errorMsg = data.error || data.message || data.msg || data.err || errorMsg;
                 errorCode = data.code || null;
                 if (response.status === 409 && errorMsg.startsWith('API Error')) {
@@ -70,6 +71,12 @@ export async function apiFetch(
         // Attach backend error code so callers can branch on it (e.g. MOVE_REQUIRED)
         const err = new Error(errorMsg) as any;
         err.code = errorCode;
+        
+        // Ensure all structured custom fields are attached directly to the Error object
+        if (typeof data !== 'undefined') {
+            Object.assign(err, data);
+        }
+
         throw err;
     }
 

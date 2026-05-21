@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
+import { formatScanError } from '../../utils/errorFormatter';
 import styles from './VI.module.css';
 import sharedStyles from '../smt/WorkOrder.module.css';
 
@@ -211,7 +212,7 @@ const VI: React.FC = () => {
             }
 
         } catch (error: any) {
-            showToast(error.message || 'Scan failed', 'error');
+            showToast(formatScanError(error), 'error');
             setPendingBarcode(null);
         } finally {
             setIsScanning(false);

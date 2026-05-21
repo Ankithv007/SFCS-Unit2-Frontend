@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
+import { formatScanError } from '../../utils/errorFormatter';
 import styles from './PCBAFCT.module.css';
 import sharedStyles from '../smt/WorkOrder.module.css';
 
@@ -398,7 +399,7 @@ const PCBAFCT: React.FC = () => {
                 if (isCompleted) { showToast('Batch completed successfully!', 'success'); setActiveBatch(null); }
             }
         } catch (error: any) {
-            showToast(error.message || 'Scan failed', 'error');
+            showToast(formatScanError(error), 'error');
             setPendingBarcode(null);
         } finally {
             setIsScanning(false);

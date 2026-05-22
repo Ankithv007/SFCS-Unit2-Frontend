@@ -105,45 +105,6 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
         }
     };
 
-    const handleFail = async (serialId: number) => {
-        const remark = window.prompt("Please enter mandatory failure remark (e.g. Print mismatch, Smudged print, Barcode unreadable, Alignment issue):");
-        if (remark === null) {
-            scanInputRef.current?.focus();
-            return; // cancelled
-        }
-        if (!remark.trim()) {
-            addToast("Error: Failure remark is MANDATORY. Status not updated.", "error");
-            scanInputRef.current?.focus();
-            return;
-        }
-
-        try {
-            const res = await fetch('/api/smt/inspections', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    serial_id: serialId,
-                    process_step: 'Printing',
-                    scanned_by: scannedBy || 'System',
-                    status: 'FAIL',
-                    rework_reason: remark.trim()
-                })
-            });
-
-            if (res.ok) {
-                addToast('Item marked as FAIL.', 'info');
-                fetchSerials();
-            } else {
-                addToast("Failed to save printing failure record", "error");
-            }
-        } catch (err) {
-            console.error("Fail error:", err);
-            addToast("Network error.", "error");
-        } finally {
-            scanInputRef.current?.focus();
-        }
-    };
-
     const scannedSerials = serials
         .filter(s => s.step_status !== null && s.step_status !== undefined)
         .sort((a, b) => new Date(b.step_scanned_at || 0).getTime() - new Date(a.step_scanned_at || 0).getTime());
@@ -284,12 +245,11 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
                                 <th>REMARK</th>
                                 <th>SCANNED BY</th>
                                 <th>SCANNED AT</th>
-                                <th>ACTION</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
                             ) : scannedSerials.map((s, idx) => {
                                 const isDone = s.step_status === 'PASS';
                                 const isFailed = s.step_status === 'FAIL';
@@ -362,26 +322,12 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
                                         <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
                                             {s.step_scanned_at ? new Date(s.step_scanned_at).toLocaleString() : '-'}
                                         </td>
-                                        <td>
-                                            {isDone ? (
-                                                <button
-                                                    onClick={() => handleFail(s.id)}
-                                                    className={styles.button}
-                                                    style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444', boxShadow: 'none' }}
-                                                    type="button"
-                                                >
-                                                    FAIL
-                                                </button>
-                                            ) : (
-                                                <span style={{ color: '#9ca3af' }}>-</span>
-                                            )}
-                                        </td>
                                     </tr>
                                 );
                             })}
                             {!loading && scannedSerials.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
                                         No items scanned yet.
                                     </td>
                                 </tr>

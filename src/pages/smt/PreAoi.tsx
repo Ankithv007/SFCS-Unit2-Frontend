@@ -25,6 +25,57 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
     </div>
 );
 
+// --- Helper function to clean and deduplicate table serials ---
+const getCleanedSerials = (rawList: any[]): any[] => {
+    const groups: { [key: number]: any[] } = {};
+    rawList.forEach(item => {
+        if (!item.id) return;
+        if (!groups[item.id]) {
+            groups[item.id] = [];
+        }
+        groups[item.id].push(item);
+    });
+
+    const cleaned: any[] = [];
+    Object.values(groups).forEach(inspections => {
+        // Sort chronologically (oldest to newest) based on scanned_at
+        const sorted = [...inspections].sort((a, b) => {
+            const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : 0;
+            const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : 0;
+            return timeA - timeB;
+        });
+
+        if (sorted.length === 0) return;
+
+        const latest = sorted[sorted.length - 1];
+        if (latest.last_status === 'FAIL') {
+            // Keep only the latest FAIL
+            cleaned.push(latest);
+        } else {
+            // Latest is PASS
+            // Find the latest FAIL before this PASS
+            let latestFailIndex = -1;
+            for (let i = sorted.length - 1; i >= 0; i--) {
+                if (sorted[i].last_status === 'FAIL') {
+                    latestFailIndex = i;
+                    break;
+                }
+            }
+
+            if (latestFailIndex !== -1) {
+                // Keep the latest FAIL and the latest PASS
+                cleaned.push(sorted[latestFailIndex]);
+                cleaned.push(latest);
+            } else {
+                // Keep only the latest PASS
+                cleaned.push(latest);
+            }
+        }
+    });
+
+    return cleaned;
+};
+
 // ─── Detail View Component (Internal) ──────────────────────────────────────────
 interface PreAoiDetailProps {
     woId: string;
@@ -81,7 +132,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                 scanned_at: i.scanned_at,
                 rework_reason: i.rework_reason
             }));
-            setTableSerials(visited);
+            setTableSerials(getCleanedSerials(visited));
         } catch (err) {
             console.error('Error fetching Pre AOI data:', err);
             addToast('Failed to load Pre AOI data.', 'error');
@@ -95,7 +146,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
         scanInputRef.current?.focus();
     }, [fetchData]);
 
-    const handlePass = async (serialId: number) => {
+    const handlePass = async (serialId: number, reworkReason?: string) => {
         try {
             const res = await fetch('/api/smt/inspections', {
                 method: 'POST',
@@ -104,50 +155,51 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                     serial_id: serialId,
                     process_step: 'Pre AOI',
                     scanned_by: operatorName || 'System',
-                    status: 'PASS'
+                    status: 'PASS',
+                    rework_reason: reworkReason
                 })
             });
             if (res.ok) {
                 const newInsp = await res.json();
                 setTableSerials(prev => {
-                    const exists = prev.find(s => s.id === serialId);
-                    if (exists) {
-                        return prev.map(s =>
-                            s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'Pre AOI', scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at, rework_reason: null } : s
-                        );
-                    } else {
-                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
-                        return [{
-                            id: serialId,
-                            serial_number: sInfo.serial_number,
-                            barcode: sInfo.serial_number,
-                            last_status: 'PASS',
-                            last_step: 'Pre AOI',
-                            scanned_by: newInsp.scanned_by,
-                            scanned_at: newInsp.scanned_at,
-                            barcode_source: sInfo.barcode_source,
-                            rework_reason: null
-                        }, ...prev];
-                    }
+                    const sInfo = allWoSerials.find(s => s.id === serialId) || {};
+                    const newItem = {
+                        id: serialId,
+                        serial_number: sInfo.serial_number,
+                        barcode: sInfo.serial_number,
+                        last_status: 'PASS',
+                        last_step: 'Pre AOI',
+                        rework_reason: newInsp.rework_reason || reworkReason || null,
+                        scanned_by: newInsp.scanned_by,
+                        scanned_at: newInsp.scanned_at,
+                        barcode_source: sInfo.barcode_source
+                    };
+                    return getCleanedSerials([newItem, ...prev]);
                 });
                 addToast('Item marked as PASS.', 'success');
                 return true;
             } else {
-                addToast('Failed to save PASS status.', 'error');
+                const errData = await res.json().catch(() => ({}));
+                addToast(errData.error || 'Failed to save status.', 'error');
                 return false;
             }
         } catch {
             addToast('Network error.', 'error');
             return false;
+        } finally {
+            scanInputRef.current?.focus();
         }
     };
 
     const handleFailOnly = async (serialId: number) => {
-        const reason = window.prompt('Please enter the defect remark for Pre AOI failure:');
-        if (reason === null) return;
+        const reason = window.prompt('Please enter the reason for failure (rework):');
+        if (reason === null) {
+            scanInputRef.current?.focus();
+            return;
+        }
         if (!reason.trim()) {
-            addToast('Defect remark is required.', 'error');
-            alert('Defect remark is required to fail a barcode.');
+            addToast('Remark is required.', 'error');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -166,33 +218,44 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
             if (res.ok) {
                 const newInsp = await res.json();
                 setTableSerials(prev => {
-                    const exists = prev.find(s => s.id === serialId);
-                    if (exists) {
-                        return prev.map(s =>
-                            s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'Pre AOI', rework_reason: reason.trim(), scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at } : s
-                        );
-                    } else {
-                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
-                        return [{
-                            id: serialId,
-                            serial_number: sInfo.serial_number,
-                            barcode: sInfo.serial_number,
-                            last_status: 'FAIL',
-                            last_step: 'Pre AOI',
-                            rework_reason: reason.trim(),
-                            scanned_by: newInsp.scanned_by,
-                            scanned_at: newInsp.scanned_at,
-                            barcode_source: sInfo.barcode_source
-                        }, ...prev];
-                    }
+                    const sInfo = allWoSerials.find(s => s.id === serialId) || {};
+                    const newItem = {
+                        id: serialId,
+                        serial_number: sInfo.serial_number,
+                        barcode: sInfo.serial_number,
+                        last_status: 'FAIL',
+                        last_step: 'Pre AOI',
+                        rework_reason: reason.trim(),
+                        scanned_by: newInsp.scanned_by,
+                        scanned_at: newInsp.scanned_at,
+                        barcode_source: sInfo.barcode_source
+                    };
+                    return getCleanedSerials([newItem, ...prev]);
                 });
-                addToast('Item marked as FAIL with defect remark.', 'info');
+                addToast('Item marked as FAIL.', 'info');
             } else {
-                addToast('Failed to save FAIL status.', 'error');
+                addToast('Failed to save status.', 'error');
             }
         } catch {
             addToast('Network error.', 'error');
+        } finally {
+            scanInputRef.current?.focus();
         }
+    };
+
+    const handlePassFromTable = async (serialId: number, serialNumber: string) => {
+        const changeRemark = window.prompt(`Barcode "${serialNumber}" previously FAILED Pre AOI. Please enter a remark for what is changed:`);
+        if (changeRemark === null) {
+            scanInputRef.current?.focus();
+            return;
+        }
+        if (!changeRemark.trim()) {
+            addToast('Remark is required to pass a failed barcode.', 'error');
+            alert('Remark is required to pass a failed barcode.');
+            scanInputRef.current?.focus();
+            return;
+        }
+        await handlePass(serialId, changeRemark.trim());
     };
 
     const processScan = async (barcodeInput: string) => {
@@ -209,6 +272,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
             addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
             alert(`Barcode "${barcodeInput}" not found in this Work Order.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -217,6 +281,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
             addToast(`Previous stage failed: Barcode failed in SPI. Cannot continue to Pre AOI.`, 'error');
             alert(`Previous stage failed: Barcode "${barcodeInput}" failed in SPI stage. Cannot continue to Pre AOI.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -224,6 +289,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
             addToast(`Previous stage not completed: Barcode has not passed SPI stage.`, 'error');
             alert(`Previous stage not completed: Barcode "${barcodeInput}" has not passed SPI stage. Cannot continue to Pre AOI.`);
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
@@ -239,17 +305,35 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                 addToast(`Barcode ${barcodeInput} has already passed Pre AOI.`, 'info');
                 alert(`Barcode "${barcodeInput}" has already passed Pre AOI.`);
                 setScanBarcode('');
+                scanInputRef.current?.focus();
                 return;
             }
-            // Auto-PASS on scan if it failed earlier
-            await handlePass(alreadyInTable.id);
+
+            // If it failed Pre AOI, scanning it again will ask what is changed and PASS it
+            const changeRemark = window.prompt(`Barcode "${barcodeInput}" previously FAILED Pre AOI. Please enter a remark of what is changed:`);
+            if (changeRemark === null) {
+                setScanBarcode('');
+                scanInputRef.current?.focus();
+                return;
+            }
+            if (!changeRemark.trim()) {
+                addToast('Remark is required to pass a failed barcode.', 'error');
+                alert('Remark is required to pass a failed barcode.');
+                setScanBarcode('');
+                scanInputRef.current?.focus();
+                return;
+            }
+
+            await handlePass(alreadyInTable.id, changeRemark.trim());
             setScanBarcode('');
+            scanInputRef.current?.focus();
             return;
         }
 
-        // Auto-PASS on scan
+        // Automatic Pass on Scan
         await handlePass(match.id);
         setScanBarcode('');
+        scanInputRef.current?.focus();
     };
 
     // Auto-scan effect
@@ -280,11 +364,26 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
         await processScan(scanBarcode);
     };
 
+    const maxTimeMap: { [key: number]: number } = {};
+    tableSerials.forEach(item => {
+        const t = item.scanned_at ? new Date(item.scanned_at).getTime() : 0;
+        if (!maxTimeMap[item.id] || t > maxTimeMap[item.id]) {
+            maxTimeMap[item.id] = t;
+        }
+    });
+
     const sortedTableSerials = [...tableSerials].sort((a, b) => {
-        const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : Date.now();
-        const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : Date.now();
+        const maxA = maxTimeMap[a.id] || 0;
+        const maxB = maxTimeMap[b.id] || 0;
+        if (maxA !== maxB) {
+            return maxB - maxA;
+        }
+        const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : 0;
+        const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : 0;
         return timeB - timeA;
     });
+
+    const spiPassedSerials = allWoSerials.filter(s => s.step_status === 'PASS');
 
     return (
         <>
@@ -301,10 +400,11 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🤖 Pre AOI Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#475569' }}>Total Scanned: <strong>{tableSerials.length} / {totalSerials}</strong></span>
-                                <span style={{ color: '#475569' }}>🏭 Available: <strong style={{ color: '#2563eb' }}>{totalSerials}</strong></span>
-                                <span style={{ color: '#475569' }}>✅ completed: <strong style={{ color: '#059669' }}>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
-                                <span style={{ color: '#475569' }}>🔄 pending: <strong style={{ color: '#f59e0b' }}>{totalSerials - tableSerials.length}</strong></span>
+                                <span style={{ color: '#3b82f6' }}>SPI Passed: <strong>{spiPassedSerials.length}</strong></span>
+                                <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {totalSerials}</strong></span>
+                                <span style={{ color: '#059669' }}>Passed: <strong>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#ef4444' }}>Failed: <strong>{tableSerials.filter(s => s.last_status === 'FAIL').length}</strong></span>
+                                <span style={{ color: '#d97706' }}>Pending: <strong>{totalSerials - tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                             </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={onBack}>Back</button>
@@ -318,7 +418,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                             <input type="text" className={styles.input} value={operatorName} readOnly style={{ backgroundColor: '#f9fafb', height: '42px' }} />
                         </div>
                         <div className={styles.inputGroup}>
-                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must have passed SPI)...</label>
+                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode...</label>
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <form onSubmit={handleScan} style={{ flex: 1 }}>
                                     <input
@@ -348,9 +448,9 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                                     <th style={{ textAlign: 'center' }}>BARCODE PREVIEW</th>
                                     <th>BARCODE NUMBER</th>
                                     <th>STATUS</th>
-                                    <th>REMARK</th>
                                     <th>SCANNED BY</th>
                                     <th>SCANNED AT</th>
+                                    <th>REMARKS</th>
                                     <th>ACTION</th>
                                 </tr>
                             </thead>
@@ -359,7 +459,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                                     <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
                                 ) : tableSerials.length === 0 ? (
                                     <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin Pre AOI inspection</td></tr>
-                                ) : sortedTableSerials.map((s, idx) => {
+                                ) : sortedTableSerials.map((s) => {
                                     const isPass = s.last_status === 'PASS';
                                     const isFail = s.last_status === 'FAIL';
                                     const showBarcodeImage = s.barcode_source === 'GENERATED' || !s.barcode_source || (s.barcode_source === 'PRE_EXISTING' && s.serial_number);
@@ -367,8 +467,9 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
 
                                     return (
                                         <tr
-                                            key={s.id || idx}
+                                            key={`${s.id}-${s.last_status}`}
                                             style={{
+                                                backgroundColor: isPass ? '#f0fdf4' : '#fee2e2',
                                                 transition: 'all 0.2s',
                                                 animation: isNew ? 'rowHighlight 4s ease-out' : undefined
                                             }}
@@ -395,14 +496,29 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                                                     {isPass ? '✓ PASS' : isFail ? '● FAIL' : '🕒 PENDING'}
                                                 </span>
                                             </td>
-                                            <td style={{ padding: '1rem', fontWeight: 600, color: isFail ? '#ef4444' : '#64748b' }}>
-                                                {isFail ? (s.rework_reason || 'Defect Registered') : '-'}
-                                            </td>
                                             <td style={{ padding: '1rem', fontWeight: 600, color: '#475569' }}>
                                                 {s.scanned_by || 'System'}
                                             </td>
                                             <td style={{ padding: '1rem', fontSize: '0.85rem', color: '#64748b' }}>
                                                 {s.scanned_at ? new Date(s.scanned_at).toLocaleString() : '-'}
+                                            </td>
+                                            <td style={{ padding: '1rem', fontSize: '0.85rem' }}>
+                                                {s.rework_reason ? (
+                                                    <span style={{
+                                                        display: 'inline-block',
+                                                        padding: '4px 10px',
+                                                        borderRadius: '6px',
+                                                        backgroundColor: isFail ? '#fee2e2' : '#dcfce7',
+                                                        color: isFail ? '#991b1b' : '#166534',
+                                                        fontWeight: 600,
+                                                        maxWidth: '180px',
+                                                        wordBreak: 'break-word'
+                                                    }}>
+                                                        {s.rework_reason}
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                                )}
                                             </td>
                                             <td style={{ padding: '1rem' }}>
                                                 {isPass ? (
@@ -412,6 +528,14 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                                                         style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}
                                                     >
                                                         FAIL
+                                                    </button>
+                                                ) : isFail ? (
+                                                    <button
+                                                        onClick={() => handlePassFromTable(s.id, s.serial_number)}
+                                                        className={styles.button}
+                                                        style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#10b981' }}
+                                                    >
+                                                        PASS
                                                     </button>
                                                 ) : (
                                                     <span style={{ color: '#9ca3af' }}>-</span>
@@ -456,6 +580,7 @@ const PreAoi: React.FC = () => {
     const [createdBy, setCreatedBy] = useState('');
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
     const [inspections, setInspections] = useState<any[]>([]);
+    const [spiInspections, setSpiInspections] = useState<any[]>([]);
 
     const fetchData = useCallback(async () => {
         try {
@@ -475,6 +600,12 @@ const PreAoi: React.FC = () => {
             if (inspRes.ok) {
                 const data = await inspRes.json();
                 setInspections(data);
+            }
+
+            const spiInspRes = await fetch('/api/smt/inspections?process_step=SPI');
+            if (spiInspRes.ok) {
+                const data = await spiInspRes.json();
+                setSpiInspections(data);
             }
 
             if (smtUser) {
@@ -546,28 +677,50 @@ const PreAoi: React.FC = () => {
         }
     };
 
+    const getPassedCount = (woId: string) => {
+        const woInspections = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const latestBySerial: { [key: number]: string } = {};
+        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
+        sorted.forEach(i => {
+            latestBySerial[i.serial_id] = i.status;
+        });
+        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    };
+
+    const getSpiPassedCount = (woId: string) => {
+        const woInspections = spiInspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const latestBySerial: { [key: number]: string } = {};
+        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
+        sorted.forEach(i => {
+            latestBySerial[i.serial_id] = i.status;
+        });
+        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    };
+
     const dropdownWorkOrders = workOrders.filter(wo => {
         const woId = wo.id || wo.work_order_id;
         const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase()).length;
+        const passedCount = getPassedCount(woId);
         const targetQty = wo.scanned_count || wo.quantity || 0;
-        const isCompleted = inspectedCount >= targetQty && targetQty > 0;
+        const isCompleted = passedCount >= targetQty && targetQty > 0;
         return !hasSetup && !isCompleted;
     });
 
     const pendingEntries = savedEntries.filter(entry => {
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const woId = entry.work_order_id;
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
+        const passedCount = getPassedCount(woId);
         const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
-        return inspectedCount < targetQty || targetQty === 0;
+        return passedCount < targetQty || targetQty === 0;
     });
 
     const completedEntries = savedEntries.filter(entry => {
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (entry.work_order_id || '').toUpperCase());
+        const woId = entry.work_order_id;
+        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
         if (!wo) return false;
-        const inspectedCount = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+        const passedCount = getPassedCount(woId);
         const targetQty = wo.scanned_count || wo.quantity;
-        return inspectedCount >= targetQty && targetQty > 0;
+        return passedCount >= targetQty && targetQty > 0;
     });
 
     return (
@@ -657,41 +810,40 @@ const PreAoi: React.FC = () => {
                                 <table className={styles.table}>
                                     <thead>
                                         <tr>
-                                            <th>WORK ORDER</th>
+                                            <th>WO NUMBER</th>
                                             <th>PRODUCT NAME</th>
-                                            <th>BARCODE SOURCE</th>
-                                            <th>TOTAL QTY</th>
-                                            <th>SCANNED QTY</th>
-                                            <th>PENDING QTY</th>
-                                            <th>STATUS</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>SPI PASSED</th>
+                                            <th>PASSED</th>
+                                            <th>PENDING</th>
+                                            <th>TIME</th>
                                             <th>ACTION</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {pendingEntries.map((entry) => {
-                                            const wo = workOrders.find(w => (w.id || w.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase());
-                                            const barcodeSrc = wo?.barcode_source || 'GENERATED';
-                                            const totalQty = entry.quantity || entry.wo_qty || (wo ? (wo.scanned_count || wo.quantity) : 0);
-                                            const scannedQty = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
-                                            const pendingQty = Math.max(0, totalQty - scannedQty);
+                                            const passedVal = getPassedCount(entry.work_order_id);
+                                            const spiPassedVal = getSpiPassedCount(entry.work_order_id);
+                                            const totalVal = entry.quantity || entry.wo_qty || 0;
+                                            const pendingVal = Math.max(0, totalVal - passedVal);
                                             return (
                                                 <tr key={entry.id}>
                                                     <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                    <td style={{ fontWeight: 'bold' }}>{barcodeSrc}</td>
-                                                    <td>{totalQty}</td>
-                                                    <td style={{ color: '#2563eb', fontWeight: 'bold' }}>{scannedQty}</td>
-                                                    <td style={{ color: '#f59e0b', fontWeight: 'bold' }}>{pendingQty}</td>
-                                                    <td>
-                                                        <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', backgroundColor: '#fef3c7', color: '#d97706' }}>
-                                                            ACTIVE
-                                                        </span>
+                                                    <td>{totalVal}</td>
+                                                    <td>{entry.panel_qty || 'N/A'}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#3b82f6' }}>{spiPassedVal}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#10b981' }}>{passedVal}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#f59e0b' }}>{pendingVal}</td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                        {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : 'N/A'}
                                                     </td>
                                                     <td style={{ display: 'flex', gap: '5px' }}>
                                                         <button
                                                             className={styles.button}
                                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', height: 'auto', lineHeight: 'normal', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}
-                                                            onClick={() => setSelectedWoId(entry.work_order_id || entry.wo_id || entry.work_order)}
+                                                            onClick={() => setSelectedWoId(entry.work_order_id)}
                                                         >
                                                             Resume
                                                         </button>
@@ -703,10 +855,10 @@ const PreAoi: React.FC = () => {
                                                                     addToast("Access Denied: Only Super Admin can delete.", "error");
                                                                     return;
                                                                 }
-                                                                if (window.confirm('Are you sure you want to delete this entry?')) {
+                                                                if (window.confirm("Are you sure you want to delete this entry?")) {
                                                                     const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
                                                                     if (res.ok) {
-                                                                        setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                                        setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                                                         addToast("Entry deleted successfully.", "success");
                                                                     }
                                                                 }
@@ -720,7 +872,7 @@ const PreAoi: React.FC = () => {
                                         })}
                                         {pendingEntries.length === 0 && (
                                             <tr>
-                                                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                     No pending sessions found.
                                                 </td>
                                             </tr>
@@ -737,38 +889,40 @@ const PreAoi: React.FC = () => {
                                 <table className={styles.table}>
                                     <thead>
                                         <tr>
-                                            <th>WORK ORDER</th>
+                                            <th>WO NUMBER</th>
                                             <th>PRODUCT NAME</th>
-                                            <th>BARCODE SOURCE</th>
-                                            <th>TOTAL QTY</th>
-                                            <th>COMPLETED QTY</th>
-                                            <th>STATUS</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>SPI PASSED</th>
+                                            <th>PASSED</th>
+                                            <th>PENDING</th>
+                                            <th>TIME</th>
                                             <th>ACTION</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {completedEntries.map((entry) => {
-                                            const wo = workOrders.find(w => (w.id || w.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase());
-                                            const barcodeSrc = wo?.barcode_source || 'GENERATED';
-                                            const totalQty = entry.quantity || entry.wo_qty || (wo ? (wo.scanned_count || wo.quantity) : 0);
-                                            const scannedQty = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
+                                            const passedVal = getPassedCount(entry.work_order_id);
+                                            const spiPassedVal = getSpiPassedCount(entry.work_order_id);
+                                            const totalVal = entry.quantity || entry.wo_qty || 0;
+                                            const pendingVal = Math.max(0, totalVal - passedVal);
                                             return (
                                                 <tr key={entry.id}>
                                                     <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                    <td style={{ fontWeight: 'bold' }}>{barcodeSrc}</td>
-                                                    <td>{totalQty}</td>
-                                                    <td style={{ color: '#059669', fontWeight: 'bold' }}>{scannedQty}</td>
-                                                    <td>
-                                                        <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', backgroundColor: '#dcfce7', color: '#15803d' }}>
-                                                            COMPLETED
-                                                        </span>
+                                                    <td>{totalVal}</td>
+                                                    <td>{entry.panel_qty || 'N/A'}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#3b82f6' }}>{spiPassedVal}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#10b981' }}>{passedVal}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#f59e0b' }}>{pendingVal}</td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                        {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : 'N/A'}
                                                     </td>
                                                     <td style={{ display: 'flex', gap: '5px' }}>
                                                         <button
                                                             className={styles.secondaryButton}
                                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                            onClick={() => setSelectedWoId(entry.work_order_id || entry.wo_id || entry.work_order)}
+                                                            onClick={() => setSelectedWoId(entry.work_order_id)}
                                                         >
                                                             View
                                                         </button>
@@ -780,10 +934,10 @@ const PreAoi: React.FC = () => {
                                                                     addToast("Access Denied: Only Super Admin can delete.", "error");
                                                                     return;
                                                                 }
-                                                                if (window.confirm('Are you sure you want to delete this entry?')) {
+                                                                if (window.confirm("Are you sure you want to delete this entry?")) {
                                                                     const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
                                                                     if (res.ok) {
-                                                                        setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                                        setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                                                         addToast("Entry deleted successfully.", "success");
                                                                     }
                                                                 }
@@ -797,7 +951,7 @@ const PreAoi: React.FC = () => {
                                         })}
                                         {completedEntries.length === 0 && (
                                             <tr>
-                                                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                     No completed sessions found.
                                                 </td>
                                             </tr>

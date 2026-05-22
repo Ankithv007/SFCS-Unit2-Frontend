@@ -25,6 +25,57 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
     </div>
 );
 
+// --- Helper function to clean and deduplicate table serials ---
+const getCleanedSerials = (rawList: any[]): any[] => {
+    const groups: { [key: number]: any[] } = {};
+    rawList.forEach(item => {
+        if (!item.id) return;
+        if (!groups[item.id]) {
+            groups[item.id] = [];
+        }
+        groups[item.id].push(item);
+    });
+
+    const cleaned: any[] = [];
+    Object.values(groups).forEach(inspections => {
+        // Sort chronologically (oldest to newest) based on scanned_at
+        const sorted = [...inspections].sort((a, b) => {
+            const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : 0;
+            const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : 0;
+            return timeA - timeB;
+        });
+
+        if (sorted.length === 0) return;
+
+        const latest = sorted[sorted.length - 1];
+        if (latest.last_status === 'FAIL') {
+            // Keep only the latest FAIL
+            cleaned.push(latest);
+        } else {
+            // Latest is PASS
+            // Find the latest FAIL before this PASS
+            let latestFailIndex = -1;
+            for (let i = sorted.length - 1; i >= 0; i--) {
+                if (sorted[i].last_status === 'FAIL') {
+                    latestFailIndex = i;
+                    break;
+                }
+            }
+
+            if (latestFailIndex !== -1) {
+                // Keep the latest FAIL and the latest PASS
+                cleaned.push(sorted[latestFailIndex]);
+                cleaned.push(latest);
+            } else {
+                // Keep only the latest PASS
+                cleaned.push(latest);
+            }
+        }
+    });
+
+    return cleaned;
+};
+
 // --- Detail View Component (Internal) ---
 interface SpiDetailProps {
     woId: string;
@@ -70,7 +121,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
             inspUrl.searchParams.set('process_step', 'SPI');
             const res = await fetch(inspUrl.toString());
             const data = res.ok ? await res.json() : [];
-            
+
             const visited = data.map((i: any) => ({
                 id: i.serial_id,
                 serial_number: i.serial_number,
@@ -81,7 +132,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 scanned_at: i.scanned_at,
                 rework_reason: i.rework_reason
             }));
-            setTableSerials(visited);
+            setTableSerials(getCleanedSerials(visited));
         } catch (err) {
             console.error('Error fetching SPI data:', err);
             addToast('Failed to load SPI data.', 'error');
@@ -95,7 +146,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
         scanInputRef.current?.focus();
     }, [fetchData]);
 
-    const handlePass = async (serialId: number) => {
+    const handlePass = async (serialId: number, reworkReason?: string) => {
         try {
             const res = await fetch('/api/smt/inspections', {
                 method: 'POST',
@@ -104,32 +155,28 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                     serial_id: serialId,
                     process_step: 'SPI',
                     scanned_by: operatorName || 'System',
-                    status: 'PASS'
+                    status: 'PASS',
+                    rework_reason: reworkReason
                 })
             });
             if (res.ok) {
                 const newInsp = await res.json();
-                
+
                 // Update tableSerials
                 setTableSerials(prev => {
-                    const exists = prev.find(s => s.id === serialId);
-                    if (exists) {
-                        return prev.map(s => 
-                            s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'SPI', scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at } : s
-                        );
-                    } else {
-                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
-                        return [{
-                            id: serialId,
-                            serial_number: sInfo.serial_number,
-                            barcode: sInfo.serial_number,
-                            last_status: 'PASS',
-                            last_step: 'SPI',
-                            scanned_by: newInsp.scanned_by,
-                            scanned_at: newInsp.scanned_at,
-                            barcode_source: sInfo.barcode_source
-                        }, ...prev];
-                    }
+                    const sInfo = allWoSerials.find(s => s.id === serialId) || {};
+                    const newItem = {
+                        id: serialId,
+                        serial_number: sInfo.serial_number,
+                        barcode: sInfo.serial_number,
+                        last_status: 'PASS',
+                        last_step: 'SPI',
+                        rework_reason: newInsp.rework_reason || reworkReason || null,
+                        scanned_by: newInsp.scanned_by,
+                        scanned_at: newInsp.scanned_at,
+                        barcode_source: sInfo.barcode_source
+                    };
+                    return getCleanedSerials([newItem, ...prev]);
                 });
                 addToast('Item marked as PASS.', 'success');
                 return true;
@@ -138,8 +185,8 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 addToast(errData.error || 'Failed to save status.', 'error');
                 return false;
             }
-        } catch { 
-            addToast('Network error.', 'error'); 
+        } catch {
+            addToast('Network error.', 'error');
             return false;
         } finally {
             scanInputRef.current?.focus();
@@ -152,10 +199,10 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
             scanInputRef.current?.focus();
             return;
         }
-        if (!reason.trim()) { 
-            addToast('Remark is required.', 'error'); 
+        if (!reason.trim()) {
+            addToast('Remark is required.', 'error');
             scanInputRef.current?.focus();
-            return; 
+            return;
         }
 
         try {
@@ -172,38 +219,47 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
             });
             if (res.ok) {
                 const newInsp = await res.json();
-                
+
                 // Update tableSerials
                 setTableSerials(prev => {
-                    const exists = prev.find(s => s.id === serialId);
-                    if (exists) {
-                        return prev.map(s => 
-                            s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'SPI', rework_reason: reason.trim(), scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at } : s
-                        );
-                    } else {
-                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
-                        return [{
-                            id: serialId,
-                            serial_number: sInfo.serial_number,
-                            barcode: sInfo.serial_number,
-                            last_status: 'FAIL',
-                            last_step: 'SPI',
-                            rework_reason: reason.trim(),
-                            scanned_by: newInsp.scanned_by,
-                            scanned_at: newInsp.scanned_at,
-                            barcode_source: sInfo.barcode_source
-                        }, ...prev];
-                    }
+                    const sInfo = allWoSerials.find(s => s.id === serialId) || {};
+                    const newItem = {
+                        id: serialId,
+                        serial_number: sInfo.serial_number,
+                        barcode: sInfo.serial_number,
+                        last_status: 'FAIL',
+                        last_step: 'SPI',
+                        rework_reason: reason.trim(),
+                        scanned_by: newInsp.scanned_by,
+                        scanned_at: newInsp.scanned_at,
+                        barcode_source: sInfo.barcode_source
+                    };
+                    return getCleanedSerials([newItem, ...prev]);
                 });
                 addToast('Item marked as FAIL.', 'info');
             } else {
                 addToast('Failed to save status.', 'error');
             }
-        } catch { 
-            addToast('Network error.', 'error'); 
+        } catch {
+            addToast('Network error.', 'error');
         } finally {
             scanInputRef.current?.focus();
         }
+    };
+
+    const handlePassFromTable = async (serialId: number, serialNumber: string) => {
+        const changeRemark = window.prompt(`Barcode "${serialNumber}" previously FAILED SPI. Please enter a remark for what is changed:`);
+        if (changeRemark === null) {
+            scanInputRef.current?.focus();
+            return;
+        }
+        if (!changeRemark.trim()) {
+            addToast('Remark is required to pass a failed barcode.', 'error');
+            alert('Remark is required to pass a failed barcode.');
+            scanInputRef.current?.focus();
+            return;
+        }
+        await handlePass(serialId, changeRemark.trim());
     };
 
     const processScan = async (barcodeInput: string) => {
@@ -248,7 +304,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
             )
         );
-        
+
         if (alreadyInTable) {
             if (alreadyInTable.last_status === 'PASS') {
                 addToast(`Barcode ${barcodeInput} has already passed SPI.`, 'info');
@@ -258,8 +314,22 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                 return;
             }
 
-            // If it failed SPI, scanning it again will automatically PASS it
-            await handlePass(alreadyInTable.id);
+            // If it failed SPI, scanning it again will ask what is changed and PASS it
+            const changeRemark = window.prompt(`Barcode "${barcodeInput}" previously FAILED SPI. Please enter a remark of what is changed:`);
+            if (changeRemark === null) {
+                setScanBarcode('');
+                scanInputRef.current?.focus();
+                return;
+            }
+            if (!changeRemark.trim()) {
+                addToast('Remark is required to pass a failed barcode.', 'error');
+                alert('Remark is required to pass a failed barcode.');
+                setScanBarcode('');
+                scanInputRef.current?.focus();
+                return;
+            }
+
+            await handlePass(alreadyInTable.id, changeRemark.trim());
             setScanBarcode('');
             scanInputRef.current?.focus();
             return;
@@ -299,11 +369,26 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
         await processScan(scanBarcode);
     };
 
+    const maxTimeMap: { [key: number]: number } = {};
+    tableSerials.forEach(item => {
+        const t = item.scanned_at ? new Date(item.scanned_at).getTime() : 0;
+        if (!maxTimeMap[item.id] || t > maxTimeMap[item.id]) {
+            maxTimeMap[item.id] = t;
+        }
+    });
+
     const sortedTableSerials = [...tableSerials].sort((a, b) => {
-        const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : Date.now();
-        const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : Date.now();
+        const maxA = maxTimeMap[a.id] || 0;
+        const maxB = maxTimeMap[b.id] || 0;
+        if (maxA !== maxB) {
+            return maxB - maxA;
+        }
+        const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : 0;
+        const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : 0;
         return timeB - timeA;
     });
+
+    const printingPassedSerials = allWoSerials.filter(s => s.step_status === 'PASS');
 
     return (
         <>
@@ -320,6 +405,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🔍 SPI Inspection Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
+                                <span style={{ color: '#3b82f6' }}>Printing Passed: <strong>{printingPassedSerials.length}</strong></span>
                                 <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {totalSerials}</strong></span>
                                 <span style={{ color: '#059669' }}>Passed: <strong>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                                 <span style={{ color: '#ef4444' }}>Failed: <strong>{tableSerials.filter(s => s.last_status === 'FAIL').length}</strong></span>
@@ -369,24 +455,25 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                                     <th>STATUS</th>
                                     <th>SCANNED BY</th>
                                     <th>SCANNED AT</th>
+                                    <th>REMARKS</th>
                                     <th>ACTION</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {loading ? (
-                                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
                                 ) : tableSerials.length === 0 ? (
-                                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin inspection</td></tr>
-                                ) : sortedTableSerials.map((s, idx) => {
+                                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above to begin inspection</td></tr>
+                                ) : sortedTableSerials.map((s) => {
                                     const isPass = s.last_status === 'PASS';
                                     const isFail = s.last_status === 'FAIL';
                                     const showBarcodeImage = s.barcode_source === 'GENERATED' || !s.barcode_source || (s.barcode_source === 'PRE_EXISTING' && s.serial_number);
                                     const isNew = Date.now() - new Date(s.scanned_at || 0).getTime() < 4000;
-                                    
+
                                     return (
-                                        <tr 
-                                            key={s.id || idx}
-                                            style={{ 
+                                        <tr
+                                            key={`${s.id}-${s.last_status}`}
+                                            style={{
                                                 backgroundColor: isPass ? '#f0fdf4' : '#fee2e2',
                                                 transition: 'all 0.2s',
                                                 animation: isNew ? 'rowHighlight 4s ease-out' : undefined
@@ -420,14 +507,40 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                                             <td style={{ padding: '1rem', fontSize: '0.85rem', color: '#64748b' }}>
                                                 {s.scanned_at ? new Date(s.scanned_at).toLocaleString() : '-'}
                                             </td>
+                                            <td style={{ padding: '1rem', fontSize: '0.85rem' }}>
+                                                {s.rework_reason ? (
+                                                    <span style={{
+                                                        display: 'inline-block',
+                                                        padding: '4px 10px',
+                                                        borderRadius: '6px',
+                                                        backgroundColor: isFail ? '#fee2e2' : '#dcfce7',
+                                                        color: isFail ? '#991b1b' : '#166534',
+                                                        fontWeight: 600,
+                                                        maxWidth: '180px',
+                                                        wordBreak: 'break-word'
+                                                    }}>
+                                                        {s.rework_reason}
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                                )}
+                                            </td>
                                             <td style={{ padding: '1rem' }}>
                                                 {isPass ? (
-                                                    <button 
-                                                        onClick={() => handleFailOnly(s.id)} 
-                                                        className={styles.button} 
+                                                    <button
+                                                        onClick={() => handleFailOnly(s.id)}
+                                                        className={styles.button}
                                                         style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}
                                                     >
                                                         FAIL
+                                                    </button>
+                                                ) : isFail ? (
+                                                    <button
+                                                        onClick={() => handlePassFromTable(s.id, s.serial_number)}
+                                                        className={styles.button}
+                                                        style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#10b981' }}
+                                                    >
+                                                        PASS
                                                     </button>
                                                 ) : (
                                                     <span style={{ color: '#9ca3af' }}>-</span>
@@ -473,6 +586,7 @@ const Spi: React.FC = () => {
     const [createdBy, setCreatedBy] = useState('');
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
     const [inspections, setInspections] = useState<any[]>([]);
+    const [printingInspections, setPrintingInspections] = useState<any[]>([]);
 
     const fetchData = useCallback(async () => {
         try {
@@ -492,6 +606,12 @@ const Spi: React.FC = () => {
             if (inspRes.ok) {
                 const data = await inspRes.json();
                 setInspections(data);
+            }
+
+            const printingInspRes = await fetch('/api/smt/inspections?process_step=Printing');
+            if (printingInspRes.ok) {
+                const data = await printingInspRes.json();
+                setPrintingInspections(data);
             }
 
             if (smtUser) {
@@ -550,6 +670,7 @@ const Spi: React.FC = () => {
             if (res.ok) {
                 const newEntry = await res.json();
                 setSavedEntries([newEntry, ...savedEntries]);
+                setSelectedWoId(formWoId);
                 alert(`Starting SPI Inspection for WO: ${formWoId}`);
             } else {
                 alert("Failed to save SPI setup");
@@ -562,6 +683,16 @@ const Spi: React.FC = () => {
 
     const getPassedCount = (woId: string) => {
         const woInspections = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const latestBySerial: { [key: number]: string } = {};
+        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
+        sorted.forEach(i => {
+            latestBySerial[i.serial_id] = i.status;
+        });
+        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    };
+
+    const getPrintingPassedCount = (woId: string) => {
+        const woInspections = printingInspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
         const latestBySerial: { [key: number]: string } = {};
         const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
         sorted.forEach(i => {
@@ -618,221 +749,245 @@ const Spi: React.FC = () => {
                     </button>
                 </div>
 
-            {selectedWoId ? (
-                <SpiDetail
-                    woId={selectedWoId}
-                    onBack={() => {
-                        setSelectedWoId(null);
-                        fetchData();
-                    }}
-                    operatorName={smtUser?.name || 'System'}
-                />
-            ) : (
-                <>
-                    <div className={styles.card}>
-                        <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>SPI Setup Form</h3>
-                        <div className={styles.formGrid}>
-                            <div className={styles.inputGroup}>
-                                <label>Select Work Order *</label>
-                                <select
-                                    className={styles.input}
-                                    value={formWoId}
-                                    onChange={(e) => handleSelectWo(e.target.value)}
-                                >
-                                    <option value="">-- Select Work Order --</option>
-                                    {dropdownWorkOrders.map((wo) => (
-                                        <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
-                                            {wo.id || wo.work_order_id} - {wo.product_name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                {selectedWoId ? (
+                    <SpiDetail
+                        woId={selectedWoId}
+                        onBack={() => {
+                            setSelectedWoId(null);
+                            fetchData();
+                        }}
+                        operatorName={smtUser?.name || 'System'}
+                    />
+                ) : (
+                    <>
+                        <div className={styles.card}>
+                            <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>SPI Setup Form</h3>
+                            <div className={styles.formGrid}>
+                                <div className={styles.inputGroup}>
+                                    <label>Select Work Order *</label>
+                                    <select
+                                        className={styles.input}
+                                        value={formWoId}
+                                        onChange={(e) => handleSelectWo(e.target.value)}
+                                    >
+                                        <option value="">-- Select Work Order --</option>
+                                        {dropdownWorkOrders.map((wo) => (
+                                            <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
+                                                {wo.id || wo.work_order_id} - {wo.product_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                            <div className={styles.inputGroup}>
-                                <label>Product Name (Auto-filled)</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={productName}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
+                                <div className={styles.inputGroup}>
+                                    <label>Product Name (Auto-filled)</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={productName}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
 
-                            <div className={styles.inputGroup}>
-                                <label>WO Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    value={woQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
+                                <div className={styles.inputGroup}>
+                                    <label>WO Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        value={woQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
 
-                            <div className={styles.inputGroup}>
-                                <label>Panel Qty (Auto-filled)</label>
-                                <input
-                                    type="number"
-                                    className={styles.input}
-                                    value={panelQty}
-                                    disabled
-                                    style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                />
-                            </div>
+                                <div className={styles.inputGroup}>
+                                    <label>Panel Qty (Auto-filled)</label>
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        value={panelQty}
+                                        disabled
+                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
+                                    />
+                                </div>
 
-                            <div className={styles.inputGroup}>
-                                <label>Generated By *</label>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    value={createdBy}
-                                    readOnly
-                                    style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}
-                                />
+                                <div className={styles.inputGroup}>
+                                    <label>Generated By *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        value={createdBy}
+                                        readOnly
+                                        style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }}
+                                    />
+                                </div>
+                            </div>
+                            <div style={{ marginTop: '30px' }}>
+                                <button className={styles.button} onClick={handleStartProcess}>
+                                    Start SPI Inspection
+                                </button>
                             </div>
                         </div>
-                        <div style={{ marginTop: '30px' }}>
-                            <button className={styles.button} onClick={handleStartProcess}>
-                                Start SPI Inspection
-                            </button>
-                        </div>
-                    </div>
 
-                    <div className={styles.card}>
-                        <h3>Pending SPI Sessions</h3>
-                        <div className={styles.tableContainer}>
-                            <table className={styles.table}>
-                                <thead>
-                                    <tr>
-                                        <th>WO NUMBER</th>
-                                        <th>PRODUCT NAME</th>
-                                        <th>WO QTY</th>
-                                        <th>PANEL QTY</th>
-                                        <th>TIME</th>
-                                        <th>ACTION</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {pendingEntries.map((entry) => (
-                                        <tr key={entry.id}>
-                                            <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
-                                            <td>{(entry.product_name || '').toUpperCase()}</td>
-                                            <td>{entry.quantity || entry.wo_qty}</td>
-                                            <td>{entry.panel_qty || 'N/A'}</td>
-                                            <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                                {new Date(entry.timestamp).toLocaleTimeString()}
-                                            </td>
-                                            <td style={{ display: 'flex', gap: '5px' }}>
-                                                <button
-                                                    className={styles.button}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', height: 'auto', lineHeight: 'normal', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}
-                                                    onClick={() => setSelectedWoId(entry.work_order_id)}
-                                                >
-                                                    Resume
-                                                </button>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                    onClick={async () => {
-                                                        if (!isSuperAdmin) {
-                                                            addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                            return;
-                                                        }
-                                                        if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                            const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                            if (res.ok) {
-                                                                setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                                                                addToast("Entry deleted successfully.", "success");
-                                                            }
-                                                        }
-                                                    }}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {pendingEntries.length === 0 && (
+                        <div className={styles.card}>
+                            <h3>Pending SPI Sessions</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
                                         <tr>
-                                            <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                No pending sessions found.
-                                            </td>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>PRINTING PASSED</th>
+                                            <th>PASSED</th>
+                                            <th>PENDING</th>
+                                            <th>TIME</th>
+                                            <th>ACTION</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {pendingEntries.map((entry) => {
+                                            const passedVal = getPassedCount(entry.work_order_id);
+                                            const printingPassedVal = getPrintingPassedCount(entry.work_order_id);
+                                            const totalVal = entry.quantity || entry.wo_qty || 0;
+                                            const pendingVal = Math.max(0, totalVal - passedVal);
+                                            return (
+                                                <tr key={entry.id}>
+                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                                    <td>{(entry.product_name || '').toUpperCase()}</td>
+                                                    <td>{totalVal}</td>
+                                                    <td>{entry.panel_qty || 'N/A'}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#3b82f6' }}>{printingPassedVal}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#10b981' }}>{passedVal}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#f59e0b' }}>{pendingVal}</td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                        {new Date(entry.timestamp).toLocaleTimeString()}
+                                                    </td>
+                                                    <td style={{ display: 'flex', gap: '5px' }}>
+                                                        <button
+                                                            className={styles.button}
+                                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', height: 'auto', lineHeight: 'normal', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}
+                                                            onClick={() => setSelectedWoId(entry.work_order_id)}
+                                                        >
+                                                            Resume
+                                                        </button>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                            onClick={async () => {
+                                                                if (!isSuperAdmin) {
+                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                                    return;
+                                                                }
+                                                                if (window.confirm("Are you sure you want to delete this entry?")) {
+                                                                    const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                    if (res.ok) {
+                                                                        setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                                        addToast("Entry deleted successfully.", "success");
+                                                                    }
+                                                                }
+                                                            }}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {pendingEntries.length === 0 && (
+                                            <tr>
+                                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No pending sessions found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
 
-                    <div className={styles.card}>
-                        <h3>Completed SPI Sessions</h3>
-                        <div className={styles.tableContainer}>
-                            <table className={styles.table}>
-                                <thead>
-                                    <tr>
-                                        <th>WO NUMBER</th>
-                                        <th>PRODUCT NAME</th>
-                                        <th>WO QTY</th>
-                                        <th>PANEL QTY</th>
-                                        <th>TIME</th>
-                                        <th>ACTION</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {completedEntries.map((entry) => (
-                                        <tr key={entry.id}>
-                                            <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
-                                            <td>{(entry.product_name || '').toUpperCase()}</td>
-                                            <td>{entry.quantity || entry.wo_qty}</td>
-                                            <td>{entry.panel_qty || 'N/A'}</td>
-                                            <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                                {new Date(entry.timestamp).toLocaleTimeString()}
-                                            </td>
-                                            <td style={{ display: 'flex', gap: '5px' }}>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                    onClick={() => setSelectedWoId(entry.work_order_id)}
-                                                >
-                                                    View
-                                                </button>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                    onClick={async () => {
-                                                        if (!isSuperAdmin) {
-                                                            addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                            return;
-                                                        }
-                                                        if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                            const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                            if (res.ok) {
-                                                                setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                                                                addToast("Entry deleted successfully.", "success");
-                                                            }
-                                                        }
-                                                    }}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {completedEntries.length === 0 && (
+                        <div className={styles.card}>
+                            <h3>Completed SPI Sessions</h3>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
                                         <tr>
-                                            <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                No completed sessions found.
-                                            </td>
+                                            <th>WO NUMBER</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>WO QTY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>PRINTING PASSED</th>
+                                            <th>PASSED</th>
+                                            <th>PENDING</th>
+                                            <th>TIME</th>
+                                            <th>ACTION</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {completedEntries.map((entry) => {
+                                            const passedVal = getPassedCount(entry.work_order_id);
+                                            const printingPassedVal = getPrintingPassedCount(entry.work_order_id);
+                                            const totalVal = entry.quantity || entry.wo_qty || 0;
+                                            const pendingVal = Math.max(0, totalVal - passedVal);
+                                            return (
+                                                <tr key={entry.id}>
+                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                                    <td>{(entry.product_name || '').toUpperCase()}</td>
+                                                    <td>{totalVal}</td>
+                                                    <td>{entry.panel_qty || 'N/A'}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#3b82f6' }}>{printingPassedVal}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#10b981' }}>{passedVal}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#f59e0b' }}>{pendingVal}</td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                                                        {new Date(entry.timestamp).toLocaleTimeString()}
+                                                    </td>
+                                                    <td style={{ display: 'flex', gap: '5px' }}>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                                            onClick={() => setSelectedWoId(entry.work_order_id)}
+                                                        >
+                                                            View
+                                                        </button>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                            onClick={async () => {
+                                                                if (!isSuperAdmin) {
+                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                                    return;
+                                                                }
+                                                                if (window.confirm("Are you sure you want to delete this entry?")) {
+                                                                    const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                    if (res.ok) {
+                                                                        setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                                                                        addToast("Entry deleted successfully.", "success");
+                                                                    }
+                                                                }
+                                                            }}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {completedEntries.length === 0 && (
+                                            <tr>
+                                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                    No completed sessions found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
-                </>
-            )}
-        </div>
+                    </>
+                )}
+            </div>
         </>
     );
 };

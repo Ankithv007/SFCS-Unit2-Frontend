@@ -36,9 +36,9 @@ interface ScanRecord {
     scanned_at: string;
     status: string;
     remarks?: string;
-    repair_time?: string;
     repair_remark?: string;
     failed_at?: string;
+    failure_remark?: string;
     failed_remarks?: string;
 }
 
@@ -56,7 +56,6 @@ const Debug: React.FC = () => {
     const [scannedItems, setScannedItems] = useState<ScanRecord[]>([]);
     const [tableSearch, setTableSearch] = useState('');
     const [isScanning, setIsScanning] = useState(false);
-    const [scanTotalRecords, setScanTotalRecords] = useState(0);
 
     const [barcode, setBarcode] = useState('');
     const scanInputRef = useRef<HTMLInputElement>(null);
@@ -105,7 +104,6 @@ const Debug: React.FC = () => {
                 : `/api/backend/debug/scan/${batchId}?page=${page}&limit=50`;
             const data = await apiFetch(url);
             setScannedItems(data.data || []);
-            setScanTotalRecords(data.total || 0);
         } catch (error) {
             console.error('Error fetching scans:', error);
             setScannedItems([]);
@@ -130,9 +128,35 @@ const Debug: React.FC = () => {
 
     const handleScan = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!barcode.trim() || isScanning || !activeBatch) return;
-        setPendingBarcode(barcode.trim().toUpperCase());
-        setBarcode('');
+        const scannedVal = barcode.trim().toUpperCase();
+        if (!scannedVal || isScanning || !activeBatch) return;
+
+        setIsScanning(true);
+        try {
+            const preValRes = await apiFetch('/api/backend/track/validate', {
+                method: 'POST',
+                body: JSON.stringify({
+                    stage_code: 'DEBUG',
+                    barcode: scannedVal,
+                    batch_number: activeBatch.batch_number,
+                    work_order_id: (activeBatch as any).work_order_id || null,
+                    failed_stage_id: (activeBatch as any).failedStageId || null
+                })
+            });
+
+            if (preValRes && preValRes.success) {
+                const resolvedVal = preValRes.data?.barcode || scannedVal;
+                setPendingBarcode(resolvedVal);
+                setBarcode('');
+            }
+        } catch (error: any) {
+            showToast(formatScanError(error), 'error');
+            setTimeout(() => {
+                scanInputRef.current?.focus();
+            }, 100);
+        } finally {
+            setIsScanning(false);
+        }
     };
 
     const handleScanFinalize = async (_status: string, remarks?: string) => {
@@ -351,7 +375,7 @@ const Debug: React.FC = () => {
 
                         <div className={styles.tableCard}>
                             <div className={styles.tableHeader}>
-                                <h3>Recently Debugged ({scanTotalRecords})</h3>
+                                <h3>Recently Debugged ({scannedItems.length})</h3>
                                 <div className={styles.tableSearchWrapper}>
                                     <Search size={16} className={styles.tableSearchIcon} />
                                     <input
@@ -386,12 +410,12 @@ const Debug: React.FC = () => {
                                                 <td>{new Date(scan.scanned_at).toLocaleString()}</td>
                                                 <td><span className={styles.acceptedBadge}>PASSED</span></td>
                                                 <td>{scan.failed_at ? new Date(scan.failed_at).toLocaleString() : '-'}</td>
-                                                <td style={{ color: '#ef4444' }}>{scan.failed_remarks || '-'}</td>
-                                                <td style={{ fontWeight: 600 }}>{scan.remarks || '-'}</td>
+                                                <td style={{ color: '#ef4444' }}>{scan.failure_remark || '-'}</td>
+                                                <td style={{ fontWeight: 600 }}>{scan.repair_remark || scan.remarks || '-'}</td>
                                             </tr>
                                         ))}
                                         {scannedItems.length === 0 && (
-                                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '3rem' }}>No debug sessions recorded yet.</td></tr>
+                                            <tr><td colSpan={8} style={{ textAlign: 'center', padding: '3rem' }}>No debug sessions recorded yet.</td></tr>
                                         )}
                                     </tbody>
                                 </table>

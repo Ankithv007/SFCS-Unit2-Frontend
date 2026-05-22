@@ -11,51 +11,53 @@ export const formatScanError = (error: any): string => {
         requiredStage,
         workOrder,
         batch,
-        actualBatch,
-        actualStage,
-        suggestedAction
+        actualStage
     } = error;
 
     switch (errorCode) {
         case 'WRONG_BATCH':
-            return `This barcode belongs to Batch: ${batch || 'UNKNOWN'}
-and cannot be scanned in Batch: ${actualBatch || 'UNKNOWN'}.
+            return `This barcode belongs to a different Work Order / Batch.
+${batch || workOrder ? `(Assigned: Batch ${batch || '-'} / WO ${workOrder || '-'})` : ''}
 
-Barcode belongs to Work Order: ${workOrder || 'UNKNOWN'}
-Current Stage: ${currentStage || 'UNKNOWN'}`;
+Please scan it in the correct production batch.`;
 
         case 'INVALID_STAGE':
-            return `Previous required stage is missing.
+        case 'INVALID_TRANSITION':
+            return `This unit cannot be scanned in ${currentStage || 'this stage'} yet.
 
-Barcode must complete:
-${requiredStage || 'UNKNOWN'} stage
+Required previous stage:
+${requiredStage || 'the correct preceding stage'}
 
-before scanning in:
-${currentStage || 'UNKNOWN'}.`;
+Please complete ${requiredStage || 'preceding'} process first before continuing.`;
 
         case 'ALREADY_COMPLETED':
-            return `Barcode already completed this stage.`;
+            return `This barcode has already completed this stage.
+Duplicate scanning is not allowed.`;
 
         case 'UNDER_REWORK':
-            return `Barcode currently under Rework process.
+            return `This unit is currently under Rework process.
 
-Complete Rework and ${suggestedAction ? suggestedAction : 'QA validation before proceeding.'}`;
+Complete repair and revalidation before continuing production flow.`;
 
         case 'UNDER_DEBUG':
-            return `Barcode currently under Debug process.
+            return `This unit is currently under Debug process.
 
-${suggestedAction ? suggestedAction : ''}`;
+Complete repair and revalidation before continuing production flow.`;
 
-        case 'INVALID_TRANSITION':
-            return `Previous required stage is missing.
-            
-Barcode must complete:
-${requiredStage || 'UNKNOWN'} stage
+        case 'WRONG_QUEUE':
+            return `This barcode belongs to the ${actualStage || 'correct'} repair queue.
 
-before scanning in:
-${currentStage || 'UNKNOWN'}.
+Please repair it in the correct source-stage queue.`;
 
-Current Status: ${actualStage || 'UNKNOWN'}`;
+        case 'USN_REQUIRED':
+            return `Barcode has not been linked to a Unit Serial Number (USN).
+
+Please scan and complete the PCBA-FCT process with USN linking first.`;
+
+        case 'DUPLICATE_USN':
+            return `This Unit Serial Number is already linked to another barcode.
+
+Duplicate scanning or reuse is not allowed.`;
 
         default:
             return message || 'An unknown validation error occurred.';

@@ -160,10 +160,35 @@ const PTH: React.FC = () => {
 
     const handleScan = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!barcode.trim() || isScanning || !activeBatch) return;
+        const scannedVal = barcode.trim().toUpperCase();
+        if (!scannedVal || isScanning || !activeBatch) return;
 
-        setPendingBarcode(barcode.trim().toUpperCase());
-        setBarcode('');
+        setIsScanning(true);
+        try {
+            const preValRes = await apiFetch('/api/backend/track/validate', {
+                method: 'POST',
+                body: JSON.stringify({
+                    stage_code: 'PTH',
+                    barcode: scannedVal,
+                    batch_number: activeBatch.batch_number,
+                    work_order_id: (activeBatch as any).work_order_id || null,
+                    failed_stage_id: (activeBatch as any).failedStageId || null
+                })
+            });
+
+            if (preValRes && preValRes.success) {
+                const resolvedVal = preValRes.data?.barcode || scannedVal;
+                setPendingBarcode(resolvedVal);
+                setBarcode('');
+            }
+        } catch (error: any) {
+            showToast(formatScanError(error), 'error');
+            setTimeout(() => {
+                scanInputRef.current?.focus();
+            }, 100);
+        } finally {
+            setIsScanning(false);
+        }
     };
 
     const handleScanFinalize = async (status: string, remarks?: string) => {

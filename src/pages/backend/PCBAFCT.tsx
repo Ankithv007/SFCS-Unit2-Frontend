@@ -350,9 +350,35 @@ const PCBAFCT: React.FC = () => {
 
     const handleScan = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!barcode.trim() || isScanning || !activeBatch) return;
-        setPendingBarcode(barcode.trim().toUpperCase());
-        setBarcode('');
+        const scannedVal = barcode.trim().toUpperCase();
+        if (!scannedVal || isScanning || !activeBatch) return;
+
+        setIsScanning(true);
+        try {
+            const preValRes = await apiFetch('/api/backend/track/validate', {
+                method: 'POST',
+                body: JSON.stringify({
+                    stage_code: 'PCBA_FCT',
+                    barcode: scannedVal,
+                    batch_number: activeBatch.batch_number,
+                    work_order_id: (activeBatch as any).work_order_id || null,
+                    failed_stage_id: (activeBatch as any).failedStageId || null
+                })
+            });
+
+            if (preValRes && preValRes.success) {
+                const resolvedVal = preValRes.data?.barcode || scannedVal;
+                setPendingBarcode(resolvedVal);
+                setBarcode('');
+            }
+        } catch (error: any) {
+            showToast(formatScanError(error), 'error');
+            setTimeout(() => {
+                scanInputRef.current?.focus();
+            }, 100);
+        } finally {
+            setIsScanning(false);
+        }
     };
 
     const handleScanFinalize = async (status: string, remarks?: string) => {
@@ -406,10 +432,21 @@ const PCBAFCT: React.FC = () => {
         }
     };
 
-    const handleUsnLinked = (usn: string) => {
+    const handleUsnLinked = async (usn: string) => {
         showToast(`✅ Unit Serial Number ${usn} linked. Board ready for Assembly.`, 'success');
         setPendingUsnBarcode(null);
-        if (activeBatch) fetchScans(activeBatch.id, 1);
+        if (activeBatch) {
+            fetchScans(activeBatch.id, 1);
+            try {
+                const res = await apiFetch(`/api/backend/pcba-fct/batch?search=${activeBatch.batch_number}`);
+                const updated = res.data?.find((b: Batch) => b.id === activeBatch.id);
+                if (updated) {
+                    setActiveBatch(updated);
+                }
+            } catch (err) {
+                console.error("Failed to refresh active batch counters", err);
+            }
+        }
         fetchBatches();
     };
 

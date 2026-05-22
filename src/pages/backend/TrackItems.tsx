@@ -37,6 +37,7 @@ interface TrackResult {
     quantity: number;
     current_stage: string;
     current_status: string;
+    failed_stage: string | null;
     final_status_label: string;
     last_updated_at: string;
     failure_created_at: string | null;
@@ -50,7 +51,17 @@ interface TrackResult {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const PRODUCTION_PIPELINE = ['PTH', 'VI', 'QA', 'Flashing', 'PCBA-FCT', 'Assembly', 'Unit Testing', 'QI', 'Packing'];
+const PRODUCTION_PIPELINE = [
+    { code: 'PTH', name: 'Pre-Soldering', label: 'PTH' },
+    { code: 'VI', name: 'Visual Inspection', label: 'VI' },
+    { code: 'QA', name: 'Quality Assurance', label: 'QA' },
+    { code: 'FLASHING', name: 'Flashing', label: 'Flashing' },
+    { code: 'PCBA_FCT', name: 'PCBA FCT', label: 'PCBA-FCT' },
+    { code: 'ASSEMBLY', name: 'Assembly', label: 'Assembly' },
+    { code: 'UNIT_TESTING', name: 'Unit Testing', label: 'Unit Testing' },
+    { code: 'QI', name: 'Quality Inspection', label: 'QI' },
+    { code: 'PACKING', name: 'Packing', label: 'Packing' }
+];
 
 const fmt = (ts: string | null | undefined) =>
     ts ? new Date(ts).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }) : '—';
@@ -61,6 +72,7 @@ const statusColor = (s: string): string => {
         case 'REWORK': return '#f59e0b';
         case 'DEBUG': return '#ef4444';
         case 'READY_FOR_RESCAN': return '#6366f1';
+        case 'IN_PROGRESS': return '#3b82f6';
         default: return '#94a3b8';
     }
 };
@@ -71,6 +83,7 @@ const statusBg = (s: string): string => {
         case 'REWORK': return 'rgba(245,158,11,0.12)';
         case 'DEBUG': return 'rgba(239,68,68,0.12)';
         case 'READY_FOR_RESCAN': return 'rgba(99,102,241,0.12)';
+        case 'IN_PROGRESS': return 'rgba(59,130,246,0.12)';
         default: return 'rgba(148,163,184,0.12)';
     }
 };
@@ -174,17 +187,87 @@ const TrackItems: React.FC = () => {
         }
     };
 
-    // Compute which pipeline stages were visited
-    const visitedStages = new Set(data?.scan_history.map(h => h.station) ?? []);
+    const getStageStatus = (stage: { code: string; name: string; label: string }): string => {
+        if (!data) return 'pending';
 
-    const getStageStatus = (stageName: string): string => {
-        const entries = data?.scan_history.filter(h => h.station === stageName) ?? [];
-        if (!entries.length) return 'pending';
-        const last = entries[entries.length - 1];
-        return last.status;
+        // 1. Get all scan history entries for this stage
+        const entries = data.scan_history.filter(h => 
+            h.station === stage.name || 
+            h.station === stage.code || 
+            h.station === stage.label
+        );
+
+        const currentStageName = data.current_stage;
+        const currentStatus = data.current_status?.toUpperCase();
+        const isCurrent = currentStageName === stage.name || currentStageName === stage.code || currentStageName === stage.label;
+
+        // 2. Check if the stage has successfully completed in the scan history
+        const hasPassed = entries.some(e => e.status === 'ACCEPTED' || e.status === 'PASS');
+
+        // 3. If the unit is currently in REWORK / DEBUG / FAILED
+        if (currentStatus === 'REWORK' || currentStatus === 'DEBUG' || currentStatus === 'FAILED') {
+            const failedStageName = data.failed_stage;
+            const isFailedStage = failedStageName === stage.name || failedStageName === stage.code || failedStageName === stage.label;
+
+            if (isFailedStage) {
+                return currentStatus; // REWORK, DEBUG, or FAILED
+            }
+            if (hasPassed) {
+                return 'ACCEPTED';
+            }
+            const stageIndex = PRODUCTION_PIPELINE.findIndex(s => s.code === stage.code);
+            const failedStageIndex = PRODUCTION_PIPELINE.findIndex(s => s.code === failedStageName || s.name === failedStageName || s.label === failedStageName);
+            if (stageIndex !== -1 && failedStageIndex !== -1 && stageIndex < failedStageIndex) {
+                return 'ACCEPTED';
+            }
+            return 'pending';
+        }
+
+        // 4. If unit is currently in Rework or Debug queues (as current_stage)
+        if (currentStageName === 'Rework' || currentStageName === 'Debug') {
+            const failedStageName = data.failed_stage;
+            const isFailedStage = failedStageName === stage.name || failedStageName === stage.code || failedStageName === stage.label;
+
+            if (isFailedStage) {
+                return currentStageName === 'Rework' ? 'REWORK' : 'DEBUG';
+            }
+            if (hasPassed) {
+                return 'ACCEPTED';
+            }
+            const stageIndex = PRODUCTION_PIPELINE.findIndex(s => s.code === stage.code);
+            const failedStageIndex = PRODUCTION_PIPELINE.findIndex(s => s.code === failedStageName || s.name === failedStageName || s.label === failedStageName);
+            if (stageIndex !== -1 && failedStageIndex !== -1 && stageIndex < failedStageIndex) {
+                return 'ACCEPTED';
+            }
+            return 'pending';
+        }
+
+        // 5. Normal workflow
+        if (hasPassed) {
+            if (isCurrent && currentStatus === 'PENDING') {
+                return 'IN_PROGRESS';
+            }
+            return 'ACCEPTED';
+        }
+
+        if (isCurrent) {
+            if (currentStatus === 'ACCEPTED') {
+                return 'ACCEPTED';
+            }
+            return 'IN_PROGRESS';
+        }
+
+        const currentOrder = PRODUCTION_PIPELINE.findIndex(s => s.code === currentStageName || s.name === currentStageName || s.label === currentStageName);
+        const stageIndex = PRODUCTION_PIPELINE.findIndex(s => s.code === stage.code);
+
+        if (currentOrder !== -1 && stageIndex !== -1) {
+            if (stageIndex < currentOrder) {
+                return 'ACCEPTED';
+            }
+        }
+
+        return 'pending';
     };
-
-    const isCurrentStage = (stageName: string) => data?.current_stage === stageName;
 
     return (
         <div className={styles.page}>
@@ -351,59 +434,84 @@ const TrackItems: React.FC = () => {
                                 </div>
                                 <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
 
-                                {PRODUCTION_PIPELINE.map((stage, idx) => {
-                                    const visited = visitedStages.has(stage);
-                                    const stStatus = visited ? getStageStatus(stage) : 'pending';
-                                    const isCurrent = isCurrentStage(stage);
-                                    const color = visited ? statusColor(stStatus) : '#cbd5e1';
-                                    const entries = data.scan_history.filter(h => h.station === stage);
-                                    const isLast = idx === PRODUCTION_PIPELINE.length - 1;
+                                 {PRODUCTION_PIPELINE.map((stage, idx) => {
+                                     const stStatus = getStageStatus(stage);
+                                     const isCurrent = stStatus === 'IN_PROGRESS';
+                                     const visited = stStatus !== 'pending';
+                                     const color = statusColor(stStatus);
+                                     const entries = data.scan_history.filter(h => 
+                                         h.station === stage.name || 
+                                         h.station === stage.code || 
+                                         h.station === stage.label
+                                     );
+                                     const isLast = idx === PRODUCTION_PIPELINE.length - 1;
 
-                                    return (
-                                        <React.Fragment key={stage}>
-                                            <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
-                                                <div className={styles.pipelineNodeDot} style={{
-                                                    background: color,
-                                                    boxShadow: isCurrent ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` : `0 0 0 4px ${color}22`,
-                                                }}>
-                                                    <StationIcon station={stage} />
-                                                </div>
-                                                <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
-                                                    {stage}
-                                                    {isCurrent && <span className={styles.liveTag}>LIVE</span>}
-                                                </div>
-                                                {visited ? <StatusBadge status={stStatus} small /> : <span className={styles.pendingTag}>Pending</span>}
-                                                {entries.length > 1 && (
-                                                    <span className={styles.rescannedTag}>×{entries.length} scans</span>
-                                                )}
-                                            </div>
+                                     return (
+                                         <React.Fragment key={stage.code}>
+                                             <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
+                                                 <div className={styles.pipelineNodeDot} style={{
+                                                     background: color,
+                                                     boxShadow: isCurrent ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` : `0 0 0 4px ${color}22`,
+                                                 }}>
+                                                     <StationIcon station={stage.code} />
+                                                 </div>
+                                                 <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
+                                                     {stage.label}
+                                                     {isCurrent && <span className={styles.liveTag}>LIVE</span>}
+                                                 </div>
+                                                 {visited ? <StatusBadge status={stStatus} small /> : <span className={styles.pendingTag}>Pending</span>}
+                                                 {entries.length > 1 && (
+                                                     <span className={styles.rescannedTag}>×{entries.length} scans</span>
+                                                 )}
+                                             </div>
 
-                                            {/* Repair branch nodes */}
-                                            {entries.some(e => e.status === 'REWORK') && (
-                                                <div className={styles.repairBranch}>
-                                                    <div className={styles.branchLine} />
-                                                    <div className={styles.branchNode} style={{ background: 'rgba(245,158,11,0.08)', borderColor: '#f59e0b44' }}>
-                                                        <RotateCcw size={12} style={{ color: '#f59e0b' }} />
-                                                        <span style={{ color: '#f59e0b', fontWeight: 700 }}>REWORK</span>
-                                                        <span style={{ color: '#64748b', fontSize: '0.7rem' }}>repair queue</span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {entries.some(e => e.status === 'DEBUG') && (
-                                                <div className={styles.repairBranch}>
-                                                    <div className={styles.branchLine} />
-                                                    <div className={styles.branchNode} style={{ background: 'rgba(239,68,68,0.08)', borderColor: '#ef444444' }}>
-                                                        <Wrench size={12} style={{ color: '#ef4444' }} />
-                                                        <span style={{ color: '#ef4444', fontWeight: 700 }}>DEBUG</span>
-                                                        <span style={{ color: '#64748b', fontSize: '0.7rem' }}>repair queue</span>
-                                                    </div>
-                                                </div>
-                                            )}
+                                             {/* Repair branch nodes */}
+                                             {entries.some(e => e.status === 'REWORK') && (() => {
+                                                 const isActive = data.current_stage === 'Rework';
+                                                 return (
+                                                     <div className={styles.repairBranch}>
+                                                         <div className={styles.branchLine} />
+                                                         <div className={styles.branchNode} style={{ 
+                                                             background: isActive ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.08)', 
+                                                             borderColor: isActive ? '#f59e0b' : '#10b98144' 
+                                                         }}>
+                                                             <RotateCcw size={12} style={{ color: isActive ? '#f59e0b' : '#10b981' }} />
+                                                             <span style={{ color: isActive ? '#f59e0b' : '#10b981', fontWeight: 700 }}>
+                                                                 {isActive ? 'REWORK (ACTIVE)' : 'REWORK (PASSED)'}
+                                                             </span>
+                                                             <span style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                                                 {isActive ? 'in repair queue' : 'repaired'}
+                                                             </span>
+                                                         </div>
+                                                     </div>
+                                                 );
+                                             })()}
 
-                                            {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
-                                        </React.Fragment>
-                                    );
-                                })}
+                                             {entries.some(e => e.status === 'DEBUG') && (() => {
+                                                 const isActive = data.current_stage === 'Debug';
+                                                 return (
+                                                     <div className={styles.repairBranch}>
+                                                         <div className={styles.branchLine} />
+                                                         <div className={styles.branchNode} style={{ 
+                                                             background: isActive ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.08)', 
+                                                             borderColor: isActive ? '#ef4444' : '#10b98144' 
+                                                         }}>
+                                                             <Wrench size={12} style={{ color: isActive ? '#ef4444' : '#10b981' }} />
+                                                             <span style={{ color: isActive ? '#ef4444' : '#10b981', fontWeight: 700 }}>
+                                                                 {isActive ? 'DEBUG (ACTIVE)' : 'DEBUG (PASSED)'}
+                                                             </span>
+                                                             <span style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                                                 {isActive ? 'in debug queue' : 'repaired'}
+                                                             </span>
+                                                         </div>
+                                                     </div>
+                                                 );
+                                             })()}
+
+                                             {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                         </React.Fragment>
+                                     );
+                                 })}
                             </div>
 
                             {/* Lifecycle Timestamps */}

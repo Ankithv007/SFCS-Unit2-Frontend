@@ -717,6 +717,7 @@ export const Warehouse: React.FC = () => {
                                     <th>Time</th>
                                     <th>Previous Batch</th>
                                     <th>Status</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -734,7 +735,31 @@ export const Warehouse: React.FC = () => {
                                                 <span style={{ color: '#9ca3af' }}>-</span>
                                             )}
                                         </td>
-                                        <td className={styles.statusGreen}>ACCEPTED</td>
+                                        <td className={styles.statusGreen}>
+                                            ACCEPTED
+                                        </td>
+                                        <td>
+                                            {['admin', 'super admin'].includes(user?.role?.toLowerCase() || '') && (
+                                                <button
+                                                    className={styles.deleteTextButton}
+                                                    onClick={async () => {
+                                                        if (window.confirm('Are you sure you want to delete this scan?')) {
+                                                            try {
+                                                                await apiFetch(`/api/pretest/warehouse/scan/${scan.id}`, { method: 'DELETE' });
+                                                                setScannedItems(prev => prev.filter(s => s.id !== scan.id));
+                                                                showToast('Scan deleted successfully', 'success');
+                                                                fetchBatches();
+                                                            } catch (err: any) {
+                                                                showToast(err.message || 'Failed to delete scan', 'error');
+                                                            }
+                                                        }
+                                                    }}
+                                                    title="Delete Scan"
+                                                >
+                                                    Delete
+                                                </button>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

@@ -428,6 +428,18 @@ export const Printing: React.FC = () => {
             alert('Please select a Work Order.');
             return;
         }
+        if (!stencilName.trim()) {
+            alert('Please enter a Stencil Name.');
+            return;
+        }
+        if (!squeezeNumber.trim()) {
+            alert('Please enter a Squeegee Number.');
+            return;
+        }
+        if (!solderPaste.trim()) {
+            alert('Please enter Solder Paste details.');
+            return;
+        }
 
         try {
             const res = await fetch('/api/smt/process-setups', {
@@ -438,9 +450,9 @@ export const Printing: React.FC = () => {
                     process_name: 'PRINTING',
                     product_name: productName || 'N/A',
                     quantity: parseInt(woQty) || 0,
-                    stencil_name: stencilName || 'DEFAULT',
-                    squeegee_number: squeezeNumber || 'DEFAULT',
-                    solder_paste: solderPaste || 'DEFAULT',
+                    stencil_name: stencilName.trim(),
+                    squeegee_number: squeezeNumber.trim(),
+                    solder_paste: solderPaste.trim(),
                     side: side || 'TOP'
                 })
             });
@@ -588,7 +600,7 @@ export const Printing: React.FC = () => {
                                         type="text"
                                         className={styles.input}
                                         value={stencilName}
-                                        onChange={(e) => setStencilName(e.target.value)}
+                                        onChange={(e) => setStencilName(e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
                                         placeholder="Enter Stencil Name"
                                     />
                                 </div>
@@ -599,7 +611,7 @@ export const Printing: React.FC = () => {
                                         type="text"
                                         className={styles.input}
                                         value={squeezeNumber}
-                                        onChange={(e) => setSqueezeNumber(e.target.value)}
+                                        onChange={(e) => setSqueezeNumber(e.target.value.replace(/[^0-9]/g, ''))}
                                         placeholder="Enter Squeegee Number"
                                     />
                                 </div>
@@ -683,11 +695,9 @@ export const Printing: React.FC = () => {
                                                                 return;
                                                             }
                                                             if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                                const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                if (res.ok) {
-                                                                    setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                                                                    addToast("Entry deleted successfully.", "success");
-                                                                }
+                                                                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                addToast("Entry deleted successfully.", "success");
                                                             }
                                                         }}
                                                     >
@@ -757,11 +767,9 @@ export const Printing: React.FC = () => {
                                                                 return;
                                                             }
                                                             if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                                const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                if (res.ok) {
-                                                                    setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                                                                    addToast("Entry deleted successfully.", "success");
-                                                                }
+                                                                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                addToast("Entry deleted successfully.", "success");
                                                             }
                                                         }}
                                                     >

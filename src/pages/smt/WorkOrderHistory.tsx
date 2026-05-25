@@ -74,13 +74,14 @@ export const WorkOrderHistory: React.FC = () => {
         fetchHistory();
     };
 
-    const getStatusStyle = (status: string) => {
-        switch (status) {
-            case 'ACTIVE': return styles.statusActive;
-            case 'INACTIVE': return styles.statusInactive;
-            case 'COMPLETED': return styles.statusCompleted;
-            default: return '';
-        }
+    const getDisplayStatus = (status: string, totalQty: number, scannedQty: number) => {
+        if (status === 'COMPLETED' || (scannedQty >= totalQty && totalQty > 0)) return 'COMPLETED';
+        return 'PENDING';
+    };
+
+    const getStatusStyle = (displayStatus: string) => {
+        if (displayStatus === 'COMPLETED') return styles.statusCompleted;
+        return styles.statusActive;
     };
 
     return (
@@ -156,7 +157,7 @@ export const WorkOrderHistory: React.FC = () => {
                                 <th>Line ID</th>
                                 <th>Product Name</th>
                                 <th>Total Qty</th>
-                                <th>Completed Qty</th>
+                                <th>Scanned Qty</th>
                                 <th>Balance Qty</th>
                                 <th>Created By</th>
                                 <th>Run Date & Time</th>
@@ -168,29 +169,32 @@ export const WorkOrderHistory: React.FC = () => {
                                     <td colSpan={10} className={styles.loading}>Loading history data...</td>
                                 </tr>
                             ) : historyData.length > 0 ? (
-                                historyData.map((row, index) => (
-                                    <tr key={index}>
-                                        <td>
-                                            <span className={`${styles.statusBadge} ${getStatusStyle(row.status)}`}>
-                                                {row.status}
-                                            </span>
-                                        </td>
-                                        <td style={{ fontWeight: 600 }}>{row.work_order_id}</td>
-                                        <td>{row.area_id}</td>
-                                        <td>{row.line_id}</td>
-                                        <td>{row.product_name}</td>
-                                        <td style={{ fontWeight: 600 }}>{row.total_qty}</td>
-                                        <td style={{ color: '#10b981', fontWeight: 600 }}>{row.completed_qty}</td>
-                                        <td style={{ color: '#ef4444', fontWeight: 600 }}>{row.balance_qty}</td>
-                                        <td>{row.created_by || 'System'}</td>
-                                        <td>
-                                            {new Date(row.run_date_time).toLocaleDateString()} <br />
-                                            <small style={{ color: '#6b7280' }}>
-                                                {new Date(row.run_date_time).toLocaleTimeString()}
-                                            </small>
-                                        </td>
-                                    </tr>
-                                ))
+                                historyData.map((row, index) => {
+                                    const dispStatus = getDisplayStatus(row.status, row.total_qty, row.completed_qty);
+                                    return (
+                                        <tr key={index}>
+                                            <td>
+                                                <span className={`${styles.statusBadge} ${getStatusStyle(dispStatus)}`}>
+                                                    {dispStatus}
+                                                </span>
+                                            </td>
+                                            <td style={{ fontWeight: 600 }}>{row.work_order_id}</td>
+                                            <td>{row.area_id}</td>
+                                            <td>{row.line_id}</td>
+                                            <td>{row.product_name}</td>
+                                            <td style={{ fontWeight: 600 }}>{row.total_qty}</td>
+                                            <td style={{ color: '#10b981', fontWeight: 600 }}>{row.completed_qty}</td>
+                                            <td style={{ color: '#ef4444', fontWeight: 600 }}>{row.balance_qty}</td>
+                                            <td>{row.created_by || 'System'}</td>
+                                            <td>
+                                                {new Date(row.run_date_time).toLocaleDateString()} <br />
+                                                <small style={{ color: '#6b7280' }}>
+                                                    {new Date(row.run_date_time).toLocaleTimeString()}
+                                                </small>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             ) : (
                                 <tr>
                                     <td colSpan={10} className={styles.noData}>No work order history found for the selected filters.</td>

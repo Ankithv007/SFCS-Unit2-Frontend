@@ -1018,7 +1018,29 @@ export const Impedance: React.FC = () => {
                                                         </td>
                                                     ))}
                                                     <td style={{ fontWeight: 600, color: item.status === 'ACCEPTED' ? '#10b981' : '#ef4444' }}>
-                                                        {item.status === 'ACCEPTED' ? 'PASS' : 'FAIL'}
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <span>{item.status === 'ACCEPTED' ? 'PASS' : 'FAIL'}</span>
+                                                            {['admin', 'super admin'].includes(user?.role?.toLowerCase() || '') && (
+                                                                <button
+                                                                    className={styles.deleteTextButton}
+                                                                    onClick={async () => {
+                                                                        if (window.confirm('Are you sure you want to delete this scan?')) {
+                                                                            try {
+                                                                                await apiFetch(`/api/pretest/impedance/scan/${item.id}`, { method: 'DELETE' });
+                                                                                setScannedItems(prev => prev.filter(s => s.id !== item.id));
+                                                                                showToast('Scan deleted successfully', 'success');
+                                                                                fetchBatches();
+                                                                            } catch (err: any) {
+                                                                                showToast(err.message || 'Failed to delete scan', 'error');
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    title="Delete Scan"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td>{new Date(item.scanned_at || Date.now()).toLocaleTimeString()}</td>
                                                 </tr>

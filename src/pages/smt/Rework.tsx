@@ -710,11 +710,9 @@ const Rework: React.FC = () => {
                                                         return;
                                                     }
                                                     if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                        const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                        if (res.ok) {
-                                                            setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                        await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
                                                             addToast("Entry deleted successfully.", "success");
-                                                        }
                                                     }
                                                 }}
                                             >
@@ -769,11 +767,9 @@ const Rework: React.FC = () => {
                                                         return;
                                                     }
                                                     if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                        const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                        if (res.ok) {
-                                                            setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                        await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
                                                             addToast("Entry deleted successfully.", "success");
-                                                        }
                                                     }
                                                 }}
                                             >

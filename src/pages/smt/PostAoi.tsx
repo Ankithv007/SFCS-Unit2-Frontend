@@ -86,11 +86,11 @@ interface PostAoiDetailProps {
 const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorName }) => {
     const [tableSerials, setTableSerials] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [totalSerials, setTotalSerials] = useState(0);
     const [scanBarcode, setScanBarcode] = useState('');
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
     const scanInputRef = useRef<HTMLInputElement>(null);
+    const isProcessingScan = useRef(false);
     const [allWoSerials, setAllWoSerials] = useState<any[]>([]);
 
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
@@ -111,7 +111,6 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
             const totalRes = await fetch(totalUrl.toString());
             if (totalRes.ok) {
                 const totalData = await totalRes.json();
-                setTotalSerials(totalData.length);
                 setAllWoSerials(totalData);
             }
 
@@ -216,84 +215,86 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
         }
     };
 
-    const handlePassFromTable = async (serialId: number) => {
-        const match = allWoSerials.find((s: any) => s.id === serialId);
-        const remark = match?.rework_reason || 'Repaired in Rework';
-        await handlePass(serialId, remark);
-    };
+
 
     const processScan = async (barcodeInput: string) => {
+        if (isProcessingScan.current) return;
         const cleanInput = (barcodeInput || '').trim().replace(/-/g, '').toUpperCase();
         if (!cleanInput) return;
 
-        const match = allWoSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-            )
-        );
+        isProcessingScan.current = true;
+        try {
+            const match = allWoSerials.find((s: any) =>
+                [s.serial_number, s.barcode].some(v =>
+                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+                )
+            );
 
-        if (!match) {
-            addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
-            alert(`Barcode "${barcodeInput}" not found in this Work Order.`);
-            setScanBarcode('');
-            scanInputRef.current?.focus();
-            return;
-        }
-
-        // Validate Pre AOI status
-        if (match.step_status === 'FAIL') {
-            addToast(`Previous stage failed: Barcode failed in Pre AOI. Cannot continue to Post AOI.`, 'error');
-            alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Pre AOI stage. Cannot continue to Post AOI.`);
-            setScanBarcode('');
-            scanInputRef.current?.focus();
-            return;
-        }
-
-        if (!match.step_status || match.step_status !== 'PASS') {
-            addToast(`Previous stage not completed: Barcode has not passed Pre AOI stage.`, 'error');
-            alert(`Previous stage not completed: Barcode "${barcodeInput}" has not passed Pre AOI stage. Cannot continue to Post AOI.`);
-            setScanBarcode('');
-            scanInputRef.current?.focus();
-            return;
-        }
-
-        // Check if barcode failed in its last inspection step (if that step was Post AOI)
-        if (match.last_step === 'Post AOI' && match.last_status === 'FAIL') {
-            addToast(`Previous stage failed: Barcode failed in Post AOI and must be reworked first.`, 'error');
-            alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Post AOI and has not been reworked. Please repair in Rework module first.`);
-            setScanBarcode('');
-            scanInputRef.current?.focus();
-            return;
-        }
-
-        // Check if already in table and passed (and not reworked since last Post AOI PASS)
-        const alreadyInTable = tableSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-            )
-        );
-
-        if (alreadyInTable) {
-            if (alreadyInTable.last_status === 'PASS') {
-                addToast(`Barcode ${barcodeInput} has already passed Post AOI.`, 'info');
-                alert(`Barcode "${barcodeInput}" has already passed Post AOI.`);
+            if (!match) {
+                addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
+                alert(`Barcode "${barcodeInput}" not found in this Work Order.`);
                 setScanBarcode('');
                 scanInputRef.current?.focus();
                 return;
             }
-            // It failed previously, but since it passed validation, it means it has been reworked.
-            // Automatically pass it using the rework remarks from the Rework phase.
-            const remark = match?.rework_reason || 'Repaired in Rework';
-            await handlePass(alreadyInTable.id, remark);
+
+            // Validate Pre AOI status
+            if (match.step_status === 'FAIL') {
+                addToast(`Previous stage failed: Barcode failed in Pre AOI. Cannot continue to Post AOI.`, 'error');
+                alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Pre AOI stage. Cannot continue to Post AOI.`);
+                setScanBarcode('');
+                scanInputRef.current?.focus();
+                return;
+            }
+
+            if (!match.step_status || match.step_status !== 'PASS') {
+                addToast(`Previous stage not completed: Barcode has not passed Pre AOI stage.`, 'error');
+                alert(`Previous stage not completed: Barcode "${barcodeInput}" has not passed Pre AOI stage. Cannot continue to Post AOI.`);
+                setScanBarcode('');
+                scanInputRef.current?.focus();
+                return;
+            }
+
+            // Check if barcode failed in its last inspection step (if that step was Post AOI)
+            if (match.last_step === 'Post AOI' && match.last_status === 'FAIL') {
+                addToast(`Previous stage failed: Barcode failed in Post AOI and must be reworked first.`, 'error');
+                alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Post AOI and has not been reworked. Please repair in Rework module first.`);
+                setScanBarcode('');
+                scanInputRef.current?.focus();
+                return;
+            }
+
+            // Check if already in table and passed (and not reworked since last Post AOI PASS)
+            const alreadyInTable = tableSerials.find((s: any) =>
+                [s.serial_number, s.barcode].some(v =>
+                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
+                )
+            );
+
+            if (alreadyInTable) {
+                if (alreadyInTable.last_status === 'PASS') {
+                    addToast(`Barcode ${barcodeInput} has already passed Post AOI.`, 'info');
+                    alert(`Barcode "${barcodeInput}" has already passed Post AOI.`);
+                    setScanBarcode('');
+                    scanInputRef.current?.focus();
+                    return;
+                }
+                // It failed previously, but since it passed validation, it means it has been reworked.
+                // Automatically pass it using the rework remarks from the Rework phase.
+                const remark = match?.rework_reason || 'Repaired in Rework';
+                await handlePass(alreadyInTable.id, remark);
+                setScanBarcode('');
+                scanInputRef.current?.focus();
+                return;
+            }
+
+            // Auto-PASS on scan
+            await handlePass(match.id);
             setScanBarcode('');
             scanInputRef.current?.focus();
-            return;
+        } finally {
+            isProcessingScan.current = false;
         }
-
-        // Auto-PASS on scan
-        await handlePass(match.id);
-        setScanBarcode('');
-        scanInputRef.current?.focus();
     };
 
     // Auto-scan effect
@@ -346,10 +347,11 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🤖 Post AOI Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {totalSerials}</strong></span>
+                                <span style={{ color: '#8b5cf6' }}>Pre AOI Passed: <strong>{allWoSerials.filter(s => s.step_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {allWoSerials.filter(s => s.step_status === 'PASS').length}</strong></span>
                                 <span style={{ color: '#059669' }}>Passed: <strong>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                                 <span style={{ color: '#ef4444' }}>Failed: <strong>{tableSerials.filter(s => s.last_status === 'FAIL').length}</strong></span>
-                                <span style={{ color: '#d97706' }}>Pending: <strong>{totalSerials - tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#d97706' }}>Pending: <strong>{allWoSerials.filter(s => s.step_status === 'PASS').length - tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                             </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={onBack}>Back</button>
@@ -410,7 +412,6 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                                     const isFail = s.last_status === 'FAIL';
                                     const showBarcodeImage = s.barcode_source === 'GENERATED' || !s.barcode_source || (s.barcode_source === 'PRE_EXISTING' && s.serial_number);
                                     const isNew = Date.now() - new Date(s.scanned_at || 0).getTime() < 4000;
-                                    const hasPassed = sortedTableSerials.some(x => x.serial_number === s.serial_number && x.last_status === 'PASS');
 
                                     return (
                                         <tr
@@ -423,8 +424,11 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                                         >
                                             <td style={{ padding: '0.5rem', textAlign: 'center' }}>
                                                 {showBarcodeImage ? (
-                                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '0.25rem' }}>
                                                         <QRCode value={(s.serial_number || '').toUpperCase()} size={64} />
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                                                            {(s.serial_number || '').toUpperCase()}
+                                                        </span>
                                                     </div>
                                                 ) : (
                                                     <span style={{ color: '#9ca3af' }}>-</span>
@@ -454,15 +458,7 @@ const PostAoiDetail: React.FC<PostAoiDetailProps> = ({ woId, onBack, operatorNam
                                             </td>
                                             {/* REPAIR ACTION column */}
                                             <td style={{ padding: '1rem' }}>
-                                                {isFail && !hasPassed ? (
-                                                    <button
-                                                        onClick={() => handlePassFromTable(s.id)}
-                                                        className={styles.button}
-                                                        style={{ height: '34px', padding: '0 14px', fontSize: '0.8rem', backgroundColor: '#10b981', borderColor: '#10b981', fontWeight: 700 }}
-                                                    >
-                                                        🔧 REPAIR
-                                                    </button>
-                                                ) : isPass && s.rework_reason ? (
+                                                {isPass && s.rework_reason ? (
                                                     <span style={{
                                                         display: 'inline-block',
                                                         padding: '4px 10px',
@@ -792,15 +788,13 @@ const PostAoi: React.FC = () => {
                                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                             onClick={async () => {
                                                                 if (!isSuperAdmin) {
-                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                                    return;
+                addToast("Access Denied: Only Super Admin can delete.", "error");
+                return;
                                                                 }
                                                                 if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                                    const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                    if (res.ok) {
-                                                                        setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
-                                                                        addToast("Entry deleted successfully.", "success");
-                                                                    }
+                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                    addToast("Entry deleted successfully.", "success");
                                                                 }
                                                             }}
                                                         >
@@ -871,15 +865,13 @@ const PostAoi: React.FC = () => {
                                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                             onClick={async () => {
                                                                 if (!isSuperAdmin) {
-                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                                    return;
+                addToast("Access Denied: Only Super Admin can delete.", "error");
+                return;
                                                                 }
                                                                 if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                                    const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                    if (res.ok) {
-                                                                        setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
-                                                                        addToast("Entry deleted successfully.", "success");
-                                                                    }
+                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                    addToast("Entry deleted successfully.", "success");
                                                                 }
                                                             }}
                                                         >

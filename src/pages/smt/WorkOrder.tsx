@@ -213,6 +213,8 @@ export const WorkOrder: React.FC = () => {
         setPriority('medium');
     };
 
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+
     const handleDeleteWorkOrder = async (id: string) => {
         if (!isSuperAdmin) {
             addToast("Access Denied: Only Super Admin can delete.", "error");
@@ -222,21 +224,24 @@ export const WorkOrder: React.FC = () => {
             return;
         }
 
+        setDeletingId(id);
         try {
-            const res = await apiFetch(`/api/smt/work-orders/${id}`, {
+            await apiFetch(`/api/smt/work-orders/${id}`, {
                 method: 'DELETE'
             });
 
-            if (res.ok) {
-                setWorkOrders(workOrders.filter(wo => wo.work_order_id !== id));
-                addToast("Work Order deleted successfully.", "success");
-            } else {
-                const data = await res.json();
-                alert(`Failed to delete: ${data.error || 'Unknown error'}`);
-            }
-        } catch (err) {
+            setWorkOrders(prev => prev.filter(wo => wo.work_order_id !== id));
+            addToast("Work Order deleted successfully.", "success");
+        } catch (err: any) {
             console.error("Delete error:", err);
-            alert("Error connecting to server.");
+            // Ignore 404 if it's already deleted (double click safety fallback)
+            if (err.message === 'Work order not found') {
+                setWorkOrders(prev => prev.filter(wo => wo.work_order_id !== id));
+            } else {
+                alert(`Failed to delete: ${err.message || 'Unknown error'}`);
+            }
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -509,8 +514,10 @@ export const WorkOrder: React.FC = () => {
                                             <button
                                                 onClick={() => handleDeleteWorkOrder(wo.work_order_id)}
                                                 className={styles.deleteButton}
+                                                disabled={deletingId === wo.work_order_id}
+                                                style={{ opacity: deletingId === wo.work_order_id ? 0.5 : 1 }}
                                             >
-                                                Delete
+                                                {deletingId === wo.work_order_id ? 'Deleting...' : 'Delete'}
                                             </button>
                                         </td>
                                     </tr>

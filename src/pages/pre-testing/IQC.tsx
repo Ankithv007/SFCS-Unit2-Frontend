@@ -842,6 +842,26 @@ export const IQC: React.FC = () => {
                                                         </button>
                                                     </>
                                                 )}
+                                                {['admin', 'super admin'].includes(user?.role?.toLowerCase() || '') && (
+                                                    <button
+                                                        className={styles.deleteTextButton}
+                                                        onClick={async () => {
+                                                            if (window.confirm('Are you sure you want to delete this scan?')) {
+                                                                try {
+                                                                    await apiFetch(`/api/pretest/iqc/scan/${comp.id}`, { method: 'DELETE' });
+                                                                    setScannedComponents(prev => prev.filter(s => s.id !== comp.id));
+                                                                    showToast('Scan deleted successfully', 'success');
+                                                                    fetchBatches();
+                                                                } catch (err: any) {
+                                                                    showToast(err.message || 'Failed to delete scan', 'error');
+                                                                }
+                                                            }
+                                                        }}
+                                                        title="Delete Scan"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

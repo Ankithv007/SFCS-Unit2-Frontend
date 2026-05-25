@@ -243,20 +243,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
         }
     };
 
-    const handlePassFromTable = async (serialId: number, serialNumber: string) => {
-        const changeRemark = window.prompt(`Barcode "${serialNumber}" previously FAILED Pre AOI. Please enter a remark for what is changed:`);
-        if (changeRemark === null) {
-            scanInputRef.current?.focus();
-            return;
-        }
-        if (!changeRemark.trim()) {
-            addToast('Remark is required to pass a failed barcode.', 'error');
-            alert('Remark is required to pass a failed barcode.');
-            scanInputRef.current?.focus();
-            return;
-        }
-        await handlePass(serialId, changeRemark.trim());
-    };
+
 
     const processScan = async (barcodeInput: string) => {
         const cleanInput = (barcodeInput || '').trim().replace(/-/g, '').toUpperCase();
@@ -476,8 +463,11 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                                         >
                                             <td style={{ padding: '0.5rem', textAlign: 'center' }}>
                                                 {showBarcodeImage ? (
-                                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '0.25rem' }}>
                                                         <QRCode value={(s.serial_number || '').toUpperCase()} size={64} />
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                                                            {(s.serial_number || '').toUpperCase()}
+                                                        </span>
                                                     </div>
                                                 ) : (
                                                     <span style={{ color: '#9ca3af' }}>-</span>
@@ -529,14 +519,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName 
                                                     >
                                                         FAIL
                                                     </button>
-                                                ) : isFail ? (
-                                                    <button
-                                                        onClick={() => handlePassFromTable(s.id, s.serial_number)}
-                                                        className={styles.button}
-                                                        style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#10b981' }}
-                                                    >
-                                                        PASS
-                                                    </button>
+
                                                 ) : (
                                                     <span style={{ color: '#9ca3af' }}>-</span>
                                                 )}
@@ -852,15 +835,13 @@ const PreAoi: React.FC = () => {
                                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                             onClick={async () => {
                                                                 if (!isSuperAdmin) {
-                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                                    return;
+                addToast("Access Denied: Only Super Admin can delete.", "error");
+                return;
                                                                 }
                                                                 if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                                    const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                    if (res.ok) {
-                                                                        setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                                                                        addToast("Entry deleted successfully.", "success");
-                                                                    }
+                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                    addToast("Entry deleted successfully.", "success");
                                                                 }
                                                             }}
                                                         >
@@ -931,15 +912,13 @@ const PreAoi: React.FC = () => {
                                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                             onClick={async () => {
                                                                 if (!isSuperAdmin) {
-                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                                    return;
+                addToast("Access Denied: Only Super Admin can delete.", "error");
+                return;
                                                                 }
                                                                 if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                                    const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                    if (res.ok) {
-                                                                        setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                                                                        addToast("Entry deleted successfully.", "success");
-                                                                    }
+                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
+                    addToast("Entry deleted successfully.", "success");
                                                                 }
                                                             }}
                                                         >

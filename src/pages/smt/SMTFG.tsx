@@ -35,7 +35,6 @@ interface SmtFgDetailProps {
 const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName }) => {
     const [tableSerials, setTableSerials] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [totalSerials, setTotalSerials] = useState(0);
     const [scanBarcode, setScanBarcode] = useState('');
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
@@ -60,7 +59,6 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
             const totalRes = await fetch(totalUrl.toString());
             if (totalRes.ok) {
                 const totalData = await totalRes.json();
-                setTotalSerials(totalData.length);
                 setAllWoSerials(totalData);
             }
 
@@ -145,64 +143,7 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
         }
     };
 
-    const handleFailOnly = async (serialId: number) => {
-        const reason = window.prompt('Please enter the defect remark for SMT FG failure:');
-        if (reason === null) {
-            scanInputRef.current?.focus();
-            return;
-        }
-        if (!reason.trim()) {
-            addToast('Defect remark is required.', 'error');
-            alert('Defect remark is required to fail a barcode.');
-            scanInputRef.current?.focus();
-            return;
-        }
 
-        try {
-            const res = await fetch('/api/smt/inspections', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    serial_id: serialId,
-                    process_step: 'SMT FG',
-                    scanned_by: operatorName || 'System',
-                    status: 'FAIL',
-                    rework_reason: reason.trim()
-                })
-            });
-            if (res.ok) {
-                const newInsp = await res.json();
-                setTableSerials(prev => {
-                    const exists = prev.find(s => s.id === serialId);
-                    if (exists) {
-                        return prev.map(s =>
-                            s.id === serialId ? { ...s, last_status: 'FAIL', last_step: 'SMT FG', rework_reason: reason.trim(), scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at } : s
-                        );
-                    } else {
-                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
-                        return [{
-                            id: serialId,
-                            serial_number: sInfo.serial_number,
-                            barcode: sInfo.serial_number,
-                            last_status: 'FAIL',
-                            last_step: 'SMT FG',
-                            rework_reason: reason.trim(),
-                            scanned_by: newInsp.scanned_by,
-                            scanned_at: newInsp.scanned_at,
-                            barcode_source: sInfo.barcode_source
-                        }, ...prev];
-                    }
-                });
-                addToast('Item marked as FAIL with defect remark.', 'info');
-            } else {
-                addToast('Failed to save SMT FG FAIL status.', 'error');
-            }
-        } catch {
-            addToast('Network error.', 'error');
-        } finally {
-            scanInputRef.current?.focus();
-        }
-    };
 
     const processScan = async (barcodeInput: string) => {
         const cleanInput = (barcodeInput || '').trim().replace(/-/g, '').toUpperCase();
@@ -308,10 +249,11 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#0369a1', marginBottom: '0.5rem' }}>📦 SMT FG Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#0369a1' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {totalSerials}</strong></span>
+                                <span style={{ color: '#8b5cf6' }}>Post AOI Passed: <strong>{allWoSerials.filter(s => s.step_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#0369a1' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {allWoSerials.filter(s => s.step_status === 'PASS').length}</strong></span>
                                 <span style={{ color: '#0369a1' }}>Passed: <strong>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                                 <span style={{ color: '#0369a1' }}>Failed: <strong>{tableSerials.filter(s => s.last_status === 'FAIL').length}</strong></span>
-                                <span style={{ color: '#0369a1' }}>Pending: <strong>{totalSerials - tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#0369a1' }}>Pending: <strong>{allWoSerials.filter(s => s.step_status === 'PASS').length - tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
                             </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={onBack}>Back</button>
@@ -355,17 +297,15 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
                                     <th style={{ textAlign: 'center' }}>BARCODE PREVIEW</th>
                                     <th>BARCODE NUMBER</th>
                                     <th>STATUS</th>
-                                    <th>REMARK</th>
                                     <th>RELEASED BY</th>
                                     <th>RELEASED AT</th>
-                                    <th>ACTION</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {loading ? (
-                                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
                                 ) : tableSerials.length === 0 ? (
-                                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above for Final Finished Goods release</td></tr>
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above for Final Finished Goods release</td></tr>
                                 ) : sortedTableSerials.map((s, idx) => {
                                     const isPass = s.last_status === 'PASS';
                                     const isFail = s.last_status === 'FAIL';
@@ -402,27 +342,11 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName })
                                                     {isPass ? '✓ RELEASED' : isFail ? '● FG REJECT' : '🕒 PENDING'}
                                                 </span>
                                             </td>
-                                            <td style={{ padding: '1rem', fontWeight: 600, color: isFail ? '#ef4444' : '#64748b' }}>
-                                                {isFail ? (s.rework_reason || 'FG Rejected') : '-'}
-                                            </td>
                                             <td style={{ padding: '1rem', fontWeight: 600, color: '#475569' }}>
                                                 {s.scanned_by || 'System'}
                                             </td>
                                             <td style={{ padding: '1rem', fontSize: '0.85rem', color: '#64748b' }}>
                                                 {s.scanned_at ? new Date(s.scanned_at).toLocaleString() : '-'}
-                                            </td>
-                                            <td style={{ padding: '1rem' }}>
-                                                {isPass ? (
-                                                    <button
-                                                        onClick={() => handleFailOnly(s.id)}
-                                                        className={styles.button}
-                                                        style={{ height: '32px', padding: '0 12px', fontSize: '0.8rem', backgroundColor: '#ef4444' }}
-                                                    >
-                                                        REJECT
-                                                    </button>
-                                                ) : (
-                                                    <span style={{ color: '#9ca3af' }}>-</span>
-                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -463,6 +387,7 @@ const SMTFG: React.FC = () => {
     const [createdBy, setCreatedBy] = useState('');
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
     const [inspections, setInspections] = useState<any[]>([]);
+    const [postAoiInspections, setPostAoiInspections] = useState<any[]>([]);
 
     const fetchData = useCallback(async () => {
         try {
@@ -482,6 +407,12 @@ const SMTFG: React.FC = () => {
             if (inspRes.ok) {
                 const data = await inspRes.json();
                 setInspections(data);
+            }
+
+            const postAoiInspRes = await fetch('/api/smt/inspections?process_step=Post%20AOI');
+            if (postAoiInspRes.ok) {
+                const data = await postAoiInspRes.json();
+                setPostAoiInspections(data);
             }
 
             if (smtUser) {
@@ -560,6 +491,14 @@ const SMTFG: React.FC = () => {
         sorted.forEach(i => {
             latestBySerial[i.serial_id] = i.status;
         });
+        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    };
+
+    const getPostAoiPassedCount = (woId: string) => {
+        const woInspections = postAoiInspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const latestBySerial: { [key: number]: string } = {};
+        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
+        sorted.forEach(i => { latestBySerial[i.serial_id] = i.status; });
         return Object.values(latestBySerial).filter(status => status === 'PASS').length;
     };
 
@@ -677,9 +616,11 @@ const SMTFG: React.FC = () => {
                                     <thead>
                                         <tr>
                                             <th>WORK ORDER</th>
+                                            <th>LINE ID</th>
                                             <th>PRODUCT NAME</th>
                                             <th>BARCODE SOURCE</th>
                                             <th>TOTAL QTY</th>
+                                            <th>POST AOI PASSED</th>
                                             <th>SCANNED QTY</th>
                                             <th>PENDING QTY</th>
                                             <th>STATUS</th>
@@ -692,18 +633,21 @@ const SMTFG: React.FC = () => {
                                             const barcodeSrc = wo?.barcode_source || 'GENERATED';
                                             const totalQty = entry.quantity || entry.wo_qty || (wo ? (wo.scanned_count || wo.quantity) : 0);
                                             const scannedQty = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
-                                            const pendingQty = Math.max(0, totalQty - scannedQty);
+                                            const postAoiPassedQty = getPostAoiPassedCount(entry.work_order_id);
+                                            const pendingQty = Math.max(0, postAoiPassedQty - scannedQty);
                                             return (
                                                 <tr key={entry.id}>
                                                     <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                                    <td>{wo?.line_id || '-'}</td>
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
                                                     <td style={{ fontWeight: 'bold' }}>{barcodeSrc}</td>
                                                     <td>{totalQty}</td>
+                                                    <td style={{ fontWeight: 'bold', color: '#3b82f6' }}>{postAoiPassedQty}</td>
                                                     <td style={{ color: '#2563eb', fontWeight: 'bold' }}>{scannedQty}</td>
                                                     <td style={{ color: '#f59e0b', fontWeight: 'bold' }}>{pendingQty}</td>
                                                     <td>
                                                         <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', backgroundColor: '#fef3c7', color: '#d97706' }}>
-                                                            ACTIVE
+                                                            PENDING
                                                         </span>
                                                     </td>
                                                     <td style={{ display: 'flex', gap: '5px' }}>
@@ -719,15 +663,17 @@ const SMTFG: React.FC = () => {
                                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                             onClick={async () => {
                                                                 if (!isSuperAdmin) {
+                addToast("Access Denied: Only Super Admin can delete.", "error");
+                return;
+                                                                }
+                                                                if (window.confirm('Are you sure you want to delete this entry?')) {
                                                                     addToast("Access Denied: Only Super Admin can delete.", "error");
                                                                     return;
                                                                 }
                                                                 if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                                    const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                    if (res.ok) {
-                                                                        setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
-                                                                        addToast("Entry deleted successfully.", "success");
-                                                                    }
+                                                                    await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                    setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                                    addToast("Entry deleted successfully.", "success");
                                                                 }
                                                             }}
                                                         >
@@ -739,7 +685,7 @@ const SMTFG: React.FC = () => {
                                         })}
                                         {pendingEntries.length === 0 && (
                                             <tr>
-                                                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                     No pending SMT FG sessions found.
                                                 </td>
                                             </tr>
@@ -757,6 +703,7 @@ const SMTFG: React.FC = () => {
                                     <thead>
                                         <tr>
                                             <th>WORK ORDER</th>
+                                            <th>LINE ID</th>
                                             <th>PRODUCT NAME</th>
                                             <th>BARCODE SOURCE</th>
                                             <th>TOTAL QTY</th>
@@ -774,6 +721,7 @@ const SMTFG: React.FC = () => {
                                             return (
                                                 <tr key={entry.id}>
                                                     <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
+                                                    <td>{wo?.line_id || '-'}</td>
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
                                                     <td style={{ fontWeight: 'bold' }}>{barcodeSrc}</td>
                                                     <td>{totalQty}</td>
@@ -796,15 +744,13 @@ const SMTFG: React.FC = () => {
                                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                             onClick={async () => {
                                                                 if (!isSuperAdmin) {
-                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                                    return;
+                addToast("Access Denied: Only Super Admin can delete.", "error");
+                return;
                                                                 }
                                                                 if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                                    const res = await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                    if (res.ok) {
-                                                                        setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
-                                                                        addToast("Entry deleted successfully.", "success");
-                                                                    }
+                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                    addToast("Entry deleted successfully.", "success");
                                                                 }
                                                             }}
                                                         >
@@ -816,7 +762,7 @@ const SMTFG: React.FC = () => {
                                         })}
                                         {completedEntries.length === 0 && (
                                             <tr>
-                                                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                     No completed SMT FG sessions found.
                                                 </td>
                                             </tr>

@@ -202,8 +202,8 @@ export const SmtLogin: React.FC = () => {
         }
         if (window.confirm(`Are you sure you want to delete ${name}?`)) {
             try {
-                const res = await apiFetch(`/api/smt/employees/${id}`, { method: 'DELETE' });
-                if (res.ok) fetchEmployees();
+                await apiFetch(`/api/smt/employees/${id}`, { method: 'DELETE' });
+                fetchEmployees();
             } catch (err) {
                 console.error("Delete error:", err);
             }

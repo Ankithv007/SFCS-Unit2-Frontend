@@ -385,14 +385,12 @@ export const SerialNumber: React.FC = () => {
         }
         if (window.confirm(`Are you sure you want to delete all serials for Work Order ${woId}? This action cannot be undone.`)) {
             try {
-                const res = await apiFetch(`/api/smt/serial-numbers?work_order_id=${woId}`, {
+                await apiFetch(`/api/smt/serial-numbers?work_order_id=${woId}`, {
                     method: 'DELETE'
                 });
-                if (res.ok) {
-                    setBatches(batches.filter(b => b.work_order_id !== woId));
+setBatches(batches.filter(b => b.work_order_id !== woId));
                     if (activeBatch && activeBatch.work_order_id === woId) {
                         setActiveBatch(null);
-                    }
                     addToast('Batch deleted successfully.', 'success');
                 } else {
                     addToast('Failed to delete batch from database.', 'error');
@@ -601,9 +599,9 @@ export const SerialNumber: React.FC = () => {
                                                             <button
                                                                 className={styles.secondaryButton}
                                                                 onClick={() => {
-                                                                    setActiveBatch(batch);
-                                                                    setCurrentPage(1);
-                                                                    setBarcodeFilter('');
+                setActiveBatch(batch);
+                setCurrentPage(1);
+                setBarcodeFilter('');
                                                                 }}
                                                             >
                                                                 View Details

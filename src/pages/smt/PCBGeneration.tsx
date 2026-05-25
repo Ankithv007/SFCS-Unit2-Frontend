@@ -112,7 +112,7 @@ const PCBGeneration: React.FC = () => {
 
     const fetchComponents = async (woId: string) => {
         try {
-            const data = await apiFetch(`/api/smt/inspections?work_order_id=${woId}&process_step=PCB Generation`);
+            const data = await apiFetch(`/api/smt/inspections?work_order_id=${woId}&process_step=PCB Registration`);
             setScannedComponents(data);
         } catch (error) {
             console.error('Error fetching components:', error);
@@ -141,7 +141,7 @@ const PCBGeneration: React.FC = () => {
         fetchComponents(selectedWo.id);
         fetchAllSerials(selectedWo.id);
         setSelectedWoId('');
-        showToast(`Started PCB Generation for ${selectedWo.id}`, 'success');
+        showToast(`Started PCB Registration for ${selectedWo.id}`, 'success');
         setTimeout(() => { scanInputRef.current?.focus(); }, 100);
     };
 
@@ -158,12 +158,12 @@ const PCBGeneration: React.FC = () => {
             showToast("Access Denied: Only Super Admin can delete.", "error");
             return;
         }
-        if (!window.confirm(`Are you sure you want to reset and delete the scan session for Work Order ${batchId}? This will remove all PCB Generation records for this batch.`)) {
+        if (!window.confirm(`Are you sure you want to reset and delete the scan session for Work Order ${batchId}? This will remove all PCB Registration records for this batch.`)) {
             return;
         }
 
         try {
-            await apiFetch(`/api/smt/inspections/batch?work_order_id=${batchId}&process_step=PCB Generation`, {
+            await apiFetch(`/api/smt/inspections/batch?work_order_id=${batchId}&process_step=PCB Registration`, {
                 method: 'DELETE'
             });
             showToast(`Scan session for ${batchId} deleted successfully`, 'success');
@@ -298,7 +298,7 @@ const PCBGeneration: React.FC = () => {
                 method: 'POST',
                 body: JSON.stringify({
                     serial_id: serialIdToInspect,
-                    process_step: 'PCB Generation',
+                    process_step: 'PCB Registration',
                     scanned_by: scannerName,
                     status: 'PASS'
                 })
@@ -651,7 +651,7 @@ const PCBGeneration: React.FC = () => {
             `}</style>
             <div className={styles.headerRow}>
                 <div className={styles.headerContent}>
-                    <h2><span role="img" aria-label="printer">🖨️</span> PCB Generation</h2>
+                    <h2><span role="img" aria-label="printer">🖨️</span> PCB Registration</h2>
                     <p>Manage PCB barcode scanning and registration. Shift: <strong>{getShift()}</strong></p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -672,7 +672,7 @@ const PCBGeneration: React.FC = () => {
                 <>
                     {/* Create Batch */}
                     <div className={styles.card}>
-                        <h3>Start PCB Generation</h3>
+                        <h3>Start PCB Registration</h3>
                         <div className={styles.formGrid}>
                             <div className={styles.inputGroup}>
                                 <label>Select Work Order *</label>

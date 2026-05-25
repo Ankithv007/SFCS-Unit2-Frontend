@@ -53,142 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                 <span className={styles.menuIcon}>🛡️</span>
                 <span className={styles.menuText}>Admin Panel</span>
             </div>
-
-            <div
-                className={`${styles.menuItem} ${isActive('/qc-inspection') ? styles.active : ''}`}
-                onClick={() => navigate('/qc-inspection')}
-                title="QC Inspection"
-            >
-                <span className={styles.menuIcon}>📋</span>
-                <span className={styles.menuText}>QC Inspection</span>
-            </div>
-
-            <div
-                className={`${styles.menuItem} ${isActive('/vacuum-leak-test') ? styles.active : ''}`}
-                onClick={() => navigate('/vacuum-leak-test')}
-                title="Vacuum Leak Test"
-            >
-                <span className={styles.menuIcon}>🔬</span>
-                <span className={styles.menuText}>Vacuum Leak Test</span>
-            </div>
-
-            {/* Inventory & Report Module */}
-            <div className={styles.moduleWrapper}>
-                <div
-                    className={`${styles.menuItem} ${expandedModule === 'inventory-report' ? styles.active : ''}`}
-                    onClick={() => toggleModule('inventory-report')}
-                    title="Inventory & Report"
-                >
-                    <span className={styles.menuIcon}>📦</span>
-                    <span className={styles.menuText}>Inventory & Report</span>
-                    <span className={styles.arrow}>{expandedModule === 'inventory-report' ? '▼' : '▶'}</span>
-                </div>
-
-                {expandedModule === 'inventory-report' && (
-                    <div className={styles.submenu}>
-
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/purchase-order') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/purchase-order')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Purchase Order (PO)
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/wip-stack') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/wip-stack')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> WIP Stack [Prod]
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/return-wip') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/return-wip')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Return From WIP
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/report') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/report')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Report
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Pre testing Module */}
-            <div className={styles.moduleWrapper}>
-                <div
-                    className={`${styles.menuItem} ${expandedModule === 'pre-testing' ? styles.active : ''}`}
-                    onClick={() => toggleModule('pre-testing')}
-                    title="Pre testing (E2E)"
-                >
-                    <span className={styles.menuIcon}>🧪</span>
-                    <span className={styles.menuText}>Pre testing (E2E)</span>
-                    <span className={styles.arrow}>{expandedModule === 'pre-testing' ? '▼' : '▶'}</span>
-                </div>
-
-                {expandedModule === 'pre-testing' && (
-                    <div className={styles.submenu}>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/pre-testing/warehouse') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/pre-testing/warehouse')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Warehouse
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/pre-testing/iqc') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/pre-testing/iqc')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Pre-IQC
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/pre-testing/impedance') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/pre-testing/impedance')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Pre-Impedance
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/pre-testing/calibration') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/pre-testing/calibration')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Pre-Calibration
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/pre-testing/pre-aclr') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/pre-testing/pre-aclr')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Pre-ACLR
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/pre-testing/trace') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/pre-testing/trace')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Trace
-                        </div>
-                    </div>
-                )}
-            </div>
-            {/* SMT Module */}
+{/* SMT Module */}
             <div className={styles.moduleWrapper}>
                 <div
                     className={`${styles.menuItem} ${expandedModule === 'smt' ? styles.active : ''}`}
@@ -238,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                         >
                             <span className={styles.menuIcon}>
                                 <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> PCB Generation
+                            </span> PCB Registration
                         </div>
                         <div
                             className={`${styles.submenuItem} ${isActive('/smt/printing') ? styles.activeSubmenu : ''}`}
@@ -428,6 +293,141 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                     </div>
                 )}
             </div>
+            {/* Pre testing Module */}
+            <div className={styles.moduleWrapper}>
+                <div
+                    className={`${styles.menuItem} ${expandedModule === 'pre-testing' ? styles.active : ''}`}
+                    onClick={() => toggleModule('pre-testing')}
+                    title="Pre testing (E2E)"
+                >
+                    <span className={styles.menuIcon}>🧪</span>
+                    <span className={styles.menuText}>Pre testing (E2E)</span>
+                    <span className={styles.arrow}>{expandedModule === 'pre-testing' ? '▼' : '▶'}</span>
+                </div>
+
+                {expandedModule === 'pre-testing' && (
+                    <div className={styles.submenu}>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/warehouse') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/warehouse')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Warehouse
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/iqc') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/iqc')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Pre-IQC
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/impedance') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/impedance')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Pre-Impedance
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/calibration') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/calibration')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Pre-Calibration
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/pre-aclr') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/pre-aclr')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Pre-ACLR
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/pre-testing/trace') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/pre-testing/trace')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Trace
+                        </div>
+                    </div>
+                )}
+            </div>
+            
+            <div
+                className={`${styles.menuItem} ${isActive('/qc-inspection') ? styles.active : ''}`}
+                onClick={() => navigate('/qc-inspection')}
+                title="QC Inspection"
+            >
+                <span className={styles.menuIcon}>📋</span>
+                <span className={styles.menuText}>QC Inspection</span>
+            </div>
+
+            <div
+                className={`${styles.menuItem} ${isActive('/vacuum-leak-test') ? styles.active : ''}`}
+                onClick={() => navigate('/vacuum-leak-test')}
+                title="Vacuum Leak Test"
+            >
+                <span className={styles.menuIcon}>🔬</span>
+                <span className={styles.menuText}>Vacuum Leak Test</span>
+            </div>
+
+            {/* Inventory & Report Module */}
+            <div className={styles.moduleWrapper}>
+                <div
+                    className={`${styles.menuItem} ${expandedModule === 'inventory-report' ? styles.active : ''}`}
+                    onClick={() => toggleModule('inventory-report')}
+                    title="Inventory & Report"
+                >
+                    <span className={styles.menuIcon}>📦</span>
+                    <span className={styles.menuText}>Inventory & Report</span>
+                    <span className={styles.arrow}>{expandedModule === 'inventory-report' ? '▼' : '▶'}</span>
+                </div>
+
+                {expandedModule === 'inventory-report' && (
+                    <div className={styles.submenu}>
+
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/purchase-order') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/purchase-order')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Purchase Order (PO)
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/wip-stack') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/wip-stack')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> WIP Stack [Prod]
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/return-wip') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/return-wip')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Return From WIP
+                        </div>
+                        <div
+                            className={`${styles.submenuItem} ${isActive('/report') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/report')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Report
+                        </div>
+                    </div>
+                )}
+            </div>
+
             <div className={styles.menuItem} title="Post testing">
                 <span className={styles.menuIcon}>✅</span>
                 <span className={styles.menuText}>Post testing</span>

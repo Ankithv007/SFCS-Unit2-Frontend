@@ -40,11 +40,11 @@ interface SmtTrackResult {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SMT_PIPELINE = ['Serial Number', 'PCB Generation', 'Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
+const SMT_PIPELINE = ['Serial Number', 'PCB Registration', 'Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
 
 const STAGE_ROUTES: Record<string, string> = {
     'Serial Number': '/smt/serial-number',
-    'PCB Generation': '/smt/pcb-generation',
+    'PCB Registration': '/smt/pcb-generation',
     'Printing': '/smt/printing',
     'SPI': '/smt/spi',
     'Pre AOI': '/smt/pre-aoi',
@@ -434,7 +434,7 @@ const SmtTrackItems: React.FC = () => {
                     <div className={styles.statsRow}>
                         <div className={styles.statPill} style={{ '--c': '#10b981' } as React.CSSProperties}>
                             <span className={styles.statNum}>{data.total_passed}</span>
-                            <span className={styles.statLbl}>Total Passed</span>
+                            <span className={styles.statLbl}>Total Stages Passed</span>
                         </div>
                         <div className={styles.statPill} style={{ '--c': '#f59e0b' } as React.CSSProperties}>
                             <span className={styles.statNum}>{data.total_reworks}</span>
@@ -507,7 +507,7 @@ const SmtTrackItems: React.FC = () => {
                                                     ) : (
                                                         <StatusBadge status={stStatus} small />
                                                     )
-                                                ) : <span className={styles.pendingTag}>Pending</span>}
+                                                ) : <span className={styles.pendingTag}>{stage === 'Rework' ? 'NA' : 'Pending'}</span>}
                                                 {entries.length > 1 && (
                                                     <span className={styles.rescannedTag}>×{entries.length} scans</span>
                                                 )}

@@ -4,8 +4,6 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from './Toast';
 import styles from './Header.module.css';
 import logo from '../assets/logo.webp';
-
-import { useTheme } from '../context/ThemeContext';
 import { useSmtAuth } from '../context/SmtAuthContext';
 
 interface HeaderProps {
@@ -14,7 +12,6 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
     const { user, logout, updateUserAvatar, removeUserAvatar } = useAuth();
-    const { theme, toggleTheme } = useTheme();
     const { smtLogout } = useSmtAuth();
     const { showToast } = useToast();
     const navigate = useNavigate();
@@ -94,25 +91,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
         return () => clearInterval(interval);
     }, []);
 
-    const handleThemeToggle = () => {
-        const newTheme = theme === 'light' ? 'dark' : 'light';
-        toggleTheme();
-        showToast(`Switched to ${newTheme} mode`, 'success');
-    };
-
-    const [searchQuery, setSearchQuery] = React.useState('');
-
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (searchQuery.trim()) {
-            // Navigate to Purchase Order page with search query
-            // This assumes the PO page will handle the 'search' query param
-            // If not, it will just go there and the user can see the search bar.
-            // Ideally, we should update PO page to read this param.
-            navigate(`/inventory/purchase-order?search=${encodeURIComponent(searchQuery)}`);
-        }
-    };
-
     return (
         <header className={styles.header}>
             <div className={styles.brand}>
@@ -141,35 +119,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                 </div>
             </div>
 
-            <div className={styles.searchContainer}>
-                <form onSubmit={handleSearch} className={styles.searchWrapper}>
-                    <input
-                        type="text"
-                        className={styles.searchInput}
-                        placeholder="Search PO Number..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <button type="submit" className={styles.searchIconBtn}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                    </button>
-                </form>
-            </div>
-
             <div className={styles.userSection}>
-                <div
-                    className={`${styles.themeToggle} ${theme === 'dark' ? styles.dark : styles.light}`}
-                    onClick={handleThemeToggle}
-                    title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-                >
-                    <div className={styles.toggleThumb}>
-                        <span className={styles.sunIcon}>☀️</span>
-                        <span className={styles.moonIcon}>🌙</span>
-                    </div>
-                </div>
                 <div className={styles.userInfo} onClick={handleAvatarClick} style={{ cursor: 'pointer' }}>
                     <img
                         src={user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}&background=random`}

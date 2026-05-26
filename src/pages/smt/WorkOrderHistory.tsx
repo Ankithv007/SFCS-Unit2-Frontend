@@ -29,29 +29,15 @@ export const WorkOrderHistory: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        // Auto-fill from location state if available
-        if (location.state && location.state.areaId) {
-            setAreaId(location.state.areaId);
-        }
-
-        // Initial fetch
-        const today = new Date().toISOString().split('T')[0];
-        setFromDate(today);
-        setToDate(today);
-
-        // fetchHistory(today, today, 'ALL', areaId); // We'll wait for state to settle
-    }, [location.state]);
-
-    const fetchHistory = async () => {
+    const fetchHistory = async (fDate = fromDate, tDate = toDate, lId = lineId, aId = areaId) => {
         setLoading(true);
         setError('');
         try {
             const queryParams = new URLSearchParams({
-                areaId,
-                lineId,
-                fromDate,
-                toDate
+                areaId: aId,
+                lineId: lId,
+                fromDate: fDate,
+                toDate: tDate
             });
             const res = await fetch(`/api/smt/workorder-history?${queryParams.toString()}`);
             if (res.ok) {
@@ -68,6 +54,28 @@ export const WorkOrderHistory: React.FC = () => {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        let currentAreaId = 'SMT';
+        // Auto-fill from location state if available
+        if (location.state && location.state.areaId) {
+            currentAreaId = location.state.areaId;
+            setAreaId(currentAreaId);
+        }
+
+        // Timezone-safe local date initialization
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+
+        setFromDate(todayStr);
+        setToDate(todayStr);
+
+        // Safely trigger initial auto-fetch
+        fetchHistory(todayStr, todayStr, 'ALL', currentAreaId);
+    }, [location.state]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -136,6 +144,7 @@ export const WorkOrderHistory: React.FC = () => {
                         />
                     </div>
                     <div className={styles.inputGroup} style={{ justifyContent: 'flex-end' }}>
+                        <label style={{ visibility: 'hidden' }}>Search</label>
                         <button type="submit" className={styles.button} disabled={loading}>
                             {loading ? 'Searching...' : 'Submit'}
                         </button>

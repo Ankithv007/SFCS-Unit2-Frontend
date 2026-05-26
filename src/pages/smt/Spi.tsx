@@ -545,7 +545,7 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
 const Spi: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
-    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin';
+    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
     const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
 

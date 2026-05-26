@@ -27,7 +27,7 @@ import { useAuth } from '../../hooks/useAuth';
 import styles from './SmtLogin.module.css';
 
 export const SmtLogin: React.FC = () => {
-    const { smtLogin } = useSmtAuth();
+    const { smtLogin, smtUser } = useSmtAuth();
     const { user: mainUser } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
@@ -66,7 +66,7 @@ export const SmtLogin: React.FC = () => {
     const [showAdminPassword, setShowAdminPassword] = useState(false);
 
     const from = location.state?.from?.pathname || '/smt/work-order';
-    const isSuperAdmin = mainUser?.role === 'Super Admin';
+    const isSuperAdmin = mainUser?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
 
     useEffect(() => {
         if (isAdminMode) {

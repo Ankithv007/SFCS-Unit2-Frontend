@@ -65,7 +65,7 @@ export const WorkOrder: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
     const navigate = useNavigate();
-    const isSuperAdmin = user?.role === 'Super Admin';
+    const isSuperAdmin = user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
     const today = new Date();
     const datePrefix = `WO${today.getFullYear()}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
 

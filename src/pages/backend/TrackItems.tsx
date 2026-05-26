@@ -4,7 +4,8 @@ import styles from './TrackItems.module.css';
 import {
     Search, Package, CheckCircle, AlertTriangle,
     Clock, Activity, Zap, ArrowDown, RotateCcw, ChevronRight,
-    User, Calendar, FileText, Wrench, MapPin, TrendingUp, Download
+    User, Calendar, FileText, Wrench, MapPin, TrendingUp, Download,
+    Filter
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -112,32 +113,70 @@ const StationIcon: React.FC<{ station: string }> = ({ station }) => {
 
 const TrackItems: React.FC = () => {
     const { user } = useAuth();
+    const [searchType, setSearchType] = useState<'serial' | 'wo'>('serial');
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState<TrackResult | null>(null);
+    const [woData, setWoData] = useState<any | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [appeared, setAppeared] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+    
+    // Filter State
+    const [filterDate, setFilterDate] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
+    const [showFilter, setShowFilter] = useState(false);
+    const [workOrdersList, setWorkOrdersList] = useState<string[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 50;
+
     const inputRef = useRef<HTMLInputElement>(null);
     const printRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => { inputRef.current?.focus(); }, []);
+    useEffect(() => { 
+        inputRef.current?.focus(); 
+        
+        const fetchWOs = async () => {
+            try {
+                const res = await apiFetch('/api/backend/work-order');
+                if (Array.isArray(res)) {
+                    setWorkOrdersList(res.map((w: any) => w.wo_number || w.id));
+                }
+            } catch (err) {
+                console.error("Failed to load WOs", err);
+            }
+        };
+        fetchWOs();
+    }, []);
 
-    const handleSearch = async (e?: React.FormEvent) => {
+    const handleSearch = async (e?: React.FormEvent, directQuery?: string, directSearchType?: 'serial' | 'wo') => {
         if (e) e.preventDefault();
-        const q = query.trim();
+        const q = (directQuery ?? query).trim();
+        const type = directSearchType ?? searchType;
         if (!q) return;
-        setLoading(true); setError(null); setData(null); setAppeared(false);
+        setLoading(true); setError(null); setData(null); setWoData(null); setAppeared(false); setCurrentPage(1);
         try {
-            const result = await apiFetch(`/api/backend/track/${encodeURIComponent(q)}`);
-            setData(result);
+            if (type === 'wo') {
+                const result = await apiFetch(`/api/backend/track/wo/${encodeURIComponent(q)}`);
+                setWoData(result);
+            } else {
+                const result = await apiFetch(`/api/backend/track/${encodeURIComponent(q)}`);
+                setData(result);
+            }
             setTimeout(() => setAppeared(true), 50);
         } catch (err: any) {
-            setError(err.message || 'Barcode not found in system.');
+            setError(err.message || 'Item not found in system.');
         } finally {
             setLoading(false);
         }
     };
+
+    const handleTrackSerial = (sn: string) => {
+        setSearchType('serial');
+        setQuery(sn);
+        handleSearch(undefined, sn, 'serial');
+    };
+
 
     const handleDownloadPdf = async () => {
         try {
@@ -179,7 +218,8 @@ const TrackItems: React.FC = () => {
                 heightLeft -= pdfHeight;
             }
 
-            pdf.save(`Traceability_Report_${data?.barcode || 'record'}.pdf`);
+            const fileName = data ? `Backend_Traceability_${data.barcode}.pdf` : `Backend_WorkOrder_${woData?.work_order_id}.pdf`;
+            pdf.save(fileName);
         } catch (error) {
             console.error("PDF Download Failed:", error);
         } finally {
@@ -269,6 +309,29 @@ const TrackItems: React.FC = () => {
         return 'pending';
     };
 
+    const filteredSerials = (woData?.serials.filter((s: any) => {
+        let matches = true;
+        if (filterDate) {
+            const sDate = s.created_at ? new Date(s.created_at).toISOString().split('T')[0] : '';
+            if (sDate !== filterDate) matches = false;
+        }
+        if (filterStatus) {
+            const finalStatus = s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING';
+            if (finalStatus !== filterStatus) matches = false;
+        }
+        return matches;
+    }) || []).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filterDate, filterStatus]);
+
+    const totalPages = Math.ceil(filteredSerials.length / ITEMS_PER_PAGE);
+    const currentSerials = filteredSerials.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+    const completedCount = filteredSerials.filter((s: any) => s.final_status_label === 'Completed').length;
+    const pendingCount = filteredSerials.length - completedCount;
+
     return (
         <div className={styles.page}>
             {/* ── Header ── */}
@@ -280,7 +343,7 @@ const TrackItems: React.FC = () => {
                         <p className={styles.headerSub}>Complete production lifecycle visibility</p>
                     </div>
                 </div>
-                {data && (
+                {(data || woData) && (
                     <button 
                         type="button"
                         onClick={handleDownloadPdf}
@@ -303,17 +366,69 @@ const TrackItems: React.FC = () => {
             {/* ── Search ── */}
             <div className={styles.searchPanel}>
                 <form onSubmit={handleSearch} className={styles.searchForm}>
-                    <div className={styles.searchInputWrap}>
-                        <Search className={styles.searchLeadIcon} size={20} />
-                        <input
-                            ref={inputRef}
-                            className={styles.searchInput}
-                            placeholder="Scan or enter PCB Barcode or Unit Serial Number…"
-                            value={query}
-                            onChange={e => setQuery(e.target.value)}
-                        />
+                    <div className={styles.searchInputWrap} style={{ display: 'flex', gap: '0', padding: '0', border: 'none', background: 'transparent' }}>
+                        <select 
+                            value={searchType}
+                            onChange={(e) => setSearchType(e.target.value as 'serial' | 'wo')}
+                            style={{ 
+                                padding: '12px 16px', 
+                                border: '2px solid #e2e8f0', 
+                                borderRight: 'none',
+                                borderRadius: '12px 0 0 12px',
+                                background: '#f8fafc',
+                                color: '#475569',
+                                fontWeight: 600,
+                                fontSize: '14px',
+                                outline: 'none',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <option value="serial">Barcode / Serial Number</option>
+                            <option value="wo">Work Order</option>
+                        </select>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                            <Search className={styles.searchLeadIcon} size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            {searchType === 'serial' ? (
+                                <input
+                                    ref={inputRef}
+                                    style={{ 
+                                        width: '100%', 
+                                        padding: '16px 16px 16px 48px', 
+                                        border: '2px solid #e2e8f0',
+                                        borderRadius: '0 12px 12px 0',
+                                        fontSize: '15px',
+                                        outline: 'none',
+                                        color: '#1e293b'
+                                    }}
+                                    placeholder="Scan or enter Barcode or Serial Number…"
+                                    value={query}
+                                    onChange={e => setQuery(e.target.value)}
+                                />
+                            ) : (
+                                <select
+                                    style={{ 
+                                        width: '100%', 
+                                        padding: '16px 16px 16px 48px', 
+                                        border: '2px solid #e2e8f0',
+                                        borderRadius: '0 12px 12px 0',
+                                        fontSize: '15px',
+                                        outline: 'none',
+                                        color: '#1e293b',
+                                        appearance: 'none',
+                                        background: '#fff'
+                                    }}
+                                    value={query}
+                                    onChange={e => setQuery(e.target.value)}
+                                >
+                                    <option value="">-- Select Work Order --</option>
+                                    {workOrdersList.map(wo => (
+                                        <option key={wo} value={wo}>{wo}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
                     </div>
-                    <button type="submit" className={styles.searchBtn} disabled={loading}>
+                    <button type="submit" className={styles.searchBtn} disabled={loading || (searchType === 'wo' && !query)}>
                         {loading ? (
                             <span className={styles.spinner} />
                         ) : (
@@ -364,7 +479,29 @@ const TrackItems: React.FC = () => {
                             </div>
                             <div>
                                 <div className={styles.summaryLabel}>Work Order</div>
-                                <div className={styles.summaryValue}>{data.wo_number}</div>
+                                <div className={styles.summaryValue} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {data.wo_number}
+                                    {data.wo_number && data.wo_number !== '-' && (
+                                        <button 
+                                            onClick={() => {
+                                                setSearchType('wo');
+                                                setQuery(data.wo_number);
+                                                handleSearch(undefined, data.wo_number, 'wo');
+                                            }}
+                                            title="Track this Work Order"
+                                            style={{ 
+                                                background: '#f8fafc', border: '1px solid #cbd5e1', 
+                                                borderRadius: '4px', cursor: 'pointer', padding: '4px', 
+                                                display: 'flex', alignItems: 'center', color: '#3b82f6',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                                            onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                                        >
+                                            <Search size={14} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <div className={styles.summaryCard}>
@@ -424,12 +561,12 @@ const TrackItems: React.FC = () => {
                             <h3 className={styles.panelTitle}><ChevronRight size={18} /> Production Pipeline</h3>
 
                             <div className={styles.pipeline}>
-                                {/* Warehouse node */}
+                                {/* Work Order node */}
                                 <div className={styles.pipelineNode}>
                                     <div className={styles.pipelineNodeDot} style={{ background: '#3b82f6', boxShadow: '0 0 0 4px rgba(59,130,246,0.2)' }}>
                                         <Package size={14} />
                                     </div>
-                                    <div className={styles.pipelineNodeLabel}>Warehouse</div>
+                                    <div className={styles.pipelineNodeLabel}>Work Order</div>
                                     <StatusBadge status="ACCEPTED" small />
                                 </div>
                                 <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
@@ -606,12 +743,7 @@ const TrackItems: React.FC = () => {
                                                             </div>
                                                         )}
 
-                                                        {entry.repair_time && (
-                                                            <div className={`${styles.timelineDetail} ${styles.repairDetail}`}>
-                                                                <Clock size={12} style={{ color: '#10b981' }} />
-                                                                <span><strong>Repaired At:</strong> {fmt(entry.repair_time)}</span>
-                                                            </div>
-                                                        )}
+
 
                                                         {entry.resolution_remarks && entry.resolution_remarks !== 'Fixed' && (
                                                             <div className={styles.timelineDetail}>
@@ -643,12 +775,11 @@ const TrackItems: React.FC = () => {
                                         <th>Date & Time</th>
                                         <th>Failure Remark</th>
                                         <th>Repair Note</th>
-                                        <th>Repaired At</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {data.scan_history.length === 0 ? (
-                                        <tr><td colSpan={8} className={styles.emptyRow}>No records.</td></tr>
+                                        <tr><td colSpan={7} className={styles.emptyRow}>No records.</td></tr>
                                     ) : data.scan_history.map((row, idx) => (
                                         <tr key={idx} className={row.station === 'Rework' || row.station === 'Debug' ? styles.repairRow : ''}>
                                             <td className={styles.auditIdx}>{idx + 1}</td>
@@ -658,7 +789,6 @@ const TrackItems: React.FC = () => {
                                             <td className={styles.auditTime}>{fmt(row.scanned_at)}</td>
                                             <td className={styles.remarkCell}>{row.remarks || row.failed_remarks || '—'}</td>
                                             <td className={styles.remarkCell}>{row.repair_remark || '—'}</td>
-                                            <td className={styles.auditTime}>{row.repair_time ? fmt(row.repair_time) : '—'}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -666,152 +796,395 @@ const TrackItems: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            </>
+        )}
 
-                {/* Dedicated Hidden Printable PDF Section */}
-                    <div 
-                        ref={printRef} 
-                        id="hidden-pdf-report" 
-                        style={{ 
-                            position: 'absolute', 
-                            left: '-9999px', 
-                            top: '-9999px', 
-                            width: '800px', 
-                            background: '#ffffff', 
-                            padding: '40px', 
-                            color: '#1e293b', 
-                            fontFamily: 'system-ui, -apple-system, sans-serif',
-                            boxSizing: 'border-box'
-                        }}
-                    >
-                        {/* PDF Header Logo / Title */}
-                        <div style={{ borderBottom: '2px solid #3b82f6', paddingBottom: '15px', marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <h2 style={{ margin: 0, fontSize: '20px', color: '#1e3a8a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                    Velankani Software MES
-                                </h2>
-                                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
-                                    PCB BARCODE TRACEABILITY AUDIT REPORT
-                                </p>
+            {/* ── WO Results ── */}
+            {woData && (
+                <>
+                    <div className={`${styles.resultsWrap} ${appeared ? styles.revealed : ''}`} style={{ padding: '20px', background: '#fff', borderRadius: '12px' }}>
+                        
+                        {/* Summary for WO */}
+                        <div className={styles.summaryRow}>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}>
+                                    <FileText size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Work Order</div>
+                                    <div className={styles.summaryValue}>{woData.work_order_id}</div>
+                                </div>
                             </div>
-                            <div style={{ textAlign: 'right', fontSize: '10px', color: '#64748b' }}>
-                                <div>Report Date: {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}</div>
-                                <div>Generated By: {user?.name || 'Operator'}</div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
+                                    <TrendingUp size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Product</div>
+                                    <div className={styles.summaryValue}>{woData.product_name}</div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
+                                    <Package size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Total Serials</div>
+                                    <div className={styles.summaryValue}>{woData.total_serials} / {woData.quantity}</div>
+                                </div>
                             </div>
                         </div>
 
-                        {/* PDF Metadata Grid (PCB Barcode, Work Order, Model, Current Stage) */}
-                        <div style={{ 
-                            display: 'grid', 
-                            gridTemplateColumns: '1fr 1fr', 
-                            gap: '12px 24px', 
-                            marginBottom: '30px', 
-                            background: '#f8fafc', 
-                            padding: '16px', 
-                            borderRadius: '8px', 
-                            border: '1px solid #e2e8f0',
-                            fontSize: '12px'
-                        }}>
-                            <div>
-                                <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>PCB Barcode</span>
-                                <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.barcode}</span>
+                        <div className={styles.historyPanel} style={{ marginTop: '20px' }}>
+                            <h3 className={styles.panelTitle} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Package size={18} /> Work Order Serials ({filteredSerials.length})
+                                </span>
+                                <span style={{ fontSize: '13px', color: '#166534', background: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                                    Completed: {completedCount}
+                                </span>
+                                <span style={{ fontSize: '13px', color: '#92400e', background: '#fef3c7', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                                    Pending: {pendingCount}
+                                </span>
+                            </h3>
+                            <div className={styles.tableContainer}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                                    <thead style={{ background: '#1e293b', color: '#ffffff' }}>
+                                        <tr>
+                                            <th style={{ padding: '12px 16px', fontWeight: 600, position: 'relative' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    Serial Number Barcode
+                                                    <button onClick={() => setShowFilter(!showFilter)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+                                                        <Filter size={14} color={(filterDate || filterStatus) ? '#60a5fa' : '#cbd5e1'} />
+                                                    </button>
+                                                </div>
+                                                {showFilter && (
+                                                    <div style={{ position: 'absolute', top: '100%', left: '16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', zIndex: 50, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)', width: '200px', color: '#1e293b' }}>
+                                                        <div style={{ marginBottom: '8px' }}>
+                                                            <label style={{ display: 'block', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>Date</label>
+                                                            <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ width: '100%', padding: '4px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                                                        </div>
+                                                        <div style={{ marginBottom: '12px' }}>
+                                                            <label style={{ display: 'block', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>Status</label>
+                                                            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ width: '100%', padding: '4px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                                                                <option value="">All</option>
+                                                                <option value="COMPLETED">Completed</option>
+                                                                <option value="PENDING">Pending</option>
+                                                            </select>
+                                                        </div>
+                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                                            <button onClick={() => { setFilterDate(''); setFilterStatus(''); }} style={{ background: 'transparent', border: 'none', fontSize: '11px', color: '#ef4444', cursor: 'pointer' }}>Clear</button>
+                                                            <button onClick={() => setShowFilter(false)} style={{ background: '#f1f5f9', border: 'none', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>Close</button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </th>
+                                            {PRODUCTION_PIPELINE.map((step: any) => (
+                                                <th key={step.code} style={{ padding: '12px 16px', fontWeight: 600 }}>{step.label}</th>
+                                            ))}
+                                            <th style={{ padding: '12px 16px', fontWeight: 600 }}>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {currentSerials.map((s: any, idx: number) => (
+                                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s' }}>
+                                                <td style={{ padding: '12px 16px', fontWeight: 600, color: '#334155' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                                        {s.serial_number}
+                                                        <button 
+                                                            onClick={() => handleTrackSerial(s.serial_number)}
+                                                            title="Track this Serial Number"
+                                                            style={{ 
+                                                                background: '#f8fafc', border: '1px solid #cbd5e1', 
+                                                                borderRadius: '4px', cursor: 'pointer', padding: '4px', 
+                                                                display: 'flex', alignItems: 'center', color: '#3b82f6',
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                                                        >
+                                                            <Search size={14} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                                {PRODUCTION_PIPELINE.map((step: any) => (
+                                                    <td key={step.code} style={{ padding: '12px 16px' }}>
+                                                        {s.step_status && s.step_status[step.name] && s.step_status[step.name] !== '-' ? (
+                                                            <StatusBadge status={s.step_status[step.name]} small />
+                                                        ) : (
+                                                            <span style={{ color: '#94a3b8' }}>-</span>
+                                                        )}
+                                                    </td>
+                                                ))}
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    <span style={{ 
+                                                        fontSize: '10px', 
+                                                        background: s.final_status_label === 'Completed' ? '#dcfce7' : '#fef3c7', 
+                                                        border: `1px solid ${s.final_status_label === 'Completed' ? '#86efac' : '#fde68a'}`, 
+                                                        padding: '4px 8px', 
+                                                        borderRadius: '4px', 
+                                                        color: s.final_status_label === 'Completed' ? '#166534' : '#92400e',
+                                                        fontWeight: 600
+                                                    }}>
+                                                        {s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {filteredSerials.length === 0 && (
+                                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
+                                        No serial numbers match the selected filters.
+                                    </div>
+                                )}
                             </div>
-                            <div>
-                                <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Work Order</span>
-                                <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.wo_number}</span>
-                            </div>
-                            <div>
-                                <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Model</span>
-                                <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.model}</span>
-                            </div>
-                            <div>
-                                <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Current Stage</span>
-                                <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.current_stage}</span>
-                            </div>
-                            {data.unit_serial_number && (
-                                <div style={{ gridColumn: 'span 2' }}>
-                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Unit Serial Number</span>
-                                    <span style={{ color: '#16a34a', fontWeight: 700 }}>: {data.unit_serial_number}</span>
+                            
+                            {totalPages > 1 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 16px' }}>
+                                    <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                        Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredSerials.length)} of {filteredSerials.length} entries
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button 
+                                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                            disabled={currentPage === 1}
+                                            style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', background: currentPage === 1 ? '#f8fafc' : '#fff', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600 }}
+                                        >
+                                            Previous
+                                        </button>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', fontSize: '12px', fontWeight: 600, color: '#334155', background: '#f1f5f9', borderRadius: '4px' }}>
+                                            Page {currentPage} of {totalPages}
+                                        </div>
+                                        <button 
+                                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                            disabled={currentPage === totalPages}
+                                            style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', background: currentPage === totalPages ? '#f8fafc' : '#fff', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600 }}
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
 
-                        {/* Table Title */}
-                        <h3 style={{ fontSize: '14px', color: '#0f172a', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            Traceability Scan History (Audit Log)
-                        </h3>
-
-                        {/* Audit Log Table */}
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
-                            <thead>
-                                <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
-                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '30px' }}>#</th>
-                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '80px' }}>Stage</th>
-                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '80px' }}>Action</th>
-                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '90px' }}>Operator</th>
-                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '120px' }}>Date & Time</th>
-                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Remarks / Failure</th>
-                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Repair Note</th>
-                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '120px' }}>Repaired At</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {data.scan_history.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={8} style={{ padding: '12px', textAlign: 'center', color: '#64748b', border: '1px solid #cbd5e1' }}>
-                                            No scan events recorded yet.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    data.scan_history.map((row, idx) => {
-                                        const isRepair = row.station === 'Rework' || row.station === 'Debug';
-                                        return (
-                                            <tr 
-                                                key={idx} 
-                                                style={{ 
-                                                    background: isRepair ? '#fffbeb' : idx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                                                    color: '#1e293b'
-                                                }}
-                                            >
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600, textAlign: 'center' }}>{idx + 1}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.station}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
-                                                    <span style={{
-                                                        display: 'inline-block',
-                                                        padding: '2px 6px',
-                                                        borderRadius: '4px',
-                                                        fontWeight: 700,
-                                                        fontSize: '9px',
-                                                        background: statusBg(row.status),
-                                                        color: statusColor(row.status),
-                                                        border: `1px solid ${statusColor(row.status)}33`
-                                                    }}>
-                                                        {row.status.toUpperCase()}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>
-                                                    {row.remarks || row.failed_remarks || '—'}
-                                                </td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>
-                                                    {row.repair_remark || '—'}
-                                                </td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>
-                                                    {row.repair_time ? fmt(row.repair_time) : '—'}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-
-                        {/* PDF Footer Page Note */}
-                        <div style={{ marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '10px', textAlign: 'center', fontSize: '9px', color: '#94a3b8' }}>
-                            This report is an official computer-generated audit log from the Velankani Software Manufacturing Execution System (MES).
-                        </div>
                     </div>
                 </>
+            )}
+
+            {/* Dedicated Hidden Printable PDF Section */}
+            {(data || woData) && (
+                <div 
+                    ref={printRef} 
+                    id="hidden-pdf-report" 
+                    style={{ 
+                        position: 'absolute', 
+                        left: '-9999px', 
+                        top: '-9999px', 
+                        width: '800px', 
+                        background: '#ffffff', 
+                        padding: '40px', 
+                        color: '#1e293b', 
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        boxSizing: 'border-box'
+                    }}
+                >
+                    {/* PDF Header Logo / Title */}
+                    <div style={{ borderBottom: '2px solid #3b82f6', paddingBottom: '15px', marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <h2 style={{ margin: 0, fontSize: '20px', color: '#1e3a8a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                Velankani Software MES
+                            </h2>
+                            <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                                {data ? 'PCB BARCODE TRACEABILITY AUDIT REPORT' : 'WORK ORDER TRACEABILITY REPORT'}
+                            </p>
+                        </div>
+                        <div style={{ textAlign: 'right', fontSize: '10px', color: '#64748b' }}>
+                            <div>Report Date: {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}</div>
+                            <div>Generated By: {user?.name || 'Operator'}</div>
+                        </div>
+                    </div>
+
+                    {data && (
+                        <>
+                            {/* PDF Metadata Grid (PCB Barcode, Work Order, Model, Current Stage) */}
+                            <div style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: '1fr 1fr', 
+                                gap: '12px 24px', 
+                                marginBottom: '30px', 
+                                background: '#f8fafc', 
+                                padding: '16px', 
+                                borderRadius: '8px', 
+                                border: '1px solid #e2e8f0',
+                                fontSize: '12px'
+                            }}>
+                                <div>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>PCB Barcode</span>
+                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.barcode}</span>
+                                </div>
+                                <div>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Work Order</span>
+                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.wo_number}</span>
+                                </div>
+                                <div>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Model</span>
+                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.model}</span>
+                                </div>
+                                <div>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Current Stage</span>
+                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.current_stage}</span>
+                                </div>
+                                {data.unit_serial_number && (
+                                    <div style={{ gridColumn: 'span 2' }}>
+                                        <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Unit Serial Number</span>
+                                        <span style={{ color: '#16a34a', fontWeight: 700 }}>: {data.unit_serial_number}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Table Title */}
+                            <h3 style={{ fontSize: '14px', color: '#0f172a', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                Traceability Scan History (Audit Log)
+                            </h3>
+
+                            {/* Audit Log Table */}
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                                <thead>
+                                    <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '30px' }}>#</th>
+                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '80px' }}>Stage</th>
+                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '80px' }}>Action</th>
+                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '90px' }}>Operator</th>
+                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '120px' }}>Date & Time</th>
+                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Remarks / Failure</th>
+                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Repair Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.scan_history.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} style={{ padding: '12px', textAlign: 'center', color: '#64748b', border: '1px solid #cbd5e1' }}>
+                                                No scan events recorded yet.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        data.scan_history.map((row, idx) => {
+                                            const isRepair = row.station === 'Rework' || row.station === 'Debug';
+                                            return (
+                                                <tr 
+                                                    key={idx} 
+                                                    style={{ 
+                                                        background: isRepair ? '#fffbeb' : idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                                                        color: '#1e293b'
+                                                    }}
+                                                >
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600, textAlign: 'center' }}>{idx + 1}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.station}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
+                                                        <span style={{
+                                                            display: 'inline-block',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            fontWeight: 700,
+                                                            fontSize: '9px',
+                                                            background: statusBg(row.status),
+                                                            color: statusColor(row.status),
+                                                            border: `1px solid ${statusColor(row.status)}33`
+                                                        }}>
+                                                            {row.status.toUpperCase()}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>
+                                                        {row.remarks || row.failed_remarks || '—'}
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>
+                                                        {row.repair_remark || '—'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </>
+                    )}
+
+                    {woData && (
+                        <>
+                            {/* PDF Metadata Grid for WO */}
+                            <div style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: '1fr 1fr 1fr', 
+                                gap: '12px 24px', 
+                                marginBottom: '30px', 
+                                background: '#f8fafc', 
+                                padding: '16px', 
+                                borderRadius: '8px', 
+                                border: '1px solid #e2e8f0',
+                                fontSize: '12px'
+                            }}>
+                                <div>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '100px' }}>Work Order</span>
+                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.work_order_id}</span>
+                                </div>
+                                <div>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '100px' }}>Product</span>
+                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.product_name}</span>
+                                </div>
+                                <div>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '100px' }}>Total Serials</span>
+                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.total_serials} / {woData.quantity}</span>
+                                </div>
+                            </div>
+
+                            {/* Table Title */}
+                            <h3 style={{ fontSize: '14px', color: '#0f172a', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                Work Order Matrix
+                            </h3>
+
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', textAlign: 'left' }}>
+                                <thead>
+                                    <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                        <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Serial Number</th>
+                                        {PRODUCTION_PIPELINE.map((step: any) => (
+                                            <th key={step.code} style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>{step.label}</th>
+                                        ))}
+                                        <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {woData.serials.map((s: any, idx: number) => (
+                                        <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f8fafc', color: '#1e293b' }}>
+                                            <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{s.serial_number}</td>
+                                            {PRODUCTION_PIPELINE.map((step: any) => (
+                                                <td key={step.code} style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>
+                                                    {s.step_status && s.step_status[step.name] && s.step_status[step.name] !== '-' ? (
+                                                        <span style={{ color: statusColor(s.step_status[step.name]), fontWeight: 700 }}>
+                                                            {s.step_status[step.name]}
+                                                        </span>
+                                                    ) : (
+                                                        <span style={{ color: '#94a3b8' }}>-</span>
+                                                    )}
+                                                </td>
+                                            ))}
+                                            <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1', fontWeight: 700, color: s.final_status_label === 'Completed' ? '#16a34a' : '#d97706' }}>
+                                                {s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </>
+                    )}
+
+                    {/* PDF Footer Page Note */}
+                    <div style={{ marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '10px', textAlign: 'center', fontSize: '9px', color: '#94a3b8' }}>
+                        This report is an official computer-generated audit log from the Velankani Software Manufacturing Execution System (MES).
+                    </div>
+                </div>
             )}
         </div>
     );

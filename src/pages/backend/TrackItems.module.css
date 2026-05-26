@@ -175,14 +175,13 @@
 
 /* ── Summary cards row ───────────────────────────────────────────────────── */
 .summaryRow {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
     margin-bottom: 1rem;
-    flex-wrap: wrap;
 }
 
 .summaryCard {
-    flex: 1 1 180px;
     background: white;
     border-radius: 1rem;
     padding: 1.1rem 1.25rem;
@@ -191,7 +190,6 @@
     gap: 1rem;
     box-shadow: 0 2px 12px rgba(0,0,0,0.06);
     border: 1px solid rgba(226,232,240,0.7);
-    min-width: 160px;
 }
 
 .summaryIcon {

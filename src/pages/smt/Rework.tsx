@@ -497,7 +497,7 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
 const Rework: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
-    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin';
+    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
 
     const [toasts, setToasts] = useState<Toast[]>([]);

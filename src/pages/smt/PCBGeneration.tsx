@@ -41,7 +41,7 @@ const PCBGeneration: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { showToast } = useToast();
     const { user } = useAuth();
-    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin';
+    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
 
     // Batch Data State
     const [batches, setBatches] = useState<SmtWorkOrder[]>([]);

@@ -451,7 +451,7 @@ const PCBAFCT: React.FC = () => {
     };
 
     const handleDeleteBatch = async (batchId: number) => {
-        if (user?.role?.toLowerCase() !== 'superadmin') {
+        if (user?.role !== 'Super Admin') {
             showToast('Only SuperAdmin can perform delete operations.', 'error');
             return;
         }

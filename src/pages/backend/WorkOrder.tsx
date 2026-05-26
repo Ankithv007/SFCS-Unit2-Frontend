@@ -138,7 +138,7 @@ const WorkOrder: React.FC = () => {
     };
 
     const handleDeleteClick = (wo: WorkOrderRecord) => {
-        if (user?.role?.toLowerCase() !== 'superadmin') {
+        if (user?.role !== 'Super Admin') {
             showToast('Only SuperAdmin can perform delete operations.', 'error');
             return;
         }

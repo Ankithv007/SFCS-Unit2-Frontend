@@ -6,12 +6,14 @@ interface ScanDecisionModalProps {
     barcode: string;
     onFinalize: (status: string, remarks?: string) => void;
     onClose: () => void;
-    repairMode?: boolean;
+    repairMode?: boolean | 'REWORK' | 'DEBUG';
 }
 
 const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinalize, onClose, repairMode = false }) => {
-    const [mode, setMode] = useState<'select' | 'input'>(repairMode ? 'input' : 'select');
-    const [status, setStatus] = useState<'ACCEPTED' | 'REWORK' | 'DEBUG'>(repairMode ? 'ACCEPTED' : 'ACCEPTED');
+    const isRepair = !!repairMode;
+    const repairType = typeof repairMode === 'string' ? repairMode : 'REWORK';
+    const [mode, setMode] = useState<'select' | 'input'>(isRepair ? 'input' : 'select');
+    const [status, setStatus] = useState<'ACCEPTED' | 'REWORK' | 'DEBUG'>(isRepair ? 'ACCEPTED' : 'ACCEPTED');
     const [text, setText] = useState('');
     const [focusedIndex, setFocusedIndex] = useState(0);
 
@@ -95,32 +97,54 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
                     ) : (
                         <div className={styles.inputGroup}>
                             <label className={styles.inputLabel}>
-                                {repairMode ? 'Repair Remark (Mandatory) *' : (status === 'REWORK' ? 'Rework Details *' : 'Debug Reason *')}
+                                {isRepair ? 'Repair Remark (Mandatory) *' : (status === 'REWORK' ? 'Rework Details *' : 'Debug Reason *')}
                             </label>
                             <textarea
                                 autoFocus
                                 className={styles.textarea}
-                                placeholder={repairMode ? "Enter repair steps taken..." : `Enter ${status} details...`}
+                                placeholder={isRepair ? "Enter repair steps taken..." : `Enter ${status} details...`}
                                 value={text}
                                 onChange={(e) => setText(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
                                         if (text.trim()) {
-                                            onFinalize(status, text.trim());
+                                            onFinalize(isRepair ? 'ACCEPTED' : status, text.trim());
                                         }
                                     }
                                 }}
                             />
                             <div className={styles.modalFooter}>
-                                {!repairMode && <button className={styles.secondaryBtn} onClick={() => setMode('select')}>Back</button>}
-                                <button
-                                    className={styles.primaryBtn}
-                                    onClick={() => onFinalize(status, text)}
-                                    disabled={!text.trim()}
-                                >
-                                    {repairMode ? 'Complete & Pass' : 'Submit'}
-                                </button>
+                                {isRepair ? (
+                                    <>
+                                        <button
+                                            className={styles.secondaryBtn}
+                                            onClick={() => onFinalize(repairType, text.trim())}
+                                            style={{ backgroundColor: '#ef4444', color: 'white', borderColor: '#ef4444' }}
+                                            disabled={!text.trim()}
+                                        >
+                                            Fail & Keep in Repair
+                                        </button>
+                                        <button
+                                            className={styles.primaryBtn}
+                                            onClick={() => onFinalize('ACCEPTED', text.trim())}
+                                            disabled={!text.trim()}
+                                        >
+                                            Complete & Pass
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button className={styles.secondaryBtn} onClick={() => setMode('select')}>Back</button>
+                                        <button
+                                            className={styles.primaryBtn}
+                                            onClick={() => onFinalize(status, text.trim())}
+                                            disabled={!text.trim()}
+                                        >
+                                            Submit
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}

@@ -159,7 +159,7 @@ const Debug: React.FC = () => {
         }
     };
 
-    const handleScanFinalize = async (_status: string, remarks?: string) => {
+    const handleScanFinalize = async (status: string, remarks?: string) => {
         if (!pendingBarcode || !activeBatch) return;
         if (!remarks?.trim()) {
             showToast('Debug remark is mandatory', 'error');
@@ -176,7 +176,7 @@ const Debug: React.FC = () => {
                     failed_stage_id: activeBatch.failedStageId,
                     barcode: pendingBarcode,
                     scanned_by: user?.name || 'Operator',
-                    status: 'ACCEPTED',
+                    status: status,
                     remarks: remarks
                 })
             });
@@ -227,7 +227,6 @@ const Debug: React.FC = () => {
                             <th>Scanned</th>
                             <th>Pending</th>
                             <th>Passed</th>
-                            <th>Rework</th>
                             <th>Debug</th>
                             <th className={styles.actionColumn}>Action</th>
                         </tr>
@@ -244,7 +243,6 @@ const Debug: React.FC = () => {
                                     <td className={styles.statusBlue}>{batch.scanned || 0}</td>
                                     <td style={{ color: 'orange', fontWeight: 700 }}>{batch.pending || 0}</td>
                                     <td className={styles.statusGreen}>{batch.passed || 0}</td>
-                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.rework || 0}</td>
                                     <td style={{ color: '#ef4444', fontWeight: 700 }}>{batch.debug || 0}</td>
                                     <td className={styles.actionColumn}>
                                         <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
@@ -428,7 +426,7 @@ const Debug: React.FC = () => {
             {pendingBarcode && (
                 <ScanDecisionModal
                     barcode={pendingBarcode}
-                    repairMode={true}
+                    repairMode="DEBUG"
                     onFinalize={handleScanFinalize}
                     onClose={() => setPendingBarcode(null)}
                 />

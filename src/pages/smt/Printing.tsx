@@ -600,7 +600,7 @@ export const Printing: React.FC = () => {
                                         type="text"
                                         className={styles.input}
                                         value={stencilName}
-                                        onChange={(e) => setStencilName(e.target.value.replace(/[^a-zA-Z\s]/g, ''))}
+                                        onChange={(e) => setStencilName(e.target.value.replace(/[^a-zA-Z0-9\s_-]/g, ''))}
                                         placeholder="Enter Stencil Name"
                                     />
                                 </div>
@@ -611,7 +611,7 @@ export const Printing: React.FC = () => {
                                         type="text"
                                         className={styles.input}
                                         value={squeezeNumber}
-                                        onChange={(e) => setSqueezeNumber(e.target.value.replace(/[^0-9]/g, ''))}
+                                        onChange={(e) => setSqueezeNumber(e.target.value.replace(/[^a-zA-Z0-9\s_-]/g, ''))}
                                         placeholder="Enter Squeegee Number"
                                     />
                                 </div>
@@ -622,7 +622,7 @@ export const Printing: React.FC = () => {
                                         type="text"
                                         className={styles.input}
                                         value={solderPaste}
-                                        onChange={(e) => setSolderPaste(e.target.value)}
+                                        onChange={(e) => setSolderPaste(e.target.value.replace(/[^a-zA-Z0-9\s_-]/g, ''))}
                                         placeholder="Enter Solder Paste"
                                     />
                                 </div>

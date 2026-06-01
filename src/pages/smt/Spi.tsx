@@ -4,6 +4,7 @@ import styles from './Spi.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../utils/api';
+import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
@@ -81,9 +82,10 @@ interface SpiDetailProps {
     woId: string;
     onBack: () => void;
     operatorName: string;
+    onCountClick?: (stage: string, type: string, label: string) => void;
 }
 
-const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => {
+const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName, onCountClick }) => {
     const [tableSerials, setTableSerials] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [totalSerials, setTotalSerials] = useState(0);
@@ -392,11 +394,51 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName }) => 
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🔍 SPI Inspection Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#3b82f6' }}>Printing Passed: <strong>{printingPassedSerials.length}</strong></span>
-                                <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{tableSerials.filter(s => s.last_status === 'PASS').length} / {totalSerials}</strong></span>
-                                <span style={{ color: '#059669' }}>Passed: <strong>{tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
-                                <span style={{ color: '#ef4444' }}>Failed: <strong>{tableSerials.filter(s => s.last_status === 'FAIL').length}</strong></span>
-                                <span style={{ color: '#d97706' }}>Pending: <strong>{totalSerials - tableSerials.filter(s => s.last_status === 'PASS').length}</strong></span>
+                                <span style={{ color: '#3b82f6' }}>Printing Passed:{' '}
+                                    <strong 
+                                        className="smt-clickable-count"
+                                        onClick={() => onCountClick && onCountClick('Printing', 'passed', 'Printing Passed')}
+                                        style={{ color: '#3b82f6' }}
+                                    >
+                                        {printingPassedSerials.length}
+                                    </strong>
+                                </span>
+                                <span style={{ color: '#475569' }}>Total Scanned:{' '}
+                                    <strong 
+                                        className="smt-clickable-count"
+                                        onClick={() => onCountClick && onCountClick('SPI', 'scanned', 'Total Scanned')}
+                                    >
+                                        {tableSerials.filter(s => s.last_status === 'PASS').length}
+                                    </strong>{' '}
+                                    / {totalSerials}
+                                </span>
+                                <span style={{ color: '#059669' }}>Passed:{' '}
+                                    <strong 
+                                        className="smt-clickable-count"
+                                        onClick={() => onCountClick && onCountClick('SPI', 'passed', 'Passed')}
+                                        style={{ color: '#059669' }}
+                                    >
+                                        {tableSerials.filter(s => s.last_status === 'PASS').length}
+                                    </strong>
+                                </span>
+                                <span style={{ color: '#ef4444' }}>Failed:{' '}
+                                    <strong 
+                                        className="smt-clickable-count"
+                                        onClick={() => onCountClick && onCountClick('SPI', 'failed', 'Failed')}
+                                        style={{ color: '#ef4444' }}
+                                    >
+                                        {tableSerials.filter(s => s.last_status === 'FAIL').length}
+                                    </strong>
+                                </span>
+                                <span style={{ color: '#d97706' }}>Pending:{' '}
+                                    <strong 
+                                        className="smt-clickable-count"
+                                        onClick={() => onCountClick && onCountClick('SPI', 'pending', 'Pending')}
+                                        style={{ color: '#d97706' }}
+                                    >
+                                        {totalSerials - tableSerials.filter(s => s.last_status === 'PASS').length}
+                                    </strong>
+                                </span>
                             </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={onBack}>Back</button>
@@ -548,6 +590,12 @@ const Spi: React.FC = () => {
     const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
     const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
+    const [selectedCount, setSelectedCount] = useState<{
+        workOrderId: string;
+        stage: string;
+        type: string;
+        label: string;
+    } | null>(null);
 
     // Toast state
     const [toasts, setToasts] = useState<Toast[]>([]);
@@ -740,6 +788,12 @@ const Spi: React.FC = () => {
                             fetchData();
                         }}
                         operatorName={smtUser?.name || 'System'}
+                        onCountClick={(stage, type, label) => setSelectedCount({
+                            workOrderId: selectedWoId,
+                            stage,
+                            type,
+                            label
+                        })}
                     />
                 ) : (
                     <>
@@ -840,11 +894,64 @@ const Spi: React.FC = () => {
                                                 <tr key={entry.id}>
                                                     <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                    <td>{totalVal}</td>
-                                                    <td>{entry.panel_qty || 'N/A'}</td>
-                                                    <td style={{ fontWeight: 'bold', color: '#3b82f6' }}>{printingPassedVal}</td>
-                                                    <td style={{ fontWeight: 'bold', color: '#10b981' }}>{passedVal}</td>
-                                                    <td style={{ fontWeight: 'bold', color: '#f59e0b' }}>{pendingVal}</td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'total',
+                                                            label: 'WO Quantity'
+                                                        })}
+                                                    >
+                                                        {totalVal}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'total',
+                                                            label: 'Panel Quantity'
+                                                        })}
+                                                    >
+                                                        {entry.panel_qty || 'N/A'}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'Printing',
+                                                            type: 'passed',
+                                                            label: 'Printing Passed'
+                                                        })}
+                                                        style={{ fontWeight: 'bold', color: '#3b82f6' }}
+                                                    >
+                                                        {printingPassedVal}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'passed',
+                                                            label: 'Passed'
+                                                        })}
+                                                        style={{ fontWeight: 'bold', color: '#10b981' }}
+                                                    >
+                                                        {passedVal}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'pending',
+                                                            label: 'Pending'
+                                                        })}
+                                                        style={{ fontWeight: 'bold', color: '#f59e0b' }}
+                                                    >
+                                                        {pendingVal}
+                                                    </td>
                                                     <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
                                                         {new Date(entry.timestamp).toLocaleTimeString()}
                                                     </td>
@@ -916,11 +1023,64 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                                 <tr key={entry.id}>
                                                     <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                    <td>{totalVal}</td>
-                                                    <td>{entry.panel_qty || 'N/A'}</td>
-                                                    <td style={{ fontWeight: 'bold', color: '#3b82f6' }}>{printingPassedVal}</td>
-                                                    <td style={{ fontWeight: 'bold', color: '#10b981' }}>{passedVal}</td>
-                                                    <td style={{ fontWeight: 'bold', color: '#f59e0b' }}>{pendingVal}</td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'total',
+                                                            label: 'WO Quantity'
+                                                        })}
+                                                    >
+                                                        {totalVal}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'total',
+                                                            label: 'Panel Quantity'
+                                                        })}
+                                                    >
+                                                        {entry.panel_qty || 'N/A'}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'Printing',
+                                                            type: 'passed',
+                                                            label: 'Printing Passed'
+                                                        })}
+                                                        style={{ fontWeight: 'bold', color: '#3b82f6' }}
+                                                    >
+                                                        {printingPassedVal}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'passed',
+                                                            label: 'Passed'
+                                                        })}
+                                                        style={{ fontWeight: 'bold', color: '#10b981' }}
+                                                    >
+                                                        {passedVal}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'pending',
+                                                            label: 'Pending'
+                                                        })}
+                                                        style={{ fontWeight: 'bold', color: '#f59e0b' }}
+                                                    >
+                                                        {pendingVal}
+                                                    </td>
                                                     <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
                                                         {new Date(entry.timestamp).toLocaleTimeString()}
                                                     </td>
@@ -967,6 +1127,15 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                     </>
                 )}
             </div>
+            {selectedCount && (
+                <SMTCountDetailsModal
+                    workOrderId={selectedCount.workOrderId}
+                    stage={selectedCount.stage}
+                    type={selectedCount.type}
+                    label={selectedCount.label}
+                    onClose={() => setSelectedCount(null)}
+                />
+            )}
         </>
     );
 };

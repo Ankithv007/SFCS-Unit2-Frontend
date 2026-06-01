@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../utils/api';
 import QRCodeReact from 'react-qr-code';
 import QRCode from 'qrcode';
+import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
@@ -77,6 +78,12 @@ export const SerialNumber: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
 
     const [batches, setBatches] = useState<SmtBatch[]>([]);
+    const [selectedCount, setSelectedCount] = useState<{
+        workOrderId: string;
+        stage: string;
+        type: string;
+        label: string;
+    } | null>(null);
 
     // Toast state
     const [toasts, setToasts] = useState<Toast[]>([]);
@@ -581,8 +588,28 @@ setBatches(batches.filter(b => b.work_order_id !== woId));
                                             return (
                                                 <tr key={batch.id}>
                                                     <td style={{ fontWeight: 600 }}>{(batch.product_name || '').toUpperCase()}</td>
-                                                    <td>{batch.wo_qty}</td>
-                                                    <td>{batch.panel_qty}</td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: batch.work_order_id,
+                                                            stage: 'Serial Number',
+                                                            type: 'total',
+                                                            label: 'WO Quantity'
+                                                        })}
+                                                    >
+                                                        {batch.wo_qty}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: batch.work_order_id,
+                                                            stage: 'Serial Number',
+                                                            type: 'total',
+                                                            label: 'Panel Quantity'
+                                                        })}
+                                                    >
+                                                        {batch.panel_qty}
+                                                    </td>
                                                     <td style={{ color: '#2563eb', fontWeight: 600 }}>{(batch.work_order_id || '').toUpperCase()}</td>
                                                     <td style={{ fontWeight: 'bold', color: isPreExisting ? '#d97706' : '#2563eb' }}>{displaySource}</td>
                                                     <td>
@@ -638,7 +665,18 @@ setBatches(batches.filter(b => b.work_order_id !== woId));
 
                                 <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', fontSize: '1rem', color: '#4b5563', marginTop: '1rem' }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        🏭 Serial Number Available: <strong style={{ color: '#2563eb' }}>{activeAvailableCount}</strong>
+                                        🏭 Serial Number Available:{' '}
+                                        <strong 
+                                            className="smt-clickable-count"
+                                            onClick={() => setSelectedCount({
+                                                workOrderId: activeBatch.work_order_id,
+                                                stage: 'Serial Number',
+                                                type: 'total',
+                                                label: 'Serial Number Available'
+                                            })}
+                                        >
+                                            {activeAvailableCount}
+                                        </strong>
                                     </span>
                                 </div>
                             </div>
@@ -757,6 +795,15 @@ setBatches(batches.filter(b => b.work_order_id !== woId));
                     </>
                 )}
             </div>
+            {selectedCount && (
+                <SMTCountDetailsModal
+                    workOrderId={selectedCount.workOrderId}
+                    stage={selectedCount.stage}
+                    type={selectedCount.type}
+                    label={selectedCount.label}
+                    onClose={() => setSelectedCount(null)}
+                />
+            )}
         </>
     );
 };

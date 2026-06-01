@@ -4,6 +4,7 @@ import { useSmtAuth } from '../../context/SmtAuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import styles from './WorkOrder.module.css';
 import { apiFetch } from '../../utils/api';
+import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
@@ -81,6 +82,12 @@ export const WorkOrder: React.FC = () => {
     const [error, setError] = useState('');
 
     const [workOrders, setWorkOrders] = useState<any[]>([]);
+    const [selectedCount, setSelectedCount] = useState<{
+        workOrderId: string;
+        stage: string;
+        type: string;
+        label: string;
+    } | null>(null);
 
     // Toast state
     const [toasts, setToasts] = useState<Toast[]>([]);
@@ -488,8 +495,28 @@ export const WorkOrder: React.FC = () => {
                                         <td style={{ fontWeight: 600 }}>{wo.work_order_id}</td>
                                         <td>{wo.product_name}</td>
                                         <DescriptionCell text={wo.product_description} />
-                                        <td>{wo.quantity}</td>
-                                        <td>{wo.panel_quantity}</td>
+                                        <td 
+                                            className="smt-clickable-count" 
+                                            onClick={() => setSelectedCount({
+                                                workOrderId: wo.work_order_id,
+                                                stage: 'Work Order',
+                                                type: 'total',
+                                                label: 'Total Quantity'
+                                            })}
+                                        >
+                                            {wo.quantity}
+                                        </td>
+                                        <td 
+                                            className="smt-clickable-count" 
+                                            onClick={() => setSelectedCount({
+                                                workOrderId: wo.work_order_id,
+                                                stage: 'Work Order',
+                                                type: 'total',
+                                                label: 'Panel Quantity'
+                                            })}
+                                        >
+                                            {wo.panel_quantity}
+                                        </td>
                                         <td>{wo.line_id}</td>
                                         <td>
                                             <span style={{
@@ -534,6 +561,15 @@ export const WorkOrder: React.FC = () => {
                     </div>
                 </div>
             </div>
+            {selectedCount && (
+                <SMTCountDetailsModal
+                    workOrderId={selectedCount.workOrderId}
+                    stage={selectedCount.stage}
+                    type={selectedCount.type}
+                    label={selectedCount.label}
+                    onClose={() => setSelectedCount(null)}
+                />
+            )}
         </>
     );
 };

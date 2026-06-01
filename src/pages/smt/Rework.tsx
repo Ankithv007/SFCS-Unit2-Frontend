@@ -4,6 +4,7 @@ import styles from './Spi.module.css'; // sharing premium CSS styles
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../utils/api';
+import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
@@ -30,9 +31,10 @@ interface ReworkDetailProps {
     woId: string;
     onBack: () => void;
     operatorName: string;
+    onCountClick?: (stage: string, type: string, label: string) => void;
 }
 
-const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName }) => {
+const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName, onCountClick }) => {
     const [serials, setSerials] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [scanBarcode, setScanBarcode] = useState('');
@@ -292,9 +294,33 @@ const ReworkDetail: React.FC<ReworkDetailProps> = ({ woId, onBack, operatorName 
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#92400e', marginBottom: '0.5rem' }}>🛠️ SMT Rework Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#b45309' }}>Pending Rework: <strong>{pendingItems.length}</strong></span>
-                                <span style={{ color: '#b45309' }}>🛠️ Total Failed Ever: <strong style={{ color: '#d97706' }}>{serials.length}</strong></span>
-                                <span style={{ color: '#b45309' }}>✅ Repaired & Revalidated: <strong style={{ color: '#059669' }}>{historyItems.filter(h => h.status === 'REVALIDATED_PASS').length}</strong></span>
+                                <span style={{ color: '#b45309' }}>Pending Rework:{' '}
+                                    <strong 
+                                        className="smt-clickable-count"
+                                        onClick={() => onCountClick && onCountClick('Rework', 'pending', 'Pending Rework')}
+                                        style={{ color: '#b45309' }}
+                                    >
+                                        {pendingItems.length}
+                                    </strong>
+                                </span>
+                                <span style={{ color: '#b45309' }}>🛠️ Total Failed Ever:{' '}
+                                    <strong 
+                                        className="smt-clickable-count"
+                                        onClick={() => onCountClick && onCountClick('Rework', 'total', 'Total Failed Ever')}
+                                        style={{ color: '#d97706' }}
+                                    >
+                                        {serials.length}
+                                    </strong>
+                                </span>
+                                <span style={{ color: '#b45309' }}>✅ Repaired & Revalidated:{' '}
+                                    <strong 
+                                        className="smt-clickable-count"
+                                        onClick={() => onCountClick && onCountClick('Rework', 'passed', 'Repaired & Revalidated')}
+                                        style={{ color: '#059669' }}
+                                    >
+                                        {historyItems.filter(h => h.status === 'REVALIDATED_PASS').length}
+                                    </strong>
+                                </span>
                             </div>
                         </div>
                         <button className={styles.secondaryButton} onClick={onBack}>Back</button>
@@ -511,6 +537,12 @@ const Rework: React.FC = () => {
 
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
     const [viewingWoId, setViewingWoId] = useState<string | null>(null);
+    const [selectedCount, setSelectedCount] = useState<{
+        workOrderId: string;
+        stage: string;
+        type: string;
+        label: string;
+    } | null>(null);
 
     const [formWoId, setFormWoId] = useState('');
     const [productName, setProductName] = useState('');
@@ -609,6 +641,12 @@ const Rework: React.FC = () => {
                     fetchData();
                 }}
                 operatorName={smtUser?.name || 'System'}
+                onCountClick={(stage, type, label) => setSelectedCount({
+                    workOrderId: viewingWoId!,
+                    stage,
+                    type,
+                    label
+                })}
             />
         );
     }
@@ -690,8 +728,28 @@ const Rework: React.FC = () => {
                                     <tr key={entry.id}>
                                         <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                         <td>{(entry.product_name || '').toUpperCase()}</td>
-                                        <td>{entry.quantity || entry.wo_qty}</td>
-                                        <td>{entry.panel_qty || 'N/A'}</td>
+                                        <td 
+                                            className="smt-clickable-count"
+                                            onClick={() => setSelectedCount({
+                                                workOrderId: entry.work_order_id,
+                                                stage: 'Rework',
+                                                type: 'total',
+                                                label: 'WO Quantity'
+                                            })}
+                                        >
+                                            {entry.quantity || entry.wo_qty}
+                                        </td>
+                                        <td 
+                                            className="smt-clickable-count"
+                                            onClick={() => setSelectedCount({
+                                                workOrderId: entry.work_order_id,
+                                                stage: 'Rework',
+                                                type: 'total',
+                                                label: 'Panel Quantity'
+                                            })}
+                                        >
+                                            {entry.panel_qty || 'N/A'}
+                                        </td>
                                         <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>{new Date(entry.timestamp).toLocaleTimeString()}</td>
                                         <td style={{ display: 'flex', gap: '5px' }}>
                                             <button
@@ -751,8 +809,28 @@ setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
                                     <tr key={entry.id}>
                                         <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                         <td>{(entry.product_name || '').toUpperCase()}</td>
-                                        <td>{entry.quantity || entry.wo_qty}</td>
-                                        <td>{entry.panel_qty || 'N/A'}</td>
+                                        <td 
+                                            className="smt-clickable-count"
+                                            onClick={() => setSelectedCount({
+                                                workOrderId: entry.work_order_id,
+                                                stage: 'Rework',
+                                                type: 'total',
+                                                label: 'WO Quantity'
+                                            })}
+                                        >
+                                            {entry.quantity || entry.wo_qty}
+                                        </td>
+                                        <td 
+                                            className="smt-clickable-count"
+                                            onClick={() => setSelectedCount({
+                                                workOrderId: entry.work_order_id,
+                                                stage: 'Rework',
+                                                type: 'total',
+                                                label: 'Panel Quantity'
+                                            })}
+                                        >
+                                            {entry.panel_qty || 'N/A'}
+                                        </td>
                                         <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>{new Date(entry.timestamp).toLocaleTimeString()}</td>
                                         <td style={{ display: 'flex', gap: '5px' }}>
                                             <button className={styles.secondaryButton} style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={() => setViewingWoId(entry.work_order_id)}>
@@ -788,6 +866,15 @@ setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
                     </div>
                 </div>
             </div>
+            {selectedCount && (
+                <SMTCountDetailsModal
+                    workOrderId={selectedCount.workOrderId}
+                    stage={selectedCount.stage}
+                    type={selectedCount.type}
+                    label={selectedCount.label}
+                    onClose={() => setSelectedCount(null)}
+                />
+            )}
         </>
     );
 };

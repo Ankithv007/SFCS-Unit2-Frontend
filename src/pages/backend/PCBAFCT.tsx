@@ -6,8 +6,10 @@ import sharedStyles from '../smt/WorkOrder.module.css';
 
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
+import { useBackendAuth } from '../../context/BackendAuthContext';
 import SearchInput from '../../components/SearchInput';
 import { Search, CheckCircle, MessageSquare, AlertTriangle, ArrowLeft, Eye, Trash2 } from 'lucide-react';
+import CountDetailsModal from '../../components/CountDetailsModal';
 
 interface Batch {
     id: number;
@@ -230,6 +232,7 @@ const ScanDecisionModal: React.FC<ScanDecisionModalProps> = ({ barcode, onFinali
 
 const PCBAFCT: React.FC = () => {
     const { user } = useAuth();
+    const { backendUser } = useBackendAuth();
     const { showToast } = useToast();
 
     const [pendingBatches, setPendingBatches] = useState<Batch[]>([]);
@@ -252,6 +255,59 @@ const PCBAFCT: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalRecords, setTotalRecords] = useState(0);
+
+    const [activeModal, setActiveModal] = useState<{
+        batchId: number;
+        batchNumber: string;
+        stageCode: string;
+        columnType: 'previousStagePassed' | 'scanned' | 'pending' | 'passed' | 'rework' | 'debug';
+        columnLabel: string;
+        failedStageId?: number;
+    } | null>(null);
+
+    const handleCountClick = (
+        batch: Batch, 
+        columnType: 'previousStagePassed' | 'scanned' | 'pending' | 'passed' | 'rework' | 'debug',
+        columnLabel: string
+    ) => {
+        setActiveModal({
+            batchId: batch.id,
+            batchNumber: batch.batch_number,
+            stageCode: 'PCBA_FCT',
+            columnType,
+            columnLabel
+        });
+    };
+
+    const [exportingBatchId, setExportingBatchId] = useState<number | null>(null);
+
+    const handleExportExcel = async (batch: Batch) => {
+        if (exportingBatchId !== null) return;
+        setExportingBatchId(batch.id);
+        try {
+            const blob = await apiFetch(`/api/backend/export/batch-report?batchId=${batch.id}&stageCode=PCBA_FCT`) as Blob;
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+
+            const now = new Date();
+            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+            const cleanBatch = batch.batch_number.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const fileName = `PCBA_FCT_Batch_Report_${cleanBatch}_${timestamp}.xlsx`;
+
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            showToast('Report downloaded successfully!', 'success');
+        } catch (error: any) {
+            console.error('Export error:', error);
+            showToast(error.message || 'Failed to export batch report', 'error');
+        } finally {
+            setExportingBatchId(null);
+        }
+    };
 
     const scanInputRef = useRef<HTMLInputElement>(null);
     const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
@@ -392,7 +448,7 @@ const PCBAFCT: React.FC = () => {
                     batch_id: activeBatch.id,
                     barcode: pendingBarcode,
                     work_order_id: activeBatch.work_order_id,
-                    scanned_by: user?.name || 'Operator',
+                    scanned_by: backendUser ? `${backendUser.name} (${backendUser.userId})` : (user?.name || 'Operator'),
                     status: status,
                     remarks: remarks
                 })
@@ -518,6 +574,7 @@ const PCBAFCT: React.FC = () => {
                             <th>Passed</th>
                             <th>Rework</th>
                             <th>Debug</th>
+                            <th>Download</th>
                             <th className={styles.actionColumn}>Action</th>
                         </tr>
                     </thead>
@@ -529,12 +586,59 @@ const PCBAFCT: React.FC = () => {
                                     <td>{batch.customer_name || "-"}</td>
                                     <td>{batch.model || "-"}</td>
                                     <td style={{ fontWeight: 600 }}>{batch.workOrderQty}</td>
-                                    {title === "Pending Batches" && batch.previousStagePassed !== undefined && <td style={{ fontWeight: 600, color: '#6366f1' }}>{batch.previousStagePassed}</td>}
-                                    <td className={styles.statusBlue}>{batch.scanned ?? 0}</td>
-                                    <td style={{ color: 'orange', fontWeight: 700 }}>{batch.pending ?? 0}</td>
-                                    <td className={styles.statusGreen}>{batch.passed ?? 0}</td>
-                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.rework ?? 0}</td>
-                                    <td style={{ color: '#ef4444', fontWeight: 700 }}>{batch.debug ?? 0}</td>
+                                    {title === "Pending Batches" && batch.previousStagePassed !== undefined && (
+                                        <td 
+                                            style={{ fontWeight: 600, color: '#4f46e5', cursor: 'pointer', textDecoration: 'underline' }}
+                                            onClick={() => handleCountClick(batch, 'previousStagePassed', 'Previous Stage Passed')}
+                                        >
+                                            {batch.previousStagePassed}
+                                        </td>
+                                    )}
+                                    {title === "Pending Batches" && !batch.previousStagePassed && batch.previousStagePassed !== 0 && data.some(b => b.previousStagePassed !== undefined) && (
+                                        <td>-</td>
+                                    )}
+                                    <td 
+                                        className={styles.statusBlue} 
+                                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handleCountClick(batch, 'scanned', 'Scanned')}
+                                    >
+                                        {batch.scanned ?? 0}
+                                    </td>
+                                    <td 
+                                        style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handleCountClick(batch, 'pending', 'Pending')}
+                                    >
+                                        {batch.pending ?? 0}
+                                    </td>
+                                    <td 
+                                        className={styles.statusGreen} 
+                                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handleCountClick(batch, 'passed', 'Passed')}
+                                    >
+                                        {batch.passed ?? 0}
+                                    </td>
+                                    <td 
+                                        style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handleCountClick(batch, 'rework', 'Rework')}
+                                    >
+                                        {batch.rework ?? 0}
+                                    </td>
+                                    <td 
+                                        style={{ color: '#dc2626', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handleCountClick(batch, 'debug', 'Debug')}
+                                    >
+                                        {batch.debug ?? 0}
+                                    </td>
+                                    <td>
+                                        <button 
+                                            className={sharedStyles.secondaryButton}
+                                            disabled={exportingBatchId === batch.id}
+                                            onClick={() => handleExportExcel(batch)}
+                                            style={{ minWidth: '90px' }}
+                                        >
+                                            {exportingBatchId === batch.id ? '...' : 'Export Excel'}
+                                        </button>
+                                    </td>
                                     <td className={styles.actionColumn}>
                                         <div className={sharedStyles.actions}>
                                             <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
@@ -550,7 +654,7 @@ const PCBAFCT: React.FC = () => {
                                 </tr>
                             ))
                         ) : (
-                            <tr><td colSpan={11} style={{ textAlign: 'center', padding: '2rem' }}>No batches found in this category.</td></tr>
+                            <tr><td colSpan={12} style={{ textAlign: 'center', padding: '2rem' }}>No batches found in this category.</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -651,7 +755,7 @@ const PCBAFCT: React.FC = () => {
                             <>
                                 <div className={styles.operatorSection}>
                                     <label>Scanned By</label>
-                                    <input type="text" className={styles.operatorInput} value={user?.name || ""} disabled />
+                                    <input type="text" className={styles.operatorInput} value={backendUser ? `${backendUser.name} (${backendUser.userId})` : (user?.name || "")} disabled />
                                 </div>
 
                                 <div className={styles.scanBoxWrapper}>
@@ -772,8 +876,19 @@ const PCBAFCT: React.FC = () => {
                     pcbBarcode={pendingUsnBarcode}
                     batchId={activeBatch.id}
                     workOrderId={(activeBatch as any).work_order_id}
-                    scannedBy={user?.name || 'Operator'}
+                    scannedBy={backendUser ? `${backendUser.name} (${backendUser.userId})` : (user?.name || 'Operator')}
                     onSuccess={handleUsnLinked}
+                />
+            )}
+
+            {activeModal && (
+                <CountDetailsModal
+                    batchId={activeModal.batchId}
+                    batchNumber={activeModal.batchNumber}
+                    stageCode={activeModal.stageCode}
+                    columnType={activeModal.columnType}
+                    columnLabel={activeModal.columnLabel}
+                    onClose={() => setActiveModal(null)}
                 />
             )}
         </div>

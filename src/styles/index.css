@@ -102,3 +102,63 @@ a:hover {
     white-space: nowrap;
     border: 0;
 }
+
+/* ==========================================================================
+   🔗 SMT PREMIUM CLICKABLE COUNT STYLING
+   ========================================================================== */
+.smt-clickable-count {
+    cursor: pointer !important;
+    text-decoration: underline !important;
+    font-weight: 700 !important;
+    transition: all 0.2s ease-in-out !important;
+}
+
+/* Scanned / Total counts (Blue) */
+.smt-clickable-count,
+.smt-clickable-count.smt-total,
+.smt-clickable-count.smt-scanned {
+    color: #2563eb !important;
+}
+.smt-clickable-count:hover,
+.smt-clickable-count.smt-total:hover,
+.smt-clickable-count.smt-scanned:hover {
+    color: #1d4ed8 !important;
+    opacity: 0.85 !important;
+}
+
+/* Passed counts (Green) */
+.smt-clickable-count.smt-passed,
+.smt-clickable-count.smt-fg-count {
+    color: #059669 !important;
+}
+.smt-clickable-count.smt-passed:hover,
+.smt-clickable-count.smt-fg-count:hover {
+    color: #047857 !important;
+    opacity: 0.85 !important;
+}
+
+/* Pending / Previous Passed / Panel Qty (Amber/Orange) */
+.smt-clickable-count.smt-pending,
+.smt-clickable-count.smt-previous-passed,
+.smt-clickable-count.smt-panel-count {
+    color: #d97706 !important;
+}
+.smt-clickable-count.smt-pending:hover,
+.smt-clickable-count.smt-previous-passed:hover,
+.smt-clickable-count.smt-panel-count:hover {
+    color: #b45309 !important;
+    opacity: 0.85 !important;
+}
+
+/* Failed / Rework / Debug counts (Red) */
+.smt-clickable-count.smt-failed,
+.smt-clickable-count.smt-rework,
+.smt-clickable-count.smt-debug {
+    color: #dc2626 !important;
+}
+.smt-clickable-count.smt-failed:hover,
+.smt-clickable-count.smt-rework:hover,
+.smt-clickable-count.smt-debug:hover {
+    color: #b91c1c !important;
+    opacity: 0.85 !important;
+}

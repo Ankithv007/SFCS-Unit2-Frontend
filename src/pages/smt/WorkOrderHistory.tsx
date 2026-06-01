@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import styles from './WorkOrderHistory.module.css';
+import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
 
 interface WorkOrderHistoryData {
     work_order_id: string;
@@ -17,6 +18,12 @@ interface WorkOrderHistoryData {
 
 export const WorkOrderHistory: React.FC = () => {
     const location = useLocation();
+    const [selectedCount, setSelectedCount] = useState<{
+        workOrderId: string;
+        stage: string;
+        type: string;
+        label: string;
+    } | null>(null);
 
     // Filters state
     const [areaId, setAreaId] = useState('SMT');
@@ -191,9 +198,41 @@ export const WorkOrderHistory: React.FC = () => {
                                             <td>{row.area_id}</td>
                                             <td>{row.line_id}</td>
                                             <td>{row.product_name}</td>
-                                            <td style={{ fontWeight: 600 }}>{row.total_qty}</td>
-                                            <td style={{ color: '#10b981', fontWeight: 600 }}>{row.completed_qty}</td>
-                                            <td style={{ color: '#ef4444', fontWeight: 600 }}>{row.balance_qty}</td>
+                                            <td 
+                                                className="smt-clickable-count" 
+                                                onClick={() => setSelectedCount({
+                                                    workOrderId: row.work_order_id,
+                                                    stage: 'Work Order',
+                                                    type: 'total',
+                                                    label: 'Total Quantity'
+                                                })}
+                                            >
+                                                {row.total_qty}
+                                            </td>
+                                            <td 
+                                                className="smt-clickable-count" 
+                                                onClick={() => setSelectedCount({
+                                                    workOrderId: row.work_order_id,
+                                                    stage: 'Work Order',
+                                                    type: 'completed',
+                                                    label: 'Completed Quantity'
+                                                })}
+                                                style={{ color: '#10b981' }}
+                                            >
+                                                {row.completed_qty}
+                                            </td>
+                                            <td 
+                                                className="smt-clickable-count" 
+                                                onClick={() => setSelectedCount({
+                                                    workOrderId: row.work_order_id,
+                                                    stage: 'Work Order',
+                                                    type: 'pending',
+                                                    label: 'Balance Quantity'
+                                                })}
+                                                style={{ color: '#ef4444' }}
+                                            >
+                                                {row.balance_qty}
+                                            </td>
                                             <td>{row.created_by || 'System'}</td>
                                             <td>
                                                 {new Date(row.run_date_time).toLocaleDateString()} <br />
@@ -213,6 +252,15 @@ export const WorkOrderHistory: React.FC = () => {
                     </table>
                 </div>
             </div>
+            {selectedCount && (
+                <SMTCountDetailsModal
+                    workOrderId={selectedCount.workOrderId}
+                    stage={selectedCount.stage}
+                    type={selectedCount.type}
+                    label={selectedCount.label}
+                    onClose={() => setSelectedCount(null)}
+                />
+            )}
         </div>
     );
 };

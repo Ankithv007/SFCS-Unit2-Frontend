@@ -7,6 +7,7 @@ import { Pagination } from '../../components/Pagination';
 import QRCode from 'qrcode';
 import QRCodeReact from 'react-qr-code';
 import { useToast } from '../../components/Toast';
+import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
 
 interface SmtWorkOrder {
     id: string;
@@ -67,6 +68,13 @@ const PCBGeneration: React.FC = () => {
     const [completedPage, setCompletedPage] = useState(1);
     const [scannedPage, setScannedPage] = useState(1);
     const ITEMS_PER_PAGE = 10;
+
+    const [selectedCount, setSelectedCount] = useState<{
+        workOrderId: string;
+        stage: string;
+        type: string;
+        label: string;
+    } | null>(null);
 
     // Remaining Modal State
     const [showRemainingModal, setShowRemainingModal] = useState(false);
@@ -768,9 +776,39 @@ const PCBGeneration: React.FC = () => {
                                             <td style={{ fontWeight: 600 }}>{batch.id}</td>
                                             <td>{batch.product_name}</td>
                                             <td style={{ color: '#4f46e5', fontWeight: 600 }}>{batch.barcode_source}</td>
-                                            <td>{batch.quantity}</td>
-                                            <td className={styles.statusBlue}>{batch.scanned_count}</td>
-                                            <td className={styles.statusYellow}>{batch.quantity - Number(batch.scanned_count)}</td>
+                                            <td 
+                                                className="smt-clickable-count"
+                                                onClick={() => setSelectedCount({
+                                                    workOrderId: batch.id,
+                                                    stage: 'PCB Registration',
+                                                    type: 'total',
+                                                    label: 'Total Quantity'
+                                                })}
+                                            >
+                                                {batch.quantity}
+                                            </td>
+                                            <td 
+                                                className={`smt-clickable-count ${styles.statusBlue}`}
+                                                onClick={() => setSelectedCount({
+                                                    workOrderId: batch.id,
+                                                    stage: 'PCB Registration',
+                                                    type: 'scanned',
+                                                    label: 'Scanned Quantity'
+                                                })}
+                                            >
+                                                {batch.scanned_count}
+                                            </td>
+                                            <td 
+                                                className={`smt-clickable-count ${styles.statusYellow}`}
+                                                onClick={() => setSelectedCount({
+                                                    workOrderId: batch.id,
+                                                    stage: 'PCB Registration',
+                                                    type: 'pending',
+                                                    label: 'Pending Quantity'
+                                                })}
+                                            >
+                                                {batch.quantity - Number(batch.scanned_count)}
+                                            </td>
                                             <td><span className={`${styles.badge} ${styles.badgeInfo}`}>PENDING</span></td>
                                             <td>
                                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -832,9 +870,39 @@ const PCBGeneration: React.FC = () => {
                                             <td style={{ fontWeight: 600 }}>{batch.id}</td>
                                             <td>{batch.product_name}</td>
                                             <td style={{ color: '#4f46e5', fontWeight: 600 }}>{batch.barcode_source}</td>
-                                            <td>{batch.quantity}</td>
-                                            <td className={styles.statusGreen}>{batch.scanned_count}</td>
-                                            <td className={styles.statusGreen}>0</td>
+                                            <td 
+                                                className="smt-clickable-count"
+                                                onClick={() => setSelectedCount({
+                                                    workOrderId: batch.id,
+                                                    stage: 'PCB Registration',
+                                                    type: 'total',
+                                                    label: 'Total Quantity'
+                                                })}
+                                            >
+                                                {batch.quantity}
+                                            </td>
+                                            <td 
+                                                className={`smt-clickable-count ${styles.statusGreen}`}
+                                                onClick={() => setSelectedCount({
+                                                    workOrderId: batch.id,
+                                                    stage: 'PCB Registration',
+                                                    type: 'passed',
+                                                    label: 'Completed Quantity'
+                                                })}
+                                            >
+                                                {batch.scanned_count}
+                                            </td>
+                                            <td 
+                                                className={`smt-clickable-count ${styles.statusGreen}`}
+                                                onClick={() => setSelectedCount({
+                                                    workOrderId: batch.id,
+                                                    stage: 'PCB Registration',
+                                                    type: 'pending',
+                                                    label: 'Pending Quantity'
+                                                })}
+                                            >
+                                                0
+                                            </td>
                                             <td><span className={`${styles.badge} ${styles.badgeSuccess}`}>COMPLETED</span></td>
                                             <td>
                                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -881,9 +949,46 @@ const PCBGeneration: React.FC = () => {
                             <h3>Work Order: {activeBatch.id}</h3>
                             <small>Product: {activeBatch.product_name} | Source: {activeBatch.barcode_source}</small>
                             <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', fontSize: '0.95rem', color: '#4b5563', marginTop: '0.5rem' }}>
-                                <span>Total Scanned: <strong>{scannedComponents.length}</strong> / {activeBatch.barcode_source !== 'PRE_EXISTING' ? (activeBatch.generated_qty || allSerials.length) : activeBatch.quantity}</span>
-                                <span style={{ color: '#2563eb', fontWeight: 600 }}>Scanned Qty: {scannedComponents.length}</span>
-                                <span style={{ color: '#f59e0b', fontWeight: 600 }}>Pending Qty: {Math.max(0, (activeBatch.barcode_source !== 'PRE_EXISTING' ? (activeBatch.generated_qty || allSerials.length) : activeBatch.quantity) - scannedComponents.length)}</span>
+                                <span>Total Scanned:{' '}
+                                    <strong 
+                                        className="smt-clickable-count"
+                                        onClick={() => setSelectedCount({
+                                            workOrderId: activeBatch.id,
+                                            stage: 'PCB Registration',
+                                            type: 'scanned',
+                                            label: 'Total Scanned'
+                                        })}
+                                    >
+                                        {scannedComponents.length}
+                                    </strong>{' '}
+                                    / {activeBatch.barcode_source !== 'PRE_EXISTING' ? (activeBatch.generated_qty || allSerials.length) : activeBatch.quantity}
+                                </span>
+                                <span style={{ color: '#2563eb', fontWeight: 600 }}>Scanned Qty:{' '}
+                                    <span 
+                                        className="smt-clickable-count"
+                                        onClick={() => setSelectedCount({
+                                            workOrderId: activeBatch.id,
+                                            stage: 'PCB Registration',
+                                            type: 'scanned',
+                                            label: 'Scanned Qty'
+                                        })}
+                                    >
+                                        {scannedComponents.length}
+                                    </span>
+                                </span>
+                                <span style={{ color: '#f59e0b', fontWeight: 600 }}>Pending Qty:{' '}
+                                    <span 
+                                        className="smt-clickable-count"
+                                        onClick={() => setSelectedCount({
+                                            workOrderId: activeBatch.id,
+                                            stage: 'PCB Registration',
+                                            type: 'pending',
+                                            label: 'Pending Qty'
+                                        })}
+                                    >
+                                        {Math.max(0, (activeBatch.barcode_source !== 'PRE_EXISTING' ? (activeBatch.generated_qty || allSerials.length) : activeBatch.quantity) - scannedComponents.length)}
+                                    </span>
+                                </span>
                             </div>
                         </div>
                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -1125,6 +1230,15 @@ const PCBGeneration: React.FC = () => {
                         </div>
                     )}
                 </>
+            )}
+            {selectedCount && (
+                <SMTCountDetailsModal
+                    workOrderId={selectedCount.workOrderId}
+                    stage={selectedCount.stage}
+                    type={selectedCount.type}
+                    label={selectedCount.label}
+                    onClose={() => setSelectedCount(null)}
+                />
             )}
         </div>
     );

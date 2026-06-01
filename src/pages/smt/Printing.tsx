@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import styles from './Printing.module.css';
 import QRCode from 'react-qr-code';
 import { apiFetch } from '../../utils/api';
+import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
@@ -31,9 +32,10 @@ interface PrintingDetailProps {
     onBack: () => void;
     operatorName: string;
     workOrderQty: number;
+    onCountClick?: (type: string, label: string) => void;
 }
 
-const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorName, workOrderQty }) => {
+const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorName, workOrderQty, onCountClick }) => {
     const [serials, setSerials] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [scanBarcode, setScanBarcode] = useState('');
@@ -189,10 +191,42 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
                     <div>
                         <h3>🖨️ Printing Batch Detail: {woId}</h3>
                         <div className={styles.detailStats} style={{ gap: '1.5rem' }}>
-                            <span style={{ color: '#475569' }}>Total Scanned: <strong style={{ color: '#2563eb' }}>{passedQty} / {workOrderQty}</strong></span>
-                            <span style={{ color: '#059669' }}>Passed: <strong>{passedQty}</strong></span>
-                            <span style={{ color: '#ef4444' }}>Failed: <strong>{failedQty}</strong></span>
-                            <span style={{ color: '#d97706' }}>Pending: <strong>{pendingQty}</strong></span>
+                            <span style={{ color: '#475569' }}>Total Scanned:{' '}
+                                <strong 
+                                    className="smt-clickable-count"
+                                    onClick={() => onCountClick && onCountClick('scanned', 'Total Scanned')}
+                                >
+                                    {passedQty}
+                                </strong>{' '}
+                                / {workOrderQty}
+                            </span>
+                            <span style={{ color: '#059669' }}>Passed:{' '}
+                                <strong 
+                                    className="smt-clickable-count"
+                                    onClick={() => onCountClick && onCountClick('passed', 'Passed')}
+                                    style={{ color: '#059669' }}
+                                >
+                                    {passedQty}
+                                </strong>
+                            </span>
+                            <span style={{ color: '#ef4444' }}>Failed:{' '}
+                                <strong 
+                                    className="smt-clickable-count"
+                                    onClick={() => onCountClick && onCountClick('failed', 'Failed')}
+                                    style={{ color: '#ef4444' }}
+                                >
+                                    {failedQty}
+                                </strong>
+                            </span>
+                            <span style={{ color: '#d97706' }}>Pending:{' '}
+                                <strong 
+                                    className="smt-clickable-count"
+                                    onClick={() => onCountClick && onCountClick('pending', 'Pending')}
+                                    style={{ color: '#d97706' }}
+                                >
+                                    {pendingQty}
+                                </strong>
+                            </span>
                         </div>
                     </div>
                     <button onClick={onBack} className={styles.detailBackButton}>Back</button>
@@ -359,6 +393,12 @@ export const Printing: React.FC = () => {
 
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
     const [viewingWoId, setViewingWoId] = useState<string | null>(null);
+    const [selectedCount, setSelectedCount] = useState<{
+        workOrderId: string;
+        stage: string;
+        type: string;
+        label: string;
+    } | null>(null);
 
     // Form state
     const [formWoId, setFormWoId] = useState('');
@@ -539,6 +579,12 @@ export const Printing: React.FC = () => {
                         }}
                         operatorName={smtUser?.name || 'System'}
                         workOrderQty={workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (viewingWoId || '').toUpperCase())?.quantity || 0}
+                        onCountClick={(type, label) => setSelectedCount({
+                            workOrderId: viewingWoId,
+                            stage: 'Printing',
+                            type,
+                            label
+                        })}
                     />
                 ) : (
                     <>
@@ -669,8 +715,28 @@ export const Printing: React.FC = () => {
                                             <tr key={entry.id}>
                                                 <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                                 <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                <td>{entry.quantity || entry.wo_qty}</td>
-                                                <td>{entry.panel_qty || 'N/A'}</td>
+                                                <td 
+                                                    className="smt-clickable-count"
+                                                    onClick={() => setSelectedCount({
+                                                        workOrderId: entry.work_order_id,
+                                                        stage: 'Printing',
+                                                        type: 'total',
+                                                        label: 'WO Quantity'
+                                                    })}
+                                                >
+                                                    {entry.quantity || entry.wo_qty}
+                                                </td>
+                                                <td 
+                                                    className="smt-clickable-count"
+                                                    onClick={() => setSelectedCount({
+                                                        workOrderId: entry.work_order_id,
+                                                        stage: 'Printing',
+                                                        type: 'total',
+                                                        label: 'Panel Quantity'
+                                                    })}
+                                                >
+                                                    {entry.panel_qty || 'N/A'}
+                                                </td>
                                                 <td>{entry.stencil_name || '-'}</td>
                                                 <td>{entry.squeegee_number || '-'}</td>
                                                 <td>{entry.solder_paste || '-'}</td>
@@ -741,8 +807,28 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                             <tr key={entry.id}>
                                                 <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                                 <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                <td>{entry.quantity || entry.wo_qty}</td>
-                                                <td>{entry.panel_qty || 'N/A'}</td>
+                                                <td 
+                                                    className="smt-clickable-count"
+                                                    onClick={() => setSelectedCount({
+                                                        workOrderId: entry.work_order_id,
+                                                        stage: 'Printing',
+                                                        type: 'total',
+                                                        label: 'WO Quantity'
+                                                    })}
+                                                >
+                                                    {entry.quantity || entry.wo_qty}
+                                                </td>
+                                                <td 
+                                                    className="smt-clickable-count"
+                                                    onClick={() => setSelectedCount({
+                                                        workOrderId: entry.work_order_id,
+                                                        stage: 'Printing',
+                                                        type: 'total',
+                                                        label: 'Panel Quantity'
+                                                    })}
+                                                >
+                                                    {entry.panel_qty || 'N/A'}
+                                                </td>
                                                 <td>{entry.stencil_name || '-'}</td>
                                                 <td>{entry.squeegee_number || '-'}</td>
                                                 <td>{entry.solder_paste || '-'}</td>
@@ -792,6 +878,15 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                     </>
                 )}
             </div>
+            {selectedCount && (
+                <SMTCountDetailsModal
+                    workOrderId={selectedCount.workOrderId}
+                    stage={selectedCount.stage}
+                    type={selectedCount.type}
+                    label={selectedCount.label}
+                    onClose={() => setSelectedCount(null)}
+                />
+            )}
         </>
     );
 };

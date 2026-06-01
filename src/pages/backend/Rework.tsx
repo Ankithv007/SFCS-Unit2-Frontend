@@ -6,9 +6,11 @@ import sharedStyles from '../smt/WorkOrder.module.css';
 
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
+import { useBackendAuth } from '../../context/BackendAuthContext';
 import SearchInput from '../../components/SearchInput';
 import ScanDecisionModal from '../../components/ScanDecisionModal';
 import { Search, ArrowLeft, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import CountDetailsModal from '../../components/CountDetailsModal';
 
 interface Batch {
     id: number;
@@ -44,6 +46,7 @@ interface ScanRecord {
 
 const Rework: React.FC = () => {
     const { user } = useAuth();
+    const { backendUser } = useBackendAuth();
     const { showToast } = useToast();
 
     const [activeFailureBatches, setActiveFailureBatches] = useState<Batch[]>([]);
@@ -56,6 +59,30 @@ const Rework: React.FC = () => {
     const [scannedItems, setScannedItems] = useState<ScanRecord[]>([]);
     const [tableSearch, setTableSearch] = useState('');
     const [isScanning, setIsScanning] = useState(false);
+
+    const [activeModal, setActiveModal] = useState<{
+        batchId: number;
+        batchNumber: string;
+        stageCode: string;
+        columnType: 'previousStagePassed' | 'scanned' | 'pending' | 'passed' | 'rework' | 'debug';
+        columnLabel: string;
+        failedStageId?: number;
+    } | null>(null);
+
+    const handleCountClick = (
+        batch: Batch, 
+        columnType: 'previousStagePassed' | 'scanned' | 'pending' | 'passed' | 'rework' | 'debug',
+        columnLabel: string
+    ) => {
+        setActiveModal({
+            batchId: batch.id,
+            batchNumber: batch.batch_number,
+            stageCode: 'REWORK',
+            columnType,
+            columnLabel,
+            failedStageId: batch.failedStageId
+        });
+    };
 
     const [barcode, setBarcode] = useState('');
     const scanInputRef = useRef<HTMLInputElement>(null);
@@ -175,7 +202,7 @@ const Rework: React.FC = () => {
                     work_order_id: activeBatch.work_order_id,
                     failed_stage_id: activeBatch.failedStageId,
                     barcode: pendingBarcode,
-                    scanned_by: user?.name || 'Operator',
+                    scanned_by: backendUser ? `${backendUser.name} (${backendUser.userId})` : (user?.name || 'Operator'),
                     status: status,
                     remarks: remarks
                 })
@@ -241,10 +268,32 @@ const Rework: React.FC = () => {
                                     <td>{batch.model || "-"}</td>
                                     <td style={{ fontWeight: 600 }}>{batch.workOrderQty}</td>
                                     <td style={{ color: '#6366f1', fontWeight: 700 }}>{batch.sourceStage || "-"}</td>
-                                    <td className={styles.statusBlue}>{batch.scanned || 0}</td>
-                                    <td style={{ color: 'orange', fontWeight: 700 }}>{batch.pending || 0}</td>
-                                    <td className={styles.statusGreen}>{batch.passed || 0}</td>
-                                    <td style={{ color: '#f59e0b', fontWeight: 700 }}>{batch.rework || 0}</td>
+                                    <td 
+                                        className={styles.statusBlue} 
+                                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handleCountClick(batch, 'scanned', 'Scanned')}
+                                    >
+                                        {batch.scanned || 0}
+                                    </td>
+                                    <td 
+                                        style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handleCountClick(batch, 'pending', 'Pending')}
+                                    >
+                                        {batch.pending || 0}
+                                    </td>
+                                    <td 
+                                        className={styles.statusGreen} 
+                                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handleCountClick(batch, 'passed', 'Passed')}
+                                    >
+                                        {batch.passed || 0}
+                                    </td>
+                                    <td 
+                                        style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                                        onClick={() => handleCountClick(batch, 'rework', 'Rework')}
+                                    >
+                                        {batch.rework || 0}
+                                    </td>
                                     <td className={styles.actionColumn}>
                                         <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
                                             <Search size={14} /> Start Repair
@@ -352,7 +401,7 @@ const Rework: React.FC = () => {
 
                         <div className={styles.operatorSection}>
                             <label>Repair Operator</label>
-                            <input type="text" className={styles.operatorInput} value={user?.name || ""} disabled />
+                            <input type="text" className={styles.operatorInput} value={backendUser ? `${backendUser.name} (${backendUser.userId})` : (user?.name || "")} disabled />
                         </div>
 
                         <div className={styles.scanBoxWrapper}>
@@ -430,6 +479,18 @@ const Rework: React.FC = () => {
                     repairMode="REWORK"
                     onFinalize={handleScanFinalize}
                     onClose={() => setPendingBarcode(null)}
+                />
+            )}
+
+            {activeModal && (
+                <CountDetailsModal
+                    batchId={activeModal.batchId}
+                    batchNumber={activeModal.batchNumber}
+                    stageCode={activeModal.stageCode}
+                    columnType={activeModal.columnType}
+                    columnLabel={activeModal.columnLabel}
+                    failedStageId={activeModal.failedStageId}
+                    onClose={() => setActiveModal(null)}
                 />
             )}
         </div>

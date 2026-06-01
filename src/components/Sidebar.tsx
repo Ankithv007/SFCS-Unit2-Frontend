@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useSmtAuth } from '../context/SmtAuthContext';
+import { useToast } from './Toast';
 import styles from './Sidebar.module.css';
 
 interface SidebarProps {
@@ -11,14 +13,26 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMouseLeave }) => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { smtUser } = useSmtAuth();
+    const { showToast } = useToast();
     const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
-    React.useEffect(() => {
+    const isSmtAdmin = smtUser && ['Super Admin', 'Admin', 'Manager'].includes(smtUser.role);
+
+    useEffect(() => {
         if (location.pathname.startsWith('/pre-testing')) setExpandedModule('pre-testing');
         else if (location.pathname.startsWith('/smt')) setExpandedModule('smt');
         else if (location.pathname.startsWith('/backend')) setExpandedModule('backend');
         else if (location.pathname === '/purchase-order' || location.pathname === '/wip-stack' || location.pathname === '/return-wip' || location.pathname === '/report') setExpandedModule('inventory-report');
     }, [location.pathname]);
+
+    useEffect(() => {
+        if (location.state?.accessError) {
+            showToast(location.state.accessError, 'error');
+            // Clear history state immediately to prevent toast from reappearing on refresh
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state, showToast]);
 
     const toggleModule = (module: string) => {
         setExpandedModule(expandedModule === module ? null : module);
@@ -75,7 +89,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                     <div className={styles.submenu}>
                         <div
                             className={`${styles.submenuItem} ${isActive('/smt/work-order') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/work-order')}
+                            onClick={() => {
+                                if (isSmtAdmin) {
+                                    navigate('/smt/work-order');
+                                } else {
+                                    showToast('Access Denied: Only Admins or Managers can access this page.', 'error');
+                                }
+                            }}
                         >
                             <span className={styles.menuIcon}>
                                 <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
@@ -83,7 +103,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                         </div>
                         <div
                             className={`${styles.submenuItem} ${isActive('/smt/workorder-history') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/workorder-history', { state: { areaId: 'SMT' } })}
+                            onClick={() => {
+                                if (isSmtAdmin) {
+                                    navigate('/smt/workorder-history', { state: { areaId: 'SMT' } });
+                                } else {
+                                    showToast('Access Denied: Only Admins or Managers can access this page.', 'error');
+                                }
+                            }}
                         >
                             <span className={styles.menuIcon}>
                                 <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />

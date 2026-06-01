@@ -496,7 +496,7 @@ export const WorkOrder: React.FC = () => {
                                         <td>{wo.product_name}</td>
                                         <DescriptionCell text={wo.product_description} />
                                         <td 
-                                            className="smt-clickable-count" 
+                                            className="smt-clickable-count smt-total" 
                                             onClick={() => setSelectedCount({
                                                 workOrderId: wo.work_order_id,
                                                 stage: 'Work Order',
@@ -507,7 +507,7 @@ export const WorkOrder: React.FC = () => {
                                             {wo.quantity}
                                         </td>
                                         <td 
-                                            className="smt-clickable-count" 
+                                            className="smt-clickable-count smt-panel-count" 
                                             onClick={() => setSelectedCount({
                                                 workOrderId: wo.work_order_id,
                                                 stage: 'Work Order',

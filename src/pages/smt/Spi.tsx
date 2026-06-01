@@ -379,6 +379,18 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName, onCou
 
     const printingPassedSerials = allWoSerials.filter(s => s.step_status === 'PASS');
 
+    const activeSerials = Object.values(
+        tableSerials.reduce((acc, s) => {
+            const existing = acc[s.id];
+            if (!existing || new Date(s.scanned_at).getTime() > new Date(existing.scanned_at).getTime()) {
+                acc[s.id] = s;
+            }
+            return acc;
+        }, {} as { [key: number]: any })
+    );
+    const activePassedCount = activeSerials.filter((s: any) => s.last_status === 'PASS').length;
+    const activeFailedCount = activeSerials.filter((s: any) => s.last_status === 'FAIL').length;
+
     return (
         <>
             <style>{`
@@ -396,47 +408,43 @@ const SpiDetail: React.FC<SpiDetailProps> = ({ woId, onBack, operatorName, onCou
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
                                 <span style={{ color: '#3b82f6' }}>Printing Passed:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-previous-passed"
                                         onClick={() => onCountClick && onCountClick('Printing', 'passed', 'Printing Passed')}
-                                        style={{ color: '#3b82f6' }}
                                     >
                                         {printingPassedSerials.length}
                                     </strong>
                                 </span>
                                 <span style={{ color: '#475569' }}>Total Scanned:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-scanned"
                                         onClick={() => onCountClick && onCountClick('SPI', 'scanned', 'Total Scanned')}
                                     >
-                                        {tableSerials.filter(s => s.last_status === 'PASS').length}
+                                        {activeSerials.length}
                                     </strong>{' '}
                                     / {totalSerials}
                                 </span>
                                 <span style={{ color: '#059669' }}>Passed:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-passed"
                                         onClick={() => onCountClick && onCountClick('SPI', 'passed', 'Passed')}
-                                        style={{ color: '#059669' }}
                                     >
-                                        {tableSerials.filter(s => s.last_status === 'PASS').length}
+                                        {activePassedCount}
                                     </strong>
                                 </span>
                                 <span style={{ color: '#ef4444' }}>Failed:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-failed"
                                         onClick={() => onCountClick && onCountClick('SPI', 'failed', 'Failed')}
-                                        style={{ color: '#ef4444' }}
                                     >
-                                        {tableSerials.filter(s => s.last_status === 'FAIL').length}
+                                        {activeFailedCount}
                                     </strong>
                                 </span>
                                 <span style={{ color: '#d97706' }}>Pending:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-pending"
                                         onClick={() => onCountClick && onCountClick('SPI', 'pending', 'Pending')}
-                                        style={{ color: '#d97706' }}
                                     >
-                                        {totalSerials - tableSerials.filter(s => s.last_status === 'PASS').length}
+                                        {totalSerials - activePassedCount}
                                     </strong>
                                 </span>
                             </div>
@@ -589,6 +597,36 @@ const Spi: React.FC = () => {
     const { user } = useAuth();
     const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
     const [workOrders, setWorkOrders] = useState<any[]>([]);
+    const [exportingWoId, setExportingWoId] = useState<string | null>(null);
+
+    const handleExportExcel = async (workOrderId: string, processStep: string) => {
+        if (exportingWoId !== null) return;
+        setExportingWoId(workOrderId);
+        try {
+            const blob = await apiFetch(`/api/smt/export/excel?work_order_id=${workOrderId}&process_step=${processStep}`) as Blob;
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+
+            const now = new Date();
+            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+            const cleanWo = workOrderId.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const fileName = `SMT_${processStep.replace(/\s+/g, '_')}_Report_${cleanWo}_${timestamp}.xlsx`;
+
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            addToast('Report downloaded successfully!', 'success');
+        } catch (error: any) {
+            console.error('Export error:', error);
+            addToast(error.message || 'Failed to export report', 'error');
+        } finally {
+            setExportingWoId(null);
+        }
+    };
+
     const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
     const [selectedCount, setSelectedCount] = useState<{
         workOrderId: string;
@@ -720,6 +758,16 @@ const Spi: React.FC = () => {
             latestBySerial[i.serial_id] = i.status;
         });
         return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    };
+
+    const getFailedCount = (woId: string) => {
+        const woInspections = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
+        const latestBySerial: { [key: number]: string } = {};
+        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
+        sorted.forEach(i => {
+            latestBySerial[i.serial_id] = i.status;
+        });
+        return Object.values(latestBySerial).filter(status => status === 'FAIL').length;
     };
 
     const getPrintingPassedCount = (woId: string) => {
@@ -879,6 +927,7 @@ const Spi: React.FC = () => {
                                             <th>PANEL QTY</th>
                                             <th>PRINTING PASSED</th>
                                             <th>PASSED</th>
+                                            <th>FAILED</th>
                                             <th>PENDING</th>
                                             <th>TIME</th>
                                             <th>ACTION</th>
@@ -887,6 +936,7 @@ const Spi: React.FC = () => {
                                     <tbody>
                                         {pendingEntries.map((entry) => {
                                             const passedVal = getPassedCount(entry.work_order_id);
+                                            const failedVal = getFailedCount(entry.work_order_id);
                                             const printingPassedVal = getPrintingPassedCount(entry.work_order_id);
                                             const totalVal = entry.quantity || entry.wo_qty || 0;
                                             const pendingVal = Math.max(0, totalVal - passedVal);
@@ -895,7 +945,7 @@ const Spi: React.FC = () => {
                                                     <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-total"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SPI',
@@ -906,7 +956,7 @@ const Spi: React.FC = () => {
                                                         {totalVal}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-panel-count"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SPI',
@@ -917,38 +967,50 @@ const Spi: React.FC = () => {
                                                         {entry.panel_qty || 'N/A'}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-previous-passed"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'Printing',
                                                             type: 'passed',
                                                             label: 'Printing Passed'
                                                         })}
-                                                        style={{ fontWeight: 'bold', color: '#3b82f6' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {printingPassedVal}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-passed"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SPI',
                                                             type: 'passed',
                                                             label: 'Passed'
                                                         })}
-                                                        style={{ fontWeight: 'bold', color: '#10b981' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {passedVal}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-failed"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'failed',
+                                                            label: 'Failed'
+                                                        })}
+                                                        style={{ fontWeight: 'bold' }}
+                                                    >
+                                                        {failedVal}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count smt-pending"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SPI',
                                                             type: 'pending',
                                                             label: 'Pending'
                                                         })}
-                                                        style={{ fontWeight: 'bold', color: '#f59e0b' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {pendingVal}
                                                     </td>
@@ -1008,14 +1070,17 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                             <th>PANEL QTY</th>
                                             <th>PRINTING PASSED</th>
                                             <th>PASSED</th>
+                                            <th>FAILED</th>
                                             <th>PENDING</th>
                                             <th>TIME</th>
+                                            <th>DOWNLOAD</th>
                                             <th>ACTION</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {completedEntries.map((entry) => {
                                             const passedVal = getPassedCount(entry.work_order_id);
+                                            const failedVal = getFailedCount(entry.work_order_id);
                                             const printingPassedVal = getPrintingPassedCount(entry.work_order_id);
                                             const totalVal = entry.quantity || entry.wo_qty || 0;
                                             const pendingVal = Math.max(0, totalVal - passedVal);
@@ -1024,7 +1089,7 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                                     <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-total"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SPI',
@@ -1035,7 +1100,7 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                                         {totalVal}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-panel-count"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SPI',
@@ -1046,43 +1111,103 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                                         {entry.panel_qty || 'N/A'}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-previous-passed"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'Printing',
                                                             type: 'passed',
                                                             label: 'Printing Passed'
                                                         })}
-                                                        style={{ fontWeight: 'bold', color: '#3b82f6' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {printingPassedVal}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-passed"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SPI',
                                                             type: 'passed',
                                                             label: 'Passed'
                                                         })}
-                                                        style={{ fontWeight: 'bold', color: '#10b981' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {passedVal}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-failed"
+                                                        onClick={() => setSelectedCount({
+                                                            workOrderId: entry.work_order_id,
+                                                            stage: 'SPI',
+                                                            type: 'failed',
+                                                            label: 'Failed'
+                                                        })}
+                                                        style={{ fontWeight: 'bold' }}
+                                                    >
+                                                        {failedVal}
+                                                    </td>
+                                                    <td 
+                                                        className="smt-clickable-count smt-pending"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SPI',
                                                             type: 'pending',
                                                             label: 'Pending'
                                                         })}
-                                                        style={{ fontWeight: 'bold', color: '#f59e0b' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {pendingVal}
                                                     </td>
                                                     <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
                                                         {new Date(entry.timestamp).toLocaleTimeString()}
+                                                    </td>
+                                                    <td>
+                                                        <button 
+                                                            className={styles.secondaryButton}
+                                                            disabled={exportingWoId === entry.work_order_id}
+                                                            onClick={() => handleExportExcel(entry.work_order_id, 'SPI')}
+                                                            style={{
+                                                                padding: '0.4rem',
+                                                                minWidth: '40px',
+                                                                width: '40px',
+                                                                height: '40px',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                borderRadius: '50%',
+                                                                backgroundColor: '#f0fdf4',
+                                                                border: '1px solid #bbf7d0',
+                                                                color: '#166534',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s ease',
+                                                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                                            }}
+                                                            title="Export to Excel"
+                                                            onMouseEnter={(e) => {
+                                                                e.currentTarget.style.backgroundColor = '#166534';
+                                                                e.currentTarget.style.color = '#ffffff';
+                                                                e.currentTarget.style.borderColor = '#166534';
+                                                                e.currentTarget.style.transform = 'scale(1.08)';
+                                                            }}
+                                                            onMouseLeave={(e) => {
+                                                                e.currentTarget.style.backgroundColor = '#f0fdf4';
+                                                                e.currentTarget.style.color = '#166534';
+                                                                e.currentTarget.style.borderColor = '#bbf7d0';
+                                                                e.currentTarget.style.transform = 'scale(1)';
+                                                            }}
+                                                        >
+                                                            {exportingWoId === entry.work_order_id ? (
+                                                                <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>...</span>
+                                                            ) : (
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                                                                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                                                    <polyline points="14 2 14 8 20 8"/>
+                                                                    <line x1="8" y1="13" x2="16" y2="13"/>
+                                                                    <line x1="8" y1="17" x2="16" y2="17"/>
+                                                                    <line x1="10" y1="9" x2="9" y2="9"/>
+                                                                </svg>
+                                                            )}
+                                                        </button>
                                                     </td>
                                                     <td style={{ display: 'flex', gap: '5px' }}>
                                                         <button

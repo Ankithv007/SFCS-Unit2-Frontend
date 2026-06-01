@@ -251,47 +251,43 @@ const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName, o
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#0369a1', marginBottom: '0.5rem' }}>📦 SMT FG Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#8b5cf6' }}>Post AOI Passed:{' '}
+                                <span>Post AOI Passed:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-previous-passed"
                                         onClick={() => onCountClick && onCountClick('Post AOI', 'passed', 'Post AOI Passed')}
-                                        style={{ color: '#8b5cf6' }}
                                     >
                                         {allWoSerials.filter(s => s.step_status === 'PASS').length}
                                     </strong>
                                 </span>
-                                <span style={{ color: '#0369a1' }}>Total Scanned:{' '}
+                                <span>Total Scanned:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-scanned"
                                         onClick={() => onCountClick && onCountClick('SMT FG', 'scanned', 'Total Scanned')}
                                     >
                                         {tableSerials.filter(s => s.last_status === 'PASS').length}
                                     </strong>{' '}
                                     / {allWoSerials.filter(s => s.step_status === 'PASS').length}
                                 </span>
-                                <span style={{ color: '#0369a1' }}>Passed:{' '}
+                                <span>Passed:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-passed"
                                         onClick={() => onCountClick && onCountClick('SMT FG', 'passed', 'Passed')}
-                                        style={{ color: '#0369a1' }}
                                     >
                                         {tableSerials.filter(s => s.last_status === 'PASS').length}
                                     </strong>
                                 </span>
-                                <span style={{ color: '#0369a1' }}>Failed:{' '}
+                                <span>Failed:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-failed"
                                         onClick={() => onCountClick && onCountClick('SMT FG', 'failed', 'Failed')}
-                                        style={{ color: '#0369a1' }}
                                     >
                                         {tableSerials.filter(s => s.last_status === 'FAIL').length}
                                     </strong>
                                 </span>
-                                <span style={{ color: '#0369a1' }}>Pending:{' '}
+                                <span>Pending:{' '}
                                     <strong 
-                                        className="smt-clickable-count"
+                                        className="smt-clickable-count smt-pending"
                                         onClick={() => onCountClick && onCountClick('SMT FG', 'pending', 'Pending')}
-                                        style={{ color: '#0369a1' }}
                                     >
                                         {allWoSerials.filter(s => s.step_status === 'PASS').length - tableSerials.filter(s => s.last_status === 'PASS').length}
                                     </strong>
@@ -415,6 +411,35 @@ const SMTFG: React.FC = () => {
         type: string;
         label: string;
     } | null>(null);
+    const [exportingWoId, setExportingWoId] = useState<string | null>(null);
+
+    const handleExportExcel = async (workOrderId: string, processStep: string) => {
+        if (exportingWoId !== null) return;
+        setExportingWoId(workOrderId);
+        try {
+            const blob = await apiFetch(`/api/smt/export/excel?work_order_id=${workOrderId}&process_step=${processStep}`) as Blob;
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+
+            const now = new Date();
+            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+            const cleanWo = workOrderId.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const fileName = `SMT_${processStep.replace(/\s+/g, '_')}_Report_${cleanWo}_${timestamp}.xlsx`;
+
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            addToast('Report downloaded successfully!', 'success');
+        } catch (error: any) {
+            console.error('Export error:', error);
+            addToast(error.message || 'Failed to export report', 'error');
+        } finally {
+            setExportingWoId(null);
+        }
+    };
 
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
@@ -696,7 +721,7 @@ const SMTFG: React.FC = () => {
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
                                                     <td style={{ fontWeight: 'bold' }}>{barcodeSrc}</td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-total"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SMT FG',
@@ -707,38 +732,38 @@ const SMTFG: React.FC = () => {
                                                         {totalQty}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-previous-passed"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'Post AOI',
                                                             type: 'passed',
                                                             label: 'Post AOI Passed'
                                                         })}
-                                                        style={{ fontWeight: 'bold', color: '#3b82f6' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {postAoiPassedQty}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-passed"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SMT FG',
                                                             type: 'passed',
                                                             label: 'Scanned Quantity'
                                                         })}
-                                                        style={{ color: '#2563eb', fontWeight: 'bold' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {scannedQty}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-pending"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SMT FG',
                                                             type: 'pending',
                                                             label: 'Pending Quantity'
                                                         })}
-                                                        style={{ color: '#f59e0b', fontWeight: 'bold' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {pendingQty}
                                                     </td>
@@ -806,6 +831,7 @@ const SMTFG: React.FC = () => {
                                             <th>TOTAL QTY</th>
                                             <th>COMPLETED QTY</th>
                                             <th>STATUS</th>
+                                            <th>DOWNLOAD</th>
                                             <th>ACTION</th>
                                         </tr>
                                     </thead>
@@ -822,7 +848,7 @@ const SMTFG: React.FC = () => {
                                                     <td>{(entry.product_name || '').toUpperCase()}</td>
                                                     <td style={{ fontWeight: 'bold' }}>{barcodeSrc}</td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-total"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SMT FG',
@@ -833,14 +859,14 @@ const SMTFG: React.FC = () => {
                                                         {totalQty}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-passed"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
                                                             stage: 'SMT FG',
                                                             type: 'passed',
                                                             label: 'Completed Quantity'
                                                         })}
-                                                        style={{ color: '#059669', fontWeight: 'bold' }}
+                                                        style={{ fontWeight: 'bold' }}
                                                     >
                                                         {scannedQty}
                                                     </td>
@@ -848,6 +874,54 @@ const SMTFG: React.FC = () => {
                                                         <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', backgroundColor: '#dcfce7', color: '#15803d' }}>
                                                             COMPLETED
                                                         </span>
+                                                    </td>
+                                                    <td>
+                                                        <button 
+                                                             className={styles.secondaryButton}
+                                                             disabled={exportingWoId === entry.work_order_id}
+                                                             onClick={() => handleExportExcel(entry.work_order_id, 'SMT FG')}
+                                                             style={{
+                                                                 padding: '0.4rem',
+                                                                 minWidth: '40px',
+                                                                 width: '40px',
+                                                                 height: '40px',
+                                                                 display: 'inline-flex',
+                                                                 alignItems: 'center',
+                                                                 justifyContent: 'center',
+                                                                 borderRadius: '50%',
+                                                                 backgroundColor: '#f0fdf4',
+                                                                 border: '1px solid #bbf7d0',
+                                                                 color: '#166534',
+                                                                 cursor: 'pointer',
+                                                                 transition: 'all 0.2s ease',
+                                                                 boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                                             }}
+                                                             title="Export to Excel"
+                                                             onMouseEnter={(e) => {
+                                                                 e.currentTarget.style.backgroundColor = '#166534';
+                                                                 e.currentTarget.style.color = '#ffffff';
+                                                                 e.currentTarget.style.borderColor = '#166534';
+                                                                 e.currentTarget.style.transform = 'scale(1.08)';
+                                                             }}
+                                                             onMouseLeave={(e) => {
+                                                                 e.currentTarget.style.backgroundColor = '#f0fdf4';
+                                                                 e.currentTarget.style.color = '#166534';
+                                                                 e.currentTarget.style.borderColor = '#bbf7d0';
+                                                                 e.currentTarget.style.transform = 'scale(1)';
+                                                             }}
+                                                         >
+                                                             {exportingWoId === entry.work_order_id ? (
+                                                                 <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>...</span>
+                                                             ) : (
+                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                                                                     <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                                                     <polyline points="14 2 14 8 20 8"/>
+                                                                     <line x1="8" y1="13" x2="16" y2="13"/>
+                                                                     <line x1="8" y1="17" x2="16" y2="17"/>
+                                                                     <line x1="10" y1="9" x2="9" y2="9"/>
+                                                                 </svg>
+                                                             )}
+                                                         </button>
                                                     </td>
                                                     <td style={{ display: 'flex', gap: '5px' }}>
                                                         <button
@@ -862,13 +936,13 @@ const SMTFG: React.FC = () => {
                                                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                                                             onClick={async () => {
                                                                 if (!isSuperAdmin) {
-                addToast("Access Denied: Only Super Admin can delete.", "error");
-                return;
+                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
+                                                                    return;
                                                                 }
                                                                 if (window.confirm('Are you sure you want to delete this entry?')) {
-                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
-                    addToast("Entry deleted successfully.", "success");
+                                                                    await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
+                                                                    setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
+                                                                    addToast("Entry deleted successfully.", "success");
                                                                 }
                                                             }}
                                                         >
@@ -880,7 +954,7 @@ setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
                                         })}
                                         {completedEntries.length === 0 && (
                                             <tr>
-                                                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                     No completed SMT FG sessions found.
                                                 </td>
                                             </tr>

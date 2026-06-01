@@ -199,7 +199,7 @@ export const WorkOrderHistory: React.FC = () => {
                                             <td>{row.line_id}</td>
                                             <td>{row.product_name}</td>
                                             <td 
-                                                className="smt-clickable-count" 
+                                                className="smt-clickable-count smt-total" 
                                                 onClick={() => setSelectedCount({
                                                     workOrderId: row.work_order_id,
                                                     stage: 'Work Order',
@@ -210,26 +210,26 @@ export const WorkOrderHistory: React.FC = () => {
                                                 {row.total_qty}
                                             </td>
                                             <td 
-                                                className="smt-clickable-count" 
+                                                className="smt-clickable-count smt-passed" 
                                                 onClick={() => setSelectedCount({
                                                     workOrderId: row.work_order_id,
                                                     stage: 'Work Order',
                                                     type: 'completed',
                                                     label: 'Completed Quantity'
                                                 })}
-                                                style={{ color: '#10b981' }}
+                                                style={{ fontWeight: 'bold' }}
                                             >
                                                 {row.completed_qty}
                                             </td>
                                             <td 
-                                                className="smt-clickable-count" 
+                                                className="smt-clickable-count smt-pending" 
                                                 onClick={() => setSelectedCount({
                                                     workOrderId: row.work_order_id,
                                                     stage: 'Work Order',
                                                     type: 'pending',
                                                     label: 'Balance Quantity'
                                                 })}
-                                                style={{ color: '#ef4444' }}
+                                                style={{ fontWeight: 'bold' }}
                                             >
                                                 {row.balance_qty}
                                             </td>

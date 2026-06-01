@@ -540,9 +540,47 @@ const Flashing: React.FC = () => {
                                             className={sharedStyles.secondaryButton}
                                             disabled={exportingBatchId === batch.id}
                                             onClick={() => handleExportExcel(batch)}
-                                            style={{ minWidth: '90px' }}
+                                            style={{
+                                                padding: '0.4rem',
+                                                minWidth: '40px',
+                                                width: '40px',
+                                                height: '40px',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                borderRadius: '50%',
+                                                backgroundColor: '#f0fdf4',
+                                                border: '1px solid #bbf7d0',
+                                                color: '#166534',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s ease',
+                                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                            }}
+                                            title="Export to Excel"
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.backgroundColor = '#166534';
+                                                e.currentTarget.style.color = '#ffffff';
+                                                e.currentTarget.style.borderColor = '#166534';
+                                                e.currentTarget.style.transform = 'scale(1.08)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.backgroundColor = '#f0fdf4';
+                                                e.currentTarget.style.color = '#166534';
+                                                e.currentTarget.style.borderColor = '#bbf7d0';
+                                                e.currentTarget.style.transform = 'scale(1)';
+                                            }}
                                         >
-                                            {exportingBatchId === batch.id ? '...' : 'Export Excel'}
+                                            {exportingBatchId === batch.id ? (
+                                                <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>...</span>
+                                            ) : (
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                                                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                                    <polyline points="14 2 14 8 20 8"/>
+                                                    <line x1="8" y1="13" x2="16" y2="13"/>
+                                                    <line x1="8" y1="17" x2="16" y2="17"/>
+                                                    <line x1="10" y1="9" x2="9" y2="9"/>
+                                                </svg>
+                                            )}
                                         </button>
                                     </td>
                                     <td className={styles.actionColumn}>

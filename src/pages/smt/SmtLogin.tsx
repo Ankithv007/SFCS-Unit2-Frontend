@@ -98,7 +98,7 @@ export const SmtLogin: React.FC = () => {
 
         try {
             if ((userId || '').toUpperCase() === 'ADMIN' && password === '1234') {
-                smtLogin({ id: 'admin', name: 'System Admin', userId: 'ADMIN' }, from);
+                smtLogin({ id: 'admin', name: 'System Admin', userId: 'ADMIN', role: 'Admin' }, from);
                 navigate(from, { replace: true });
                 return;
             }
@@ -115,12 +115,17 @@ export const SmtLogin: React.FC = () => {
                 if (!validEmp.is_active) {
                     setError('This account is deactivated. Please contact an admin.');
                 } else {
+                    let targetPath = from;
+                    if (targetPath === '/smt/work-order' || targetPath === '/smt/workorder-history' || targetPath.startsWith('/smt/work-order') || targetPath.startsWith('/smt/workorder-history')) {
+                        targetPath = '/smt/printing';
+                    }
                     smtLogin({ 
                         id: validEmp.id.toString(), 
                         name: validEmp.name, 
-                        userId: validEmp.user_id 
-                    }, from);
-                    navigate(from, { replace: true });
+                        userId: validEmp.user_id,
+                        role: 'Operator'
+                    }, targetPath);
+                    navigate(targetPath, { replace: true });
                 }
                 return;
             }
@@ -134,17 +139,30 @@ export const SmtLogin: React.FC = () => {
             if (authRes.ok) {
                 const authData = await authRes.json();
                 const globalUser = authData.user;
+                const userRole = globalUser.role || 'Operator';
                 
                 const authorizedRoles = ['Super Admin', 'Admin', 'Manager'];
-                if (authorizedRoles.includes(globalUser.role)) {
+                if (authorizedRoles.includes(userRole)) {
                     smtLogin({
                         id: globalUser.id.toString(),
                         name: globalUser.name,
-                        userId: globalUser.email
+                        userId: globalUser.email,
+                        role: userRole
                     }, from);
                     navigate(from, { replace: true });
                 } else {
-                    setError('Access Denied: Only Admins or Managers can access SMT tools.');
+                    // Global users who are operators can also login SMT portal as Operator role
+                    let targetPath = from;
+                    if (targetPath === '/smt/work-order' || targetPath === '/smt/workorder-history' || targetPath.startsWith('/smt/work-order') || targetPath.startsWith('/smt/workorder-history')) {
+                        targetPath = '/smt/printing';
+                    }
+                    smtLogin({
+                        id: globalUser.id.toString(),
+                        name: globalUser.name,
+                        userId: globalUser.email,
+                        role: 'Operator'
+                    }, targetPath);
+                    navigate(targetPath, { replace: true });
                 }
             } else {
                 const errData = await authRes.json();

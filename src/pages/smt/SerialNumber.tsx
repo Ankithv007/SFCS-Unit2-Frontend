@@ -589,7 +589,7 @@ setBatches(batches.filter(b => b.work_order_id !== woId));
                                                 <tr key={batch.id}>
                                                     <td style={{ fontWeight: 600 }}>{(batch.product_name || '').toUpperCase()}</td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-total"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: batch.work_order_id,
                                                             stage: 'Serial Number',
@@ -600,7 +600,7 @@ setBatches(batches.filter(b => b.work_order_id !== woId));
                                                         {batch.wo_qty}
                                                     </td>
                                                     <td 
-                                                        className="smt-clickable-count"
+                                                        className="smt-clickable-count smt-panel-count"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: batch.work_order_id,
                                                             stage: 'Serial Number',
@@ -667,7 +667,7 @@ setBatches(batches.filter(b => b.work_order_id !== woId));
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         🏭 Serial Number Available:{' '}
                                         <strong 
-                                            className="smt-clickable-count"
+                                            className="smt-clickable-count smt-scanned"
                                             onClick={() => setSelectedCount({
                                                 workOrderId: activeBatch.work_order_id,
                                                 stage: 'Serial Number',

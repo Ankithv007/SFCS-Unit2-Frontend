@@ -11,6 +11,7 @@ interface UnitRecord {
     customer_name?: string;
     model?: string;
     current_stage?: string;
+    previous_stage?: string;
     status?: string;
     scan_date_time?: string;
     operator?: string;
@@ -146,8 +147,26 @@ const CountDetailsModal: React.FC<CountDetailsModalProps> = ({
                     ) : data.length === 0 ? (
                         <div className={styles.emptyWrapper}>
                             <FileText size={48} className={styles.emptyIcon} />
-                            <h3>No Records Found</h3>
-                            <p>No units match the selected filters or criteria.</p>
+                            {stageCode === 'PTH' && columnType === 'pending' ? (
+                                <>
+                                    <h3 style={{ color: '#0f172a', fontWeight: 700 }}>First Stage Dynamic Registration</h3>
+                                    <p style={{ maxWidth: '480px', margin: '0.5rem auto 0', lineHeight: '1.5', color: '#475569' }}>
+                                        PTH (Pre-Soldering) is the entry stage for the backend production line. Barcodes are registered dynamically in the system upon their first scan at this stage.
+                                    </p>
+                                    <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px dashed #cbd5e1', fontSize: '0.875rem', color: '#334155', display: 'inline-block', textAlign: 'left' }}>
+                                        <strong style={{ color: '#4f46e5' }}>💡 Operator Instruction:</strong>
+                                        <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem', color: '#475569' }}>
+                                            <li>Start a scanning session for this batch.</li>
+                                            <li>Scan any active board barcode to register it in this Work Order.</li>
+                                        </ul>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <h3>No Records Found</h3>
+                                    <p>No units match the selected filters or criteria.</p>
+                                </>
+                            )}
                         </div>
                     ) : (
                         <div className={styles.tableWrapper}>
@@ -158,10 +177,10 @@ const CountDetailsModal: React.FC<CountDetailsModalProps> = ({
                                         <th>WO Number</th>
                                         <th>Customer & Model</th>
                                         <th>Current Stage</th>
+                                        {stageCode !== 'PTH' && <th>Previous Stage</th>}
                                         <th>Status</th>
                                         <th>Scan Date & Time</th>
                                         <th>Operator</th>
-                                        <th>Rework/Debug Details</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -170,7 +189,7 @@ const CountDetailsModal: React.FC<CountDetailsModalProps> = ({
                                             <td>
                                                 <div className={styles.barcodeCell}>
                                                     <span className={styles.barcodeText}>{record.barcode}</span>
-                                                    {record.unit_serial_number && (
+                                                    {!['PTH', 'VI', 'QA', 'FLASHING'].includes(stageCode) && record.unit_serial_number && (
                                                         <span className={styles.usnBadge} title="Unit Serial Number">
                                                             USN: {record.unit_serial_number}
                                                         </span>
@@ -189,6 +208,13 @@ const CountDetailsModal: React.FC<CountDetailsModalProps> = ({
                                                     {record.current_stage || 'Unknown'}
                                                 </span>
                                             </td>
+                                            {stageCode !== 'PTH' && (
+                                                <td>
+                                                    <span className={styles.stageBadge} style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>
+                                                        {record.previous_stage || '-'}
+                                                    </span>
+                                                </td>
+                                            )}
                                             <td>
                                                 <span className={`${styles.statusBadge} ${getStatusClass(record.status)}`}>
                                                     {(record.status || 'PENDING').toUpperCase()}
@@ -206,18 +232,6 @@ const CountDetailsModal: React.FC<CountDetailsModalProps> = ({
                                                     {record.operator || '-'}
                                                 </div>
                                             </td>
-                                            <td>
-                                                <div className={styles.remarksCell}>
-                                                    {record.failed_stage && (
-                                                        <span className={styles.failedStageTag}>
-                                                            Failed at: {record.failed_stage}
-                                                        </span>
-                                                    )}
-                                                    <p className={styles.remarksText}>
-                                                        {record.rework_debug_reason || '-'}
-                                                    </p>
-                                                </div>
-                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -227,7 +241,7 @@ const CountDetailsModal: React.FC<CountDetailsModalProps> = ({
                 </div>
 
                 {/* Modal Footer (Pagination) */}
-                {!loading && !error && totalRecords > 0 && (
+                {!loading && !error && totalRecords > 0 && !(stageCode === 'PTH' && columnType === 'pending') && (
                     <div className={styles.modalFooter}>
                         <div className={styles.recordsCount}>
                             Showing <strong>{((page - 1) * limit) + 1}</strong> to{' '}

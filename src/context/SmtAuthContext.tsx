@@ -4,6 +4,7 @@ interface SmtUser {
     id: string;
     name: string;
     userId: string;
+    role: string;
 }
 
 interface SmtAuthContextType {

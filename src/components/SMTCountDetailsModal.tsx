@@ -7,6 +7,7 @@ interface SMTRecord {
     status: string;
     scanned_by: string | null;
     scanned_at: string | null;
+    previous_stage?: string;
     rework_reason: string | null;
 }
 
@@ -158,6 +159,7 @@ const SMTCountDetailsModal: React.FC<SMTCountDetailsModalProps> = ({
                                     <tr>
                                         <th>Barcode / Serial Number</th>
                                         <th>Process Stage</th>
+                                        <th>Previous Stage</th>
                                         <th>Status</th>
                                         <th>Scan Date & Time</th>
                                         <th>Operator</th>
@@ -175,6 +177,11 @@ const SMTCountDetailsModal: React.FC<SMTCountDetailsModalProps> = ({
                                             <td>
                                                 <span className={styles.stageBadge}>
                                                     {stage}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span className={styles.stageBadge} style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>
+                                                    {record.previous_stage || '-'}
                                                 </span>
                                             </td>
                                             <td>

@@ -79,6 +79,36 @@ const PCBGeneration: React.FC = () => {
     // Remaining Modal State
     const [showRemainingModal, setShowRemainingModal] = useState(false);
 
+    const [exportingWoId, setExportingWoId] = useState<string | null>(null);
+
+    const handleExportExcel = async (workOrderId: string, processStep: string) => {
+        if (exportingWoId !== null) return;
+        setExportingWoId(workOrderId);
+        try {
+            const blob = await apiFetch(`/api/smt/export/excel?work_order_id=${workOrderId}&process_step=${processStep}`) as Blob;
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+
+            const now = new Date();
+            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+            const cleanWo = workOrderId.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const fileName = `SMT_${processStep.replace(/\s+/g, '_')}_Report_${cleanWo}_${timestamp}.xlsx`;
+
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            showToast('Report downloaded successfully!', 'success');
+        } catch (error: any) {
+            console.error('Export error:', error);
+            showToast(error.message || 'Failed to export report', 'error');
+        } finally {
+            setExportingWoId(null);
+        }
+    };
+
     useEffect(() => {
         if (!activeBatch) {
             fetchBatches();
@@ -767,6 +797,7 @@ const PCBGeneration: React.FC = () => {
                                         <th>Scanned Qty</th>
                                         <th>Pending Qty</th>
                                         <th>Status</th>
+                                        <th>Download</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -811,6 +842,54 @@ const PCBGeneration: React.FC = () => {
                                             </td>
                                             <td><span className={`${styles.badge} ${styles.badgeInfo}`}>PENDING</span></td>
                                             <td>
+                                                <button 
+                                                    className={styles.secondaryButton}
+                                                    disabled={exportingWoId === batch.id}
+                                                    onClick={() => handleExportExcel(batch.id, 'PCB Registration')}
+                                                    style={{
+                                                        padding: '0.4rem',
+                                                        minWidth: '40px',
+                                                        width: '40px',
+                                                        height: '40px',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        borderRadius: '50%',
+                                                        backgroundColor: '#f0fdf4',
+                                                        border: '1px solid #bbf7d0',
+                                                        color: '#166534',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s ease',
+                                                        boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                                    }}
+                                                    title="Export to Excel"
+                                                    onMouseEnter={(e) => {
+                                                        e.currentTarget.style.backgroundColor = '#166534';
+                                                        e.currentTarget.style.color = '#ffffff';
+                                                        e.currentTarget.style.borderColor = '#166534';
+                                                        e.currentTarget.style.transform = 'scale(1.08)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.currentTarget.style.backgroundColor = '#f0fdf4';
+                                                        e.currentTarget.style.color = '#166534';
+                                                        e.currentTarget.style.borderColor = '#bbf7d0';
+                                                        e.currentTarget.style.transform = 'scale(1)';
+                                                    }}
+                                                >
+                                                    {exportingWoId === batch.id ? (
+                                                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>...</span>
+                                                    ) : (
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                                                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                                            <polyline points="14 2 14 8 20 8"/>
+                                                            <line x1="8" y1="13" x2="16" y2="13"/>
+                                                            <line x1="8" y1="17" x2="16" y2="17"/>
+                                                            <line x1="10" y1="9" x2="9" y2="9"/>
+                                                        </svg>
+                                                    )}
+                                                </button>
+                                            </td>
+                                            <td>
                                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                                     <button
                                                         className={styles.secondaryButton}
@@ -832,7 +911,7 @@ const PCBGeneration: React.FC = () => {
                                     ))}
                                     {pendingBatches.length === 0 && (
                                         <tr>
-                                            <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                            <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                 No pending Work Orders.
                                             </td>
                                         </tr>
@@ -861,6 +940,7 @@ const PCBGeneration: React.FC = () => {
                                         <th>Completed Qty</th>
                                         <th>Pending Qty</th>
                                         <th>Status</th>
+                                        <th>Download</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -905,6 +985,54 @@ const PCBGeneration: React.FC = () => {
                                             </td>
                                             <td><span className={`${styles.badge} ${styles.badgeSuccess}`}>COMPLETED</span></td>
                                             <td>
+                                                <button 
+                                                    className={styles.secondaryButton}
+                                                    disabled={exportingWoId === batch.id}
+                                                    onClick={() => handleExportExcel(batch.id, 'PCB Registration')}
+                                                    style={{
+                                                        padding: '0.4rem',
+                                                        minWidth: '40px',
+                                                        width: '40px',
+                                                        height: '40px',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        borderRadius: '50%',
+                                                        backgroundColor: '#f0fdf4',
+                                                        border: '1px solid #bbf7d0',
+                                                        color: '#166534',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s ease',
+                                                        boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                                    }}
+                                                    title="Export to Excel"
+                                                    onMouseEnter={(e) => {
+                                                        e.currentTarget.style.backgroundColor = '#166534';
+                                                        e.currentTarget.style.color = '#ffffff';
+                                                        e.currentTarget.style.borderColor = '#166534';
+                                                        e.currentTarget.style.transform = 'scale(1.08)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.currentTarget.style.backgroundColor = '#f0fdf4';
+                                                        e.currentTarget.style.color = '#166534';
+                                                        e.currentTarget.style.borderColor = '#bbf7d0';
+                                                        e.currentTarget.style.transform = 'scale(1)';
+                                                    }}
+                                                >
+                                                    {exportingWoId === batch.id ? (
+                                                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>...</span>
+                                                    ) : (
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                                                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                                            <polyline points="14 2 14 8 20 8"/>
+                                                            <line x1="8" y1="13" x2="16" y2="13"/>
+                                                            <line x1="8" y1="17" x2="16" y2="17"/>
+                                                            <line x1="10" y1="9" x2="9" y2="9"/>
+                                                        </svg>
+                                                    )}
+                                                </button>
+                                            </td>
+                                            <td>
                                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                                     <button
                                                         className={styles.secondaryButton}
@@ -927,7 +1055,7 @@ const PCBGeneration: React.FC = () => {
                                     ))}
                                     {completedBatches.length === 0 && (
                                         <tr>
-                                            <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+                                            <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
                                                 No completed Work Orders.
                                             </td>
                                         </tr>

@@ -29,11 +29,13 @@ export const BackendAuthProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const backendLogin = (user: BackendUser, path: string) => {
         setBackendUser(user);
         setAuthenticatedPath(path);
+        localStorage.setItem('backend_userId', user.userId);
     };
 
     const backendLogout = () => {
         setBackendUser(null);
         setAuthenticatedPath(null);
+        localStorage.removeItem('backend_userId');
     };
 
     return (

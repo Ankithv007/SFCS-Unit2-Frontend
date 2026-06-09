@@ -413,8 +413,8 @@ const Flashing: React.FC = () => {
     };
 
     const handleDeleteBatch = async (batchId: number) => {
-        if (user?.role !== 'Super Admin') {
-            showToast('Only SuperAdmin can perform delete operations.', 'error');
+        if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
+            showToast('You do not have permission to delete this record.', 'error');
             return;
         }
         if (!window.confirm('Are you sure you want to delete this batch? This action cannot be undone.')) return;
@@ -746,6 +746,7 @@ const Flashing: React.FC = () => {
                                             <th>REWORK/DEBUG TIME</th>
                                             <th>Remarks</th>
                                             <th>REWORK/DEBUG Remarks</th>
+                                            <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -763,10 +764,31 @@ const Flashing: React.FC = () => {
                                                     <td>{scan.remark_debug_time ? new Date(scan.remark_debug_time).toLocaleString() : '-'}</td>
                                                     <td>{scan.remarks || '-'}</td>
                                                     <td>{scan.remark_debug_remarks || '-'}</td>
+                                                    <td>
+                                                        <button
+                                                            className={sharedStyles.deleteBtn}
+                                                            onClick={async () => {
+                                                                if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
+                                                                    showToast('You do not have permission to delete this record.', 'error');
+                                                                    return;
+                                                                }
+                                                                if (!window.confirm('Are you sure you want to delete this record?')) return;
+                                                                try {
+                                                                    await apiFetch(`/api/backend/flashing/scan/${scan.id}`, { method: 'DELETE' });
+                                                                    showToast('Record deleted successfully.', 'success');
+                                                                    fetchScans(activeBatch!.id, currentPage);
+                                                                } catch (err: any) {
+                                                                    showToast(err?.message || 'Failed to delete record', 'error');
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             ))
                                         ) : (
-                                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem' }}>No items scanned.</td></tr>
+                                            <tr><td colSpan={9} style={{ textAlign: 'center', padding: '3rem' }}>No items scanned.</td></tr>
                                         )}
                                     </tbody>
                                 </table>

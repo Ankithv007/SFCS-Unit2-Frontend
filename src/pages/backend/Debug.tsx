@@ -9,7 +9,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useBackendAuth } from '../../context/BackendAuthContext';
 import SearchInput from '../../components/SearchInput';
 import ScanDecisionModal from '../../components/ScanDecisionModal';
-import { Search, ArrowLeft, CheckCircle, Clock, Monitor, Activity } from 'lucide-react';
+import { Search, ArrowLeft, CheckCircle, Clock, Monitor, Activity, Trash2 } from 'lucide-react';
 import CountDetailsModal from '../../components/CountDetailsModal';
 
 interface Batch {
@@ -189,7 +189,7 @@ const Debug: React.FC = () => {
     const handleScanFinalize = async (status: string, remarks?: string) => {
         if (!pendingBarcode || !activeBatch) return;
         if (!remarks?.trim()) {
-            showToast('Debug remark is mandatory', 'error');
+            showToast('Repair remark is mandatory', 'error');
             return;
         }
 
@@ -213,8 +213,7 @@ const Debug: React.FC = () => {
                 setPendingBarcode(null);
                 fetchScans(activeBatch.id, 1);
                 fetchActiveBatches();
-                
-                // Refresh the active batch counters
+
                 const updatedBatches = await apiFetch(`/api/backend/debug/batch?search=${activeBatch.batch_number}`);
                 const updated = updatedBatches.data?.find((b: Batch) => b.id === activeBatch.id);
                 if (updated) {
@@ -446,6 +445,7 @@ const Debug: React.FC = () => {
                                             <th>FAILURE DATE &amp; TIME</th>
                                             <th>FAILURE REMARK</th>
                                             <th>DEBUG REMARK</th>
+                                            <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -459,10 +459,31 @@ const Debug: React.FC = () => {
                                                 <td>{scan.failed_at ? new Date(scan.failed_at).toLocaleString() : '-'}</td>
                                                 <td style={{ color: '#ef4444' }}>{scan.failure_remark || '-'}</td>
                                                 <td style={{ fontWeight: 600 }}>{scan.repair_remark || scan.remarks || '-'}</td>
+                                                <td>
+                                                    <button
+                                                        className={sharedStyles.deleteBtn}
+                                                        onClick={async () => {
+                                                            if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
+                                                                showToast('You do not have permission to delete this record.', 'error');
+                                                                return;
+                                                            }
+                                                            if (!window.confirm('Are you sure you want to delete this record?')) return;
+                                                            try {
+                                                                await apiFetch(`/api/backend/debug/scan/${scan.id}`, { method: 'DELETE' });
+                                                                showToast('Record deleted successfully.', 'success');
+                                                                fetchScans(activeBatch!.id, activeBatch!.failedStageId);
+                                                            } catch (err: any) {
+                                                                showToast(err?.message || 'Failed to delete record', 'error');
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))}
                                         {scannedItems.length === 0 && (
-                                            <tr><td colSpan={8} style={{ textAlign: 'center', padding: '3rem' }}>No debug sessions recorded yet.</td></tr>
+                                            <tr><td colSpan={9} style={{ textAlign: 'center', padding: '3rem' }}>No debug sessions recorded yet.</td></tr>
                                         )}
                                     </tbody>
                                 </table>

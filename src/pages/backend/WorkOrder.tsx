@@ -138,8 +138,8 @@ const WorkOrder: React.FC = () => {
     };
 
     const handleDeleteClick = (wo: WorkOrderRecord) => {
-        if (user?.role !== 'Super Admin') {
-            showToast('Only SuperAdmin can perform delete operations.', 'error');
+        if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
+            showToast('You do not have permission to delete this record.', 'error');
             return;
         }
         console.log("DELETE CLICKED", wo);

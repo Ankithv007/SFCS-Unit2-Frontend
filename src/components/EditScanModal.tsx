@@ -34,9 +34,9 @@ const EditScanModal: React.FC<EditScanModalProps> = ({
             return;
         }
 
-        const finalUnitSerialNo = hideUnitSerial && !initialUnitSerialNo ? barcode.trim() : unitSerialNo.trim();
+        const finalUnitSerialNo = hideUnitSerial ? (initialUnitSerialNo || '') : unitSerialNo.trim();
 
-        if (!finalUnitSerialNo) {
+        if (!hideUnitSerial && !finalUnitSerialNo) {
             showToast('Unit Serial Number cannot be empty', 'error');
             return;
         }

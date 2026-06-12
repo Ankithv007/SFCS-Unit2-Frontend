@@ -62,15 +62,46 @@ const DescriptionCell: React.FC<{ text: string }> = ({ text }) => {
     );
 };
 
+const RemarkCell: React.FC<{ remark: string | null; workOrderId: string; onOpen: (remark: string) => void }> = ({ remark, onOpen }) => {
+    if (!remark) return <td><span style={{ color: '#94a3b8' }}>-</span></td>;
+    
+    const isLong = remark.length > 40;
+    const displayContent = isLong ? remark.slice(0, 40) + '...' : remark;
+    
+    return (
+        <td style={{ maxWidth: '200px', whiteSpace: 'normal', wordWrap: 'break-word', lineHeight: '1.5', fontSize: '0.9rem', color: '#475569' }}>
+            <span>{displayContent}</span>
+            {isLong && (
+                <button
+                    onClick={() => onOpen(remark)}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#4f46e5',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: 0,
+                        marginLeft: '4px',
+                        textDecoration: 'underline',
+                        fontSize: '0.85rem'
+                    }}
+                >
+                    View More
+                </button>
+            )}
+        </td>
+    );
+};
+
 export const WorkOrder: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
     const navigate = useNavigate();
     const isSuperAdmin = user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
-    const today = new Date();
-    const datePrefix = `WO${today.getFullYear()}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
-
-    const [userSequence, setUserSequence] = useState('');
+    const [workOrderId, setWorkOrderId] = useState('');
+    const [poId, setPoId] = useState('');
+    const [remark, setRemark] = useState('');
+    const [remarkModal, setRemarkModal] = useState<{ workOrderId: string; remark: string } | null>(null);
     const [lineId, setLineId] = useState('SMT-1');
     const [productName, setProductName] = useState('');
     const [productDescription, setProductDescription] = useState('');
@@ -93,6 +124,33 @@ export const WorkOrder: React.FC = () => {
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
 
+    // Search and Pagination states
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeSearch, setActiveSearch] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(15);
+    const [totalRecords, setTotalRecords] = useState(0);
+    const [totalPages, setTotalPages] = useState(0);
+    
+    // Loading states
+    const [isLoading, setIsLoading] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    // File Upload state
+    const [selectedFile, setSelectedFile] = useState<{
+        name: string;
+        type: string;
+        size: number;
+        data: string; // Base64 encoding
+    } | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // File Preview states
+    const [previewWoId, setPreviewWoId] = useState<string | null>(null);
+    const [previewData, setPreviewData] = useState<any | null>(null);
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastId.current;
         setToasts(prev => [...prev, { id, message, type }]);
@@ -102,13 +160,13 @@ export const WorkOrder: React.FC = () => {
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
     useEffect(() => {
-        fetchWorkOrders();
+        fetchWorkOrders(currentPage, pageSize, activeSearch);
 
         // Auto-fill Created By from SMT login info
         if (smtUser) {
             setCreatedBy(smtUser.name || smtUser.userId || 'System');
         }
-    }, []);
+    }, [currentPage, pageSize, activeSearch]);
 
     // Auto-calculate Panel Quantity
     useEffect(() => {
@@ -122,35 +180,188 @@ export const WorkOrder: React.FC = () => {
         }
     }, [quantity, pcbPerPanel]);
 
-    const fetchWorkOrders = async () => {
+    const fetchWorkOrders = async (page = 1, limit = 15, search = '') => {
+        setIsLoading(true);
         try {
-            const res = await fetch('/api/smt/work-orders');
+            const queryParams = new URLSearchParams({
+                page: page.toString(),
+                limit: limit.toString()
+            });
+            if (search) {
+                queryParams.append('search', search);
+            }
+            const res = await fetch(`/api/smt/work-orders?${queryParams.toString()}`);
             if (res.ok) {
-                const data = await res.json();
-                const safeData = Array.isArray(data) ? data : [];
-                setWorkOrders(safeData.map((wo: any) => ({
-                    work_order_id: wo.id,
-                    product_name: wo.product_name,
-                    product_description: wo.product_description,
-                    quantity: wo.quantity,
-                    panel_quantity: wo.panel_quantity,
-                    line_id: wo.line_id,
-                    priority: wo.priority,
-                    created_by: wo.created_by,
-                    created_at: wo.created_at
-                })));
+                const responseData = await res.json();
+                if (responseData.success) {
+                    const safeData = Array.isArray(responseData.data) ? responseData.data : [];
+                    setWorkOrders(safeData.map((wo: any) => ({
+                        work_order_id: wo.id,
+                        product_name: wo.product_name,
+                        product_description: wo.product_description,
+                        quantity: wo.quantity,
+                        panel_quantity: wo.panel_quantity,
+                        line_id: wo.line_id,
+                        priority: wo.priority,
+                        created_by: wo.created_by,
+                        created_at: wo.created_at,
+                        po_document_name: wo.po_document_name,
+                        po_document_path: wo.po_document_path,
+                        po_document_type: wo.po_document_type,
+                        po_id: wo.po_id,
+                        remark: wo.remark
+                    })));
+                    setTotalRecords(responseData.total || 0);
+                    setTotalPages(responseData.totalPages || 0);
+                } else {
+                    addToast(responseData.message || "Failed to load work orders", "error");
+                }
+            } else {
+                addToast("Failed to connect to work orders API", "error");
             }
         } catch (err) {
             console.error("Failed to fetch work orders:", err);
+            addToast("Failed to fetch work orders due to network issue", "error");
+        } finally {
+            setIsLoading(false);
         }
     };
 
-    const handleCreateWorkOrder = async () => {
-        // Validation
-        if (!/^\d{5}$/.test(userSequence)) {
-            setError('Sequence must be exactly 5 digits.');
+    const handleSearch = () => {
+        setActiveSearch(searchQuery);
+        setCurrentPage(1); // Reset to page 1 on new search
+    };
+
+    const handleClearSearch = () => {
+        setSearchQuery('');
+        setActiveSearch('');
+        setCurrentPage(1);
+    };
+
+    const handlePageChange = (page: number) => {
+        if (page >= 1 && page <= totalPages) {
+            setCurrentPage(page);
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        processFile(file);
+    };
+
+    const processFile = (file: File) => {
+        const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+        
+        // Allowed Extensions Check
+        const allowedExtensions = ['.pdf', '.xls', '.xlsx'];
+        if (!allowedExtensions.includes(ext)) {
+            addToast("Only PDF (.pdf) and Excel (.xls, .xlsx) files are allowed.", "error");
             return;
         }
+
+        // Hardened Security Extensions Check
+        const dangerousExtensions = ['.exe', '.bat', '.sh', '.js', '.php', '.py', '.msi'];
+        if (dangerousExtensions.includes(ext)) {
+            addToast("Blocked: Dangerous file extension detected.", "error");
+            return;
+        }
+
+        // MIME Type Check
+        const allowedMimes = [
+            'application/pdf',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        ];
+        if (!allowedMimes.includes(file.type)) {
+            addToast("Invalid file type structure. Please upload PDF or Excel.", "error");
+            return;
+        }
+
+        // File Size Limit check (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            addToast("File size exceeds the maximum limit of 5MB.", "error");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            setSelectedFile({
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                data: event.target?.result as string
+            });
+            addToast("Document attached successfully.", "success");
+        };
+        reader.onerror = () => {
+            addToast("Failed to read the file.", "error");
+        };
+        reader.readAsDataURL(file);
+    };
+
+     const handleRemoveFile = (e: React.MouseEvent) => {
+         e.stopPropagation();
+         setSelectedFile(null);
+         if (fileInputRef.current) {
+             fileInputRef.current.value = '';
+         }
+     };
+
+     const handleOpenLocalPreview = (e: React.MouseEvent) => {
+         e.stopPropagation();
+         if (!selectedFile) return;
+         setPreviewWoId('__local__');
+         if (selectedFile.type === 'application/pdf') {
+             setPreviewData({
+                 type: 'pdf',
+                 url: selectedFile.data,
+                 name: selectedFile.name
+             });
+         } else {
+             setPreviewData({
+                 type: 'local_excel',
+                 name: selectedFile.name
+             });
+         }
+     };
+
+     const handleDownloadLocalFile = () => {
+         if (!selectedFile) return;
+         const a = document.createElement('a');
+         a.href = selectedFile.data;
+         a.download = selectedFile.name;
+         document.body.appendChild(a);
+         a.click();
+         document.body.removeChild(a);
+     };
+
+    const handleCreateWorkOrder = async () => {
+        // Validation & Normalization
+        const finalWorkOrderId = workOrderId.trim().toUpperCase();
+        if (!finalWorkOrderId) {
+            setError('Work Order ID is required.');
+            return;
+        }
+        if (finalWorkOrderId.length < 3 || finalWorkOrderId.length > 50) {
+            setError('Work Order ID must be between 3 and 50 characters.');
+            return;
+        }
+        if (!/^[A-Z0-9\-_]+$/.test(finalWorkOrderId)) {
+            setError('Work Order ID can only contain letters, numbers, hyphens (-), and underscores (_).');
+            return;
+        }
+
+        const finalPoId = poId.trim();
+        if (!finalPoId) {
+            setError('PO ID is required.');
+            return;
+        }
+        if (!/^[a-zA-Z0-9\-_]+$/.test(finalPoId)) {
+            setError('PO ID can only contain letters, numbers, hyphens (-), and underscores (_).');
+            return;
+        }
+
         if (!productName || !productDescription || !quantity || !panelQuantity || !createdBy) {
             setError('All fields are required.');
             return;
@@ -159,16 +370,14 @@ export const WorkOrder: React.FC = () => {
             setError('Quantities must be greater than 0.');
             return;
         }
-        if (workOrders.some(wo => wo.work_order_id === datePrefix + userSequence)) {
-            setError('Work Order ID already exists.');
-            return;
-        }
-
+        
         setError('');
-        const workOrderId = datePrefix + userSequence;
+        setIsCreating(true);
 
         const payload = {
-            work_order_id: workOrderId,
+            work_order_id: finalWorkOrderId,
+            po_id: finalPoId,
+            remark: remark,
             area_id: 'SMT',
             line_id: lineId,
             product_name: productName,
@@ -177,7 +386,7 @@ export const WorkOrder: React.FC = () => {
             panel_quantity: parseInt(panelQuantity),
             priority: priority,
             created_by: createdBy,
-            created_at: new Date().toISOString()
+            po_document: selectedFile
         };
 
         try {
@@ -187,68 +396,121 @@ export const WorkOrder: React.FC = () => {
                 body: JSON.stringify(payload)
             });
 
-            if (res.ok) {
-                const data = await res.json();
-                const newWo = {
-                    work_order_id: data.id,
-                    product_name: data.product_name,
-                    product_description: data.product_description,
-                    quantity: data.quantity,
-                    panel_quantity: data.panel_quantity,
-                    line_id: data.line_id,
-                    priority: data.priority,
-                    created_by: data.created_by,
-                    created_at: data.created_at
-                };
-                setWorkOrders([newWo, ...workOrders]);
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                addToast("Work Order created successfully.", "success");
+                
+                // Clear Form
+                setWorkOrderId('');
+                setPoId('');
+                setRemark('');
+                setProductName('');
+                setProductDescription('');
+                setQuantity('');
+                setPcbPerPanel('');
+                setPanelQuantity('');
+                setPriority('medium');
+                setSelectedFile(null);
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                }
+
+                // Reset search and return to page 1
+                setSearchQuery('');
+                setActiveSearch('');
+                setCurrentPage(1);
+                fetchWorkOrders(1, pageSize, '');
             } else {
-                const errorData = await res.json();
-                setError(`Failed to create Work Order: ${errorData.error || 'Unknown error'}`);
+                setError(`Failed to create Work Order: ${data.message || 'Unknown error'}`);
             }
         } catch (err) {
             console.error("API error:", err);
             setError('Error connecting to backend API.');
+        } finally {
+            setIsCreating(false);
         }
-
-        // Reset form
-        setUserSequence('');
-        setProductName('');
-        setProductDescription('');
-        setQuantity('');
-        setPcbPerPanel('');
-        setPanelQuantity('');
-        setPriority('medium');
     };
-
-    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const handleDeleteWorkOrder = async (id: string) => {
         if (!isSuperAdmin) {
             addToast("Access Denied: Only Super Admin can delete.", "error");
             return;
         }
-        if (!window.confirm(`Are you sure you want to delete Work Order ${id}? This will also delete all associated serial numbers and inspections.`)) {
+        if (!window.confirm(`Are you sure you want to delete Work Order ${id}? This will also delete all associated serial numbers, inspections, and PO document files.`)) {
             return;
         }
 
         setDeletingId(id);
         try {
-            await apiFetch(`/api/smt/work-orders/${id}`, {
+            const res = await apiFetch(`/api/smt/work-orders/${id}`, {
                 method: 'DELETE'
             });
 
-            setWorkOrders(prev => prev.filter(wo => wo.work_order_id !== id));
-            addToast("Work Order deleted successfully.", "success");
+            addToast(res.message || "Work Order deleted successfully.", "success");
+            fetchWorkOrders(currentPage, pageSize, activeSearch);
         } catch (err: any) {
             console.error("Delete error:", err);
-            // Ignore 404 if it's already deleted (double click safety fallback)
             if (err.message === 'Work order not found') {
-                setWorkOrders(prev => prev.filter(wo => wo.work_order_id !== id));
+                fetchWorkOrders(currentPage, pageSize, activeSearch);
             } else {
                 alert(`Failed to delete: ${err.message || 'Unknown error'}`);
             }
         } finally {
             setDeletingId(null);
+        }
+    };
+
+    const handleOpenPreview = async (id: string) => {
+        setPreviewWoId(id);
+        setIsPreviewLoading(true);
+        setPreviewData(null);
+        try {
+            const res = await fetch(`/api/smt/work-orders/${id}/preview-po`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setPreviewData(data);
+                } else {
+                    addToast(data.message || "Failed to load document preview.", "error");
+                    setPreviewWoId(null);
+                }
+            } else {
+                addToast("Preview API request failed.", "error");
+                setPreviewWoId(null);
+            }
+        } catch (err) {
+            console.error("Preview error:", err);
+            addToast("Failed to fetch preview details.", "error");
+            setPreviewWoId(null);
+        } finally {
+            setIsPreviewLoading(false);
+        }
+    };
+
+    const handleClosePreview = () => {
+        setPreviewWoId(null);
+        setPreviewData(null);
+    };
+
+    const handleDownloadPo = async (id: string, fileName: string) => {
+        try {
+            addToast("Starting download...", "info");
+            const response = await fetch(`/api/smt/work-orders/${id}/download-po`);
+            if (!response.ok) throw new Error('Download failed');
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = fileName || 'po_document';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            addToast("File downloaded successfully.", "success");
+        } catch (err: any) {
+            addToast("Failed to download file.", "error");
         }
     };
 
@@ -290,52 +552,39 @@ export const WorkOrder: React.FC = () => {
 
                     <div className={styles.formGrid} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
                         {/* --- ROW 1 --- */}
-                        <div className={styles.inputGroup}>
+                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
                             <label>Work Order ID *</label>
-                            <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                                <div style={{
-                                    backgroundColor: '#e9ecef',
-                                    border: '1px solid #ced4da',
-                                    borderRadius: '4px 0 0 4px',
-                                    padding: '0 10px',
-                                    color: '#495057',
-                                    fontWeight: '600',
-                                    borderRight: 'none',
-                                    height: '42px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    boxSizing: 'border-box',
-                                    whiteSpace: 'nowrap'
-                                }}>
-                                    {datePrefix}
-                                </div>
-                                <input
-                                    type="text"
-                                    value={userSequence}
-                                    onChange={(e) => setUserSequence(e.target.value.replace(/\D/g, ''))}
-                                    onBlur={(e) => {
-                                        if (e.target.value) {
-                                            setUserSequence(e.target.value.padStart(5, '0'));
-                                        }
-                                    }}
-                                    placeholder="00000"
-                                    maxLength={5}
-                                    style={{
-                                        borderRadius: '0 4px 4px 0',
-                                        flex: 1,
-                                        minWidth: 0,
-                                        height: '42px',
-                                        boxSizing: 'border-box',
-                                        border: '1px solid #d1d5db',
-                                        padding: '0 10px'
-                                    }}
-                                />
-                            </div>
-                            <span style={{ fontSize: '12px', color: '#6c757d', marginTop: '4px' }}>
-                                Enter 5-digit sequence
-                            </span>
+                            <input
+                                type="text"
+                                value={workOrderId}
+                                onChange={(e) => setWorkOrderId(e.target.value)}
+                                placeholder="e.g. WO2026060200016"
+                                className={styles.input}
+                                style={{ height: '42px', boxSizing: 'border-box' }}
+                                spellCheck={false}
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="none"
+                            />
                         </div>
 
+                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                            <label>PO ID *</label>
+                            <input
+                                type="text"
+                                value={poId}
+                                onChange={(e) => setPoId(e.target.value)}
+                                placeholder="e.g. PO-2026-1001"
+                                className={styles.input}
+                                style={{ height: '42px', boxSizing: 'border-box' }}
+                                spellCheck={false}
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="none"
+                            />
+                        </div>
+
+                        {/* --- ROW 2 --- */}
                         <div className={styles.inputGroup}>
                             <label>Area ID</label>
                             <input
@@ -375,7 +624,26 @@ export const WorkOrder: React.FC = () => {
                             </select>
                         </div>
 
-                        {/* --- ROW 2 --- */}
+                        <div className={styles.inputGroup}>
+                            <label>Created By *</label>
+                            <input
+                                type="text"
+                                value={createdBy}
+                                placeholder="Logged in user"
+                                className={styles.input}
+                                style={{
+                                    height: '42px',
+                                    boxSizing: 'border-box',
+                                    backgroundColor: '#f3f4f6',
+                                    color: '#6b7280',
+                                    cursor: 'not-allowed',
+                                    fontWeight: 'bold'
+                                }}
+                                readOnly
+                            />
+                        </div>
+
+                        {/* --- ROW 3 --- */}
                         <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
                             <label>Product Name *</label>
                             <input
@@ -399,7 +667,7 @@ export const WorkOrder: React.FC = () => {
                             />
                         </div>
 
-                        {/* --- ROW 3 --- */}
+                        {/* --- ROW 4 --- */}
                         <div className={styles.inputGroup}>
                             <label>Quantity *</label>
                             <input
@@ -444,123 +712,466 @@ export const WorkOrder: React.FC = () => {
                             />
                         </div>
 
-                        <div className={styles.inputGroup}>
-                            <label>Created By *</label>
-                            <input
-                                type="text"
-                                value={createdBy}
-                                placeholder="Logged in user"
-                                className={styles.input}
-                                style={{
-                                    height: '42px',
-                                    boxSizing: 'border-box',
-                                    backgroundColor: '#f3f4f6',
-                                    color: '#6b7280',
-                                    cursor: 'not-allowed',
-                                    fontWeight: 'bold'
-                                }}
-                                readOnly
-                            />
+                        {/* Empty slot to balance 4 columns */}
+                        <div></div>
+
+                        {/* --- ROW 5: PO Document & Remark Side-by-Side --- */}
+                        <div style={{
+                            gridColumn: 'span 4',
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                            gap: '1.25rem',
+                            marginTop: '0.5rem',
+                            alignItems: 'stretch'
+                        }}>
+                            {/* Left Column: Upload PO Document */}
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '0.95rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+                                    Upload PO Document
+                                </label>
+                                <div 
+                                    className={`${styles.uploadZone} ${selectedFile ? styles.uploadZoneActive : ''}`}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    style={{ 
+                                        flex: 1, 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        justifyContent: 'center', 
+                                        padding: '0.5rem', 
+                                        minHeight: '80px',
+                                        boxSizing: 'border-box'
+                                    }}
+                                >
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleFileChange}
+                                        accept=".pdf,.xls,.xlsx"
+                                        style={{ display: 'none' }}
+                                    />
+                                    <span className={styles.uploadIcon} style={{ fontSize: '1.1rem', marginBottom: '2px' }}>📤</span>
+                                    <span className={styles.uploadText} style={{ fontSize: '0.75rem' }}>
+                                        <strong>Drop file or click to upload</strong>
+                                    </span>
+                                    <span className={styles.uploadSubtext} style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                                        PDF / Excel • 5MB max
+                                    </span>
+                                </div>
+                                {selectedFile && (
+                                    <div className={styles.fileDisplay} style={{ marginTop: '0.5rem', boxSizing: 'border-box' }}>
+                                        <div className={styles.fileInfo}>
+                                            {selectedFile.type === 'application/pdf' ? (
+                                                <span className={`${styles.fileTypeIcon} ${styles.pdfColor}`} style={{ fontSize: '0.75rem', padding: '1px 4px' }}>📕 PDF</span>
+                                            ) : (
+                                                <span className={`${styles.fileTypeIcon} ${styles.excelColor}`} style={{ fontSize: '0.75rem', padding: '1px 4px' }}>📗 Excel</span>
+                                            )}
+                                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                                <span className={styles.fileName} style={{ fontSize: '0.75rem', fontWeight: 600, maxWidth: '150px' }} title={selectedFile.name}>{selectedFile.name}</span>
+                                                <span className={styles.fileSize} style={{ fontSize: '0.65rem' }}>
+                                                    {(selectedFile.size / 1024).toFixed(1)} KB
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className={styles.fileActions}>
+                                            <button 
+                                                type="button" 
+                                                className={styles.secondaryButton}
+                                                style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                                onClick={handleOpenLocalPreview}
+                                            >
+                                                👁️ View
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                className={styles.secondaryButton}
+                                                style={{ borderColor: '#ef4444', color: '#ef4444', padding: '0.15rem 0.4rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                                onClick={handleRemoveFile}
+                                            >
+                                                ❌ Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Right Column: Remark */}
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '0.95rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+                                    Remark
+                                </label>
+                                <textarea
+                                    value={remark}
+                                    onChange={(e) => setRemark(e.target.value)}
+                                    placeholder="Enter additional remarks, notes, or production instructions..."
+                                    className={styles.input}
+                                    style={{ 
+                                        boxSizing: 'border-box', 
+                                        flex: 1, 
+                                        minHeight: '80px', 
+                                        resize: 'vertical',
+                                        fontSize: '0.875rem',
+                                        padding: '0.5rem'
+                                    }}
+                                />
+                            </div>
                         </div>
                     </div>
 
                     <div className={styles.actions} style={{ marginTop: '30px' }}>
-                        <button className={styles.button} onClick={handleCreateWorkOrder}>
-                            Create Work Order
+                        <button 
+                            className={`${styles.button} ${isCreating ? styles.buttonWithSpinner : ''}`} 
+                            onClick={handleCreateWorkOrder}
+                            disabled={isCreating}
+                        >
+                            {isCreating ? (
+                                <>
+                                    <span className={styles.spinner}></span> Creating...
+                                </>
+                            ) : (
+                                'Create Work Order'
+                            )}
                         </button>
                     </div>
                 </div>
 
                 <div className={styles.card}>
-                    <h3>Created Work Orders</h3>
-                    <div className={styles.tableContainer}>
-                        <table className={styles.table}>
-                            <thead>
-                                <tr>
-                                    <th>WORK ORDER ID</th>
-                                    <th>PRODUCT NAME</th>
-                                    <th>PRODUCT DESCRIPTION</th>
-                                    <th>QUANTITY</th>
-                                    <th>PANEL QTY</th>
-                                    <th>LINE ID</th>
-                                    <th>PRIORITY</th>
-                                    <th>CREATED BY</th>
-                                    <th>DATE CREATED</th>
-                                    <th>ACTION</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {workOrders.map((wo, index) => (
-                                    <tr key={index}>
-                                        <td style={{ fontWeight: 600 }}>{wo.work_order_id}</td>
-                                        <td>{wo.product_name}</td>
-                                        <DescriptionCell text={wo.product_description} />
-                                        <td 
-                                            className="smt-clickable-count smt-total" 
-                                            onClick={() => setSelectedCount({
-                                                workOrderId: wo.work_order_id,
-                                                stage: 'Work Order',
-                                                type: 'total',
-                                                label: 'Total Quantity'
-                                            })}
-                                        >
-                                            {wo.quantity}
-                                        </td>
-                                        <td 
-                                            className="smt-clickable-count smt-panel-count" 
-                                            onClick={() => setSelectedCount({
-                                                workOrderId: wo.work_order_id,
-                                                stage: 'Work Order',
-                                                type: 'total',
-                                                label: 'Panel Quantity'
-                                            })}
-                                        >
-                                            {wo.panel_quantity}
-                                        </td>
-                                        <td>{wo.line_id}</td>
-                                        <td>
-                                            <span style={{
-                                                padding: '4px 8px',
-                                                borderRadius: '4px',
-                                                fontSize: '0.85rem',
-                                                fontWeight: 'bold',
-                                                backgroundColor: wo.priority === 'high' ? '#fee2e2' : wo.priority === 'medium' ? '#fef3c7' : '#e0e7ff',
-                                                color: wo.priority === 'high' ? '#991b1b' : wo.priority === 'medium' ? '#92400e' : '#3730a3'
-                                            }}>
-                                                {(wo.priority || 'MEDIUM').toUpperCase()}
-                                            </span>
-                                        </td>
-                                        <td>{wo.created_by || 'System'}</td>
-                                        <td>
-                                            {new Date(wo.created_at).toLocaleDateString()} <br />
-                                            <small style={{ color: '#6b7280' }}>
-                                                {new Date(wo.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                            </small>
-                                        </td>
-                                        <td>
-                                            <button
-                                                onClick={() => handleDeleteWorkOrder(wo.work_order_id)}
-                                                className={styles.deleteButton}
-                                                disabled={deletingId === wo.work_order_id}
-                                                style={{ opacity: deletingId === wo.work_order_id ? 0.5 : 1 }}
-                                            >
-                                                {deletingId === wo.work_order_id ? 'Deleting...' : 'Delete'}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {workOrders.length === 0 && (
-                                    <tr key="no-data">
-                                        <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                            No work orders created yet.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <h3>Created Work Orders</h3>
+                        
+                        {/* Search Bar section */}
+                        <div className={styles.searchBar}>
+                            <div className={styles.searchWrapper}>
+                                <span className={styles.searchIcon}>🔍</span>
+                                <input
+                                    type="text"
+                                    placeholder="Search by Work Order ID..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            handleSearch();
+                                        }
+                                    }}
+                                    className={styles.searchInput}
+                                    disabled={isLoading}
+                                />
+                            </div>
+                            <button className={styles.searchBtn} onClick={handleSearch} disabled={isLoading}>
+                                Search
+                            </button>
+                            {(activeSearch || searchQuery) && (
+                                <button className={styles.clearBtn} onClick={handleClearSearch} disabled={isLoading}>
+                                    Clear
+                                </button>
+                            )}
+                        </div>
                     </div>
+
+                    {isLoading ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4rem 0', gap: '1rem' }}>
+                            <div className={styles.darkSpinner}></div>
+                            <div style={{ color: '#64748b', fontSize: '0.95rem' }}>Loading work orders...</div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className={styles.tableContainer}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>WORK ORDER ID</th>
+                                            <th>PO ID</th>
+                                            <th>PRODUCT NAME</th>
+                                            <th>PRODUCT DESCRIPTION</th>
+                                            <th>QUANTITY</th>
+                                            <th>PANEL QTY</th>
+                                            <th>LINE ID</th>
+                                            <th>PRIORITY</th>
+                                            <th style={{ textAlign: 'center' }}>PO DOCUMENT</th>
+                                            <th>CREATED BY</th>
+                                            <th>DATE CREATED</th>
+                                            <th>REMARK</th>
+                                            <th>ACTION</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {workOrders.map((wo, index) => (
+                                            <tr key={index}>
+                                                <td style={{ fontWeight: 600 }}>{wo.work_order_id}</td>
+                                                <td style={{ fontWeight: 500, color: '#374151' }}>{wo.po_id || '-'}</td>
+                                                <td>{wo.product_name}</td>
+                                                <DescriptionCell text={wo.product_description} />
+                                                <td 
+                                                    className="smt-clickable-count smt-total" 
+                                                    onClick={() => setSelectedCount({
+                                                        workOrderId: wo.work_order_id,
+                                                        stage: 'Work Order',
+                                                        type: 'total',
+                                                        label: 'Total Quantity'
+                                                    })}
+                                                >
+                                                    {wo.quantity}
+                                                </td>
+                                                <td 
+                                                    className="smt-clickable-count smt-panel-count" 
+                                                    onClick={() => setSelectedCount({
+                                                        workOrderId: wo.work_order_id,
+                                                        stage: 'Work Order',
+                                                        type: 'total',
+                                                        label: 'Panel Quantity'
+                                                    })}
+                                                >
+                                                    {wo.panel_quantity}
+                                                </td>
+                                                <td>{wo.line_id}</td>
+                                                <td>
+                                                    <span style={{
+                                                        padding: '4px 8px',
+                                                        borderRadius: '4px',
+                                                        fontSize: '0.85rem',
+                                                        fontWeight: 'bold',
+                                                        backgroundColor: wo.priority === 'high' ? '#fee2e2' : wo.priority === 'medium' ? '#fef3c7' : '#e0e7ff',
+                                                        color: wo.priority === 'high' ? '#991b1b' : wo.priority === 'medium' ? '#92400e' : '#3730a3'
+                                                    }}>
+                                                        {(wo.priority || 'MEDIUM').toUpperCase()}
+                                                    </span>
+                                                </td>
+                                                 <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                                                     {wo.po_document_path ? (
+                                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+                                                             {wo.po_document_type === 'application/pdf' ? (
+                                                                 <span style={{ fontSize: '1.2rem', cursor: 'default' }} title="PDF Document">📕</span>
+                                                             ) : (
+                                                                 <span style={{ fontSize: '1.2rem', cursor: 'default' }} title="Excel Spreadsheet">📗</span>
+                                                             )}
+                                                             <button
+                                                                 className={styles.compactIconBtn}
+                                                                 title="View PO Document"
+                                                                 onClick={() => handleOpenPreview(wo.work_order_id)}
+                                                             >
+                                                                 👁️
+                                                             </button>
+                                                             <button
+                                                                 className={styles.compactIconBtn}
+                                                                 title="Download PO Document"
+                                                                 onClick={() => handleDownloadPo(wo.work_order_id, wo.po_document_name)}
+                                                             >
+                                                                 📥
+                                                             </button>
+                                                         </div>
+                                                     ) : (
+                                                         <span style={{ color: '#94a3b8' }}>-</span>
+                                                     )}
+                                                 </td>
+                                                <td>{wo.created_by || 'System'}</td>
+                                                <td>
+                                                    {new Date(wo.created_at).toLocaleDateString()} <br />
+                                                    <small style={{ color: '#6b7280' }}>
+                                                        {new Date(wo.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                    </small>
+                                                </td>
+                                                <RemarkCell remark={wo.remark} workOrderId={wo.work_order_id} onOpen={(text) => setRemarkModal({ workOrderId: wo.work_order_id, remark: text })} />
+                                                <td>
+                                                    <button
+                                                        onClick={() => handleDeleteWorkOrder(wo.work_order_id)}
+                                                        className={styles.deleteButton}
+                                                        disabled={deletingId === wo.work_order_id}
+                                                        style={{ opacity: deletingId === wo.work_order_id ? 0.5 : 1 }}
+                                                    >
+                                                        {deletingId === wo.work_order_id ? 'Deleting...' : 'Delete'}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Empty states handling */}
+                            {workOrders.length === 0 && (
+                                <div className={styles.emptyState}>
+                                    <span style={{ fontSize: '2.5rem' }}>🔍</span>
+                                    <h4 className={styles.emptyStateTitle}>
+                                        {activeSearch ? 'No matching Work Orders found' : 'No Work Orders Found'}
+                                    </h4>
+                                    <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                                        {activeSearch ? 'Try revising your search term or clearing the filter.' : 'Create a new work order to get started.'}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Pagination controls layout */}
+                            {totalPages > 0 && (
+                                <div className={styles.paginationSection}>
+                                    <div className={styles.paginationInfo}>
+                                        Showing {workOrders.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} records
+                                    </div>
+                                    <div className={styles.paginationControls}>
+                                        <select
+                                            value={pageSize}
+                                            onChange={(e) => {
+                                                setPageSize(parseInt(e.target.value));
+                                                setCurrentPage(1);
+                                            }}
+                                            className={styles.pageSizeSelect}
+                                            disabled={isLoading}
+                                        >
+                                            <option value={15}>15 per page</option>
+                                            <option value={25}>25 per page</option>
+                                            <option value={50}>50 per page</option>
+                                        </select>
+                                        <button
+                                            onClick={() => handlePageChange(1)}
+                                            disabled={currentPage === 1 || isLoading}
+                                            className={styles.pageBtn}
+                                        >
+                                            «
+                                        </button>
+                                        <button
+                                            onClick={() => handlePageChange(currentPage - 1)}
+                                            disabled={currentPage === 1 || isLoading}
+                                            className={styles.pageBtn}
+                                        >
+                                            ‹
+                                        </button>
+                                        
+                                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                            .filter(p => Math.abs(p - currentPage) < 2 || p === 1 || p === totalPages)
+                                            .map((p, i, arr) => {
+                                                const showEllipsis = i > 0 && p - arr[i - 1] > 1;
+                                                return (
+                                                    <React.Fragment key={p}>
+                                                        {showEllipsis && <span style={{ padding: '0 0.25rem', color: '#94a3b8' }}>...</span>}
+                                                        <button
+                                                            onClick={() => handlePageChange(p)}
+                                                            className={`${styles.pageBtn} ${currentPage === p ? styles.activePage : ''}`}
+                                                            disabled={isLoading}
+                                                        >
+                                                            {p}
+                                                        </button>
+                                                    </React.Fragment>
+                                                );
+                                            })
+                                        }
+                                        
+                                        <button
+                                            onClick={() => handlePageChange(currentPage + 1)}
+                                            disabled={currentPage === totalPages || totalPages === 0 || isLoading}
+                                            className={styles.pageBtn}
+                                        >
+                                            ›
+                                        </button>
+                                        <button
+                                            onClick={() => handlePageChange(totalPages)}
+                                            disabled={currentPage === totalPages || totalPages === 0 || isLoading}
+                                            className={styles.pageBtn}
+                                        >
+                                            »
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
             </div>
+
+            {/* Document Preview Modal */}
+            {previewWoId && (
+                <div className={styles.modalOverlay} onClick={handleClosePreview}>
+                    <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <h4 className={styles.modalTitle}>
+                                📄 PO Document Preview - {previewData?.name || 'Loading...'}
+                            </h4>
+                            <button className={styles.modalCloseBtn} onClick={handleClosePreview}>
+                                ❌
+                            </button>
+                        </div>
+                        <div className={styles.modalBody}>
+                            {isPreviewLoading ? (
+                                <div className={styles.loadingContainer}>
+                                    <div className={styles.darkSpinner}></div>
+                                    <div className={styles.loadingText}>Generating preview, please wait...</div>
+                                </div>
+                            ) : previewData?.type === 'pdf' ? (
+                                <iframe
+                                    src={previewData.url}
+                                    title="PDF Preview"
+                                    className={styles.pdfIframe}
+                                />
+                            ) : previewData?.type === 'excel' ? (
+                                <div className={styles.excelPreviewContainer}>
+                                    <table className={styles.excelTable}>
+                                        <thead>
+                                            <tr>
+                                                {previewData.columns?.map((col: string, idx: number) => (
+                                                    <th key={idx}>{col || `Col ${idx + 1}`}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {previewData.rows?.map((row: any[], rowIdx: number) => (
+                                                <tr key={rowIdx}>
+                                                    {row.map((cell: any, cellIdx: number) => (
+                                                        <td key={cellIdx}>{cell}</td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : previewData?.type === 'legacy_excel' || previewData?.type === 'local_excel' ? (
+                                <div className={styles.legacyExcelContainer}>
+                                    <span style={{ fontSize: '3rem' }}>📊</span>
+                                    <p className={styles.legacyExcelText}>
+                                        {previewData?.type === 'local_excel' ? (
+                                            <>Excel spreadsheet preview grid will be generated after the Work Order is created. You can download the attached draft file to review locally.</>
+                                        ) : (
+                                            <>Direct browser preview is not supported for legacy <strong>.xls</strong> Excel format. Please download the file directly to view it on your local device.</>
+                                        )}
+                                    </p>
+                                    <button
+                                        className={styles.button}
+                                        onClick={() => {
+                                            if (previewData?.type === 'local_excel') {
+                                                handleDownloadLocalFile();
+                                            } else {
+                                                handleDownloadPo(previewWoId!, previewData.name);
+                                            }
+                                        }}
+                                    >
+                                        Download File
+                                    </button>
+                                </div>
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '2rem', color: '#ef4444' }}>
+                                    Failed to load preview.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Full Remark Modal */}
+            {remarkModal && (
+                <div className={styles.modalOverlay} onClick={() => setRemarkModal(null)}>
+                    <div className={styles.modalContent} style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <h4 className={styles.modalTitle}>
+                                📝 Remark - {remarkModal.workOrderId}
+                            </h4>
+                            <button className={styles.modalCloseBtn} onClick={() => setRemarkModal(null)}>
+                                ❌
+                            </button>
+                        </div>
+                        <div className={styles.modalBody} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#374151', fontSize: '0.95rem', lineHeight: '1.5', minHeight: 'auto' }}>
+                            {remarkModal.remark}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {selectedCount && (
                 <SMTCountDetailsModal
                     workOrderId={selectedCount.workOrderId}

@@ -435,6 +435,7 @@ export const Printing: React.FC = () => {
     const [squeezeNumber, setSqueezeNumber] = useState('');
     const [solderPaste, setSolderPaste] = useState('');
     const [side, setSide] = useState('TOP');
+    const [isSolderPasteEnforced, setIsSolderPasteEnforced] = useState(false);
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
     const [inspections, setInspections] = useState<any[]>([]);
 
@@ -466,17 +467,57 @@ export const Printing: React.FC = () => {
         fetchData();
     }, [fetchData, smtUser]);
 
-    const handleSelectWo = (woId: string) => {
+    const handleSelectWo = async (woId: string) => {
         setFormWoId(woId);
         const wo = workOrders.find(w => (w.id === woId || w.work_order_id === woId));
         if (wo) {
             setProductName(wo.product_name);
             setWoQty(wo.quantity.toString());
             setPanelQty(wo.panel_quantity.toString());
+            
+            // Check solder paste status
+            try {
+                const spRes = await fetch(`/api/smt/solder-paste/status/${encodeURIComponent(woId)}`);
+                if (spRes.ok) {
+                    const spData = await spRes.json();
+                    if (spData.stage3?.status === 'Completed') {
+                        setSolderPaste(spData.solder_paste_barcode || '');
+                        setIsSolderPasteEnforced(true);
+                    } else {
+                        // Reset work order selection and show error toast/alert
+                        alert(`Solder Paste Management is not completed for this Work Order! Solder paste must be mixed and completed first.`);
+                        setFormWoId('');
+                        setProductName('');
+                        setWoQty('');
+                        setPanelQty('');
+                        setSolderPaste('');
+                        setIsSolderPasteEnforced(false);
+                    }
+                } else {
+                    alert('Work Order has no Solder Paste history recorded. Please perform Solder Paste Management first!');
+                    setFormWoId('');
+                    setProductName('');
+                    setWoQty('');
+                    setPanelQty('');
+                    setSolderPaste('');
+                    setIsSolderPasteEnforced(false);
+                }
+            } catch (err) {
+                console.error("Error verifying solder paste status:", err);
+                alert("Failed to verify Solder Paste status due to connection error.");
+                setFormWoId('');
+                setProductName('');
+                setWoQty('');
+                setPanelQty('');
+                setSolderPaste('');
+                setIsSolderPasteEnforced(false);
+            }
         } else {
             setProductName('');
             setWoQty('');
             setPanelQty('');
+            setSolderPaste('');
+            setIsSolderPasteEnforced(false);
         }
     };
 
@@ -696,6 +737,8 @@ export const Printing: React.FC = () => {
                                         value={solderPaste}
                                         onChange={(e) => setSolderPaste(e.target.value.replace(/[^a-zA-Z0-9\s_-]/g, ''))}
                                         placeholder="Enter Solder Paste"
+                                        disabled={isSolderPasteEnforced}
+                                        style={isSolderPasteEnforced ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed', fontWeight: 'bold' } : undefined}
                                     />
                                 </div>
 

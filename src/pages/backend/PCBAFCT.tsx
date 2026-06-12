@@ -8,8 +8,9 @@ import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { useBackendAuth } from '../../context/BackendAuthContext';
 import SearchInput from '../../components/SearchInput';
-import { Search, CheckCircle, MessageSquare, AlertTriangle, ArrowLeft, Eye, Trash2 } from 'lucide-react';
+import { Search, CheckCircle, MessageSquare, AlertTriangle, ArrowLeft, Eye, Trash2, Pencil } from 'lucide-react';
 import CountDetailsModal from '../../components/CountDetailsModal';
+import EditScanModal from '../../components/EditScanModal';
 
 interface Batch {
     id: number;
@@ -255,6 +256,9 @@ const PCBAFCT: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalRecords, setTotalRecords] = useState(0);
+    const [editingScan, setEditingScan] = useState<ScanRecord | null>(null);
+
+    const isAdmin = user?.role === 'Super Admin' || user?.role === 'Admin';
 
     const [activeModal, setActiveModal] = useState<{
         batchId: number;
@@ -525,7 +529,8 @@ const PCBAFCT: React.FC = () => {
 
     const safeScannedItems = Array.isArray(scannedItems) ? scannedItems : [];
     const filteredItems = safeScannedItems.filter(item =>
-        item.barcode?.toLowerCase().includes(tableSearch.toLowerCase())
+        item.barcode?.toLowerCase().includes(tableSearch.toLowerCase()) ||
+        (item.unit_serial_number || item.usn_from_map)?.toLowerCase().includes(tableSearch.toLowerCase())
     );
 
     
@@ -822,7 +827,7 @@ const PCBAFCT: React.FC = () => {
                                     <Search size={16} className={styles.tableSearchIcon} />
                                     <input
                                         type="text"
-                                        placeholder="Search barcode..."
+                                        placeholder="Search Barcode / Unit Serial Number..."
                                         className={styles.tableSearchInput}
                                         value={tableSearch}
                                         onChange={(e) => setTableSearch(e.target.value)}
@@ -863,8 +868,42 @@ const PCBAFCT: React.FC = () => {
                                                     <td>{scan.remarks || '-'}</td>
                                                     <td>{scan.remark_debug_remarks || '-'}</td>
                                                     <td>
-                                                        <button
-                                                            className={sharedStyles.deleteBtn}
+                                                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                                            {isAdmin && (
+                                                                <button
+                                                                    className={sharedStyles.secondaryButton}
+                                                                    onClick={() => setEditingScan(scan)}
+                                                                    style={{
+                                                                        padding: '0.4rem',
+                                                                        minWidth: '28px',
+                                                                        width: '28px',
+                                                                        height: '28px',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        borderRadius: '4px',
+                                                                        border: '1px solid #cbd5e1',
+                                                                        color: '#475569',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    onMouseEnter={(e) => {
+                                                                        e.currentTarget.style.backgroundColor = '#6366f1';
+                                                                        e.currentTarget.style.color = '#ffffff';
+                                                                        e.currentTarget.style.borderColor = '#6366f1';
+                                                                    }}
+                                                                    onMouseLeave={(e) => {
+                                                                        e.currentTarget.style.backgroundColor = 'white';
+                                                                        e.currentTarget.style.color = '#475569';
+                                                                        e.currentTarget.style.borderColor = '#cbd5e1';
+                                                                    }}
+                                                                    title="Edit Scan"
+                                                                >
+                                                                    <Pencil size={14} />
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                className={sharedStyles.deleteBtn}
                                                             onClick={async () => {
                                                                 if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
                                                                     showToast('You do not have permission to delete this record.', 'error');
@@ -882,11 +921,12 @@ const PCBAFCT: React.FC = () => {
                                                         >
                                                             <Trash2 size={14} />
                                                         </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))
                                         ) : (
-                                            <tr><td colSpan={9} style={{ textAlign: 'center', padding: '3rem' }}>No items scanned.</td></tr>
+                                            <tr><td colSpan={10} style={{ textAlign: 'center', padding: '3rem' }}>No items scanned.</td></tr>
                                         )}
                                     </tbody>
                                 </table>
@@ -949,6 +989,16 @@ const PCBAFCT: React.FC = () => {
                     columnType={activeModal.columnType}
                     columnLabel={activeModal.columnLabel}
                     onClose={() => setActiveModal(null)}
+                />
+            )}
+
+            {editingScan && (
+                <EditScanModal
+                    scanId={editingScan.id}
+                    initialBarcode={editingScan.barcode}
+                    initialUnitSerialNo={editingScan.unit_serial_number || editingScan.usn_from_map || ''}
+                    onClose={() => setEditingScan(null)}
+                    onSaveSuccess={() => fetchScans(activeBatch!.id, currentPage)}
                 />
             )}
         </div>

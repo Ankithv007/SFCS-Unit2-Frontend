@@ -28,6 +28,7 @@ import PCBGeneration from './pages/smt/PCBGeneration';
 import PreAoi from './pages/smt/PreAoi';
 import SMTFG from './pages/smt/SMTFG';
 import SmtTrackItems from './pages/smt/SmtTrackItems';
+import SolderPasteManagement from './pages/smt/SolderPasteManagement';
 
 import WorkOrderBackend from './pages/backend/WorkOrder';
 import PTH from './pages/backend/PTH';
@@ -280,6 +281,10 @@ export const router = createBrowserRouter([
                     {
                         path: 'printing',
                         element: <Printing />,
+                    },
+                    {
+                        path: 'solder-paste',
+                        element: <SolderPasteManagement />,
                     },
                     {
                         path: 'spi',

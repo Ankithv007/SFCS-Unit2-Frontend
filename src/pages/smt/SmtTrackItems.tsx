@@ -449,6 +449,54 @@ const SmtTrackItems: React.FC = () => {
                             {data.final_status_label}
                         </div>
                     </div>
+                    
+                    {/* Solder Paste Prep Details */}
+                    {(data as any).solder_paste && (
+                        <div style={{
+                            marginTop: '1.5rem',
+                            padding: '1.25rem',
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.75rem',
+                            boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)'
+                        }}>
+                            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                🧴 Solder Paste Preparation Details
+                            </h4>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                                <div>
+                                    <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Status</span>
+                                    <span style={{
+                                        fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase',
+                                        color: (data as any).solder_paste.status === 'Completed' ? '#10b981' : '#f59e0b'
+                                    }}>
+                                        {(data as any).solder_paste.status || 'Pending'}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Container Barcode</span>
+                                    <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>
+                                        {(data as any).solder_paste.details?.solder_paste_barcode || '—'}
+                                    </strong>
+                                </div>
+                                <div>
+                                    <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Thawing Finished</span>
+                                    <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>
+                                        {fmt((data as any).solder_paste.details?.stage2?.completed_at)}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Mixing Finished</span>
+                                    <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>
+                                        {fmt((data as any).solder_paste.details?.stage3?.completed_at)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* ── Main two-column layout ── */}
                     <div className={styles.mainGrid}>
@@ -615,6 +663,55 @@ const SmtTrackItems: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Solder Paste Prep Details */}
+                        {woData.solder_paste && (
+                            <div style={{
+                                marginTop: '1.5rem',
+                                padding: '1.25rem',
+                                background: '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.75rem',
+                                boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+                                marginBottom: '1.5rem'
+                            }}>
+                                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    🧴 Solder Paste Preparation Details
+                                </h4>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                                    <div>
+                                        <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Status</span>
+                                        <span style={{
+                                            fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase',
+                                            color: woData.solder_paste.status === 'Completed' ? '#10b981' : '#f59e0b'
+                                        }}>
+                                            {woData.solder_paste.status || 'Pending'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Container Barcode</span>
+                                        <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>
+                                            {woData.solder_paste.details?.solder_paste_barcode || '—'}
+                                        </strong>
+                                    </div>
+                                    <div>
+                                        <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Thawing Finished</span>
+                                        <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>
+                                            {fmt(woData.solder_paste.details?.stage2?.completed_at)}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Mixing Finished</span>
+                                        <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>
+                                            {fmt(woData.solder_paste.details?.stage3?.completed_at)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className={styles.historyPanel} style={{ marginTop: '20px' }}>
                             <h3 className={styles.panelTitle} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

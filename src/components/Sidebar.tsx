@@ -132,6 +132,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             </span> PCB Registration
                         </div>
                         <div
+                            className={`${styles.submenuItem} ${isActive('/smt/solder-paste') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/solder-paste')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                            </span> Solder Paste Mgmt
+                        </div>
+                        <div
                             className={`${styles.submenuItem} ${isActive('/smt/printing') ? styles.activeSubmenu : ''}`}
                             onClick={() => navigate('/smt/printing')}
                         >

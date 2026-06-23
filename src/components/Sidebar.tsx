@@ -16,12 +16,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     const { smtUser } = useSmtAuth();
     const { showToast } = useToast();
     const [expandedModule, setExpandedModule] = useState<string | null>(null);
+    const [isMaterialMgmtExpanded, setIsMaterialMgmtExpanded] = useState(false);
 
     const isSmtAdmin = smtUser && ['Super Admin', 'Admin', 'Manager'].includes(smtUser.role);
 
     useEffect(() => {
         if (location.pathname.startsWith('/pre-testing')) setExpandedModule('pre-testing');
-        else if (location.pathname.startsWith('/smt')) setExpandedModule('smt');
+        else if (location.pathname.startsWith('/smt')) {
+            setExpandedModule('smt');
+            if (location.pathname.startsWith('/smt/material-management')) {
+                setIsMaterialMgmtExpanded(true);
+            }
+        }
         else if (location.pathname.startsWith('/backend')) setExpandedModule('backend');
         else if (location.pathname === '/purchase-order' || location.pathname === '/wip-stack' || location.pathname === '/return-wip' || location.pathname === '/report') setExpandedModule('inventory-report');
     }, [location.pathname]);
@@ -102,42 +108,50 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             </span> Work Order
                         </div>
                         <div
-                            className={`${styles.submenuItem} ${isActive('/smt/workorder-history') ? styles.activeSubmenu : ''}`}
-                            onClick={() => {
-                                if (isSmtAdmin) {
-                                    navigate('/smt/workorder-history', { state: { areaId: 'SMT' } });
-                                } else {
-                                    showToast('Access Denied: Only Admins or Managers can access this page.', 'error');
-                                }
-                            }}
+                            className={`${styles.submenuItem} ${isActive('/smt/qms') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/qms')}
                         >
                             <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Work Order History
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Document Process" className={styles.imageIcon} />
+                            </span> Document Process
                         </div>
                         <div
-                            className={`${styles.submenuItem} ${isActive('/smt/serial-number') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/serial-number')}
+                            className={`${styles.submenuItem} ${isMaterialMgmtExpanded ? styles.activeSubmenuParent : ''}`}
+                            onClick={() => setIsMaterialMgmtExpanded(!isMaterialMgmtExpanded)}
                         >
                             <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Serial Number
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Material Management" className={styles.imageIcon} />
+                            </span> Material Mgmt
                         </div>
+                        {isMaterialMgmtExpanded && (
+                            <div className={styles.subSubmenu}>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/material-management/requests') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/material-management/requests');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Material Requests
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/material-management/return') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/material-management/return');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Material Return
+                                </div>
+                            </div>
+                        )}
                         <div
                             className={`${styles.submenuItem} ${isActive('/smt/pcb-generation') ? styles.activeSubmenu : ''}`}
                             onClick={() => navigate('/smt/pcb-generation')}
                         >
                             <span className={styles.menuIcon}>
                                 <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> PCB Registration
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/solder-paste') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/solder-paste')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Solder Paste Mgmt
+                            </span> PCB Generation
                         </div>
                         <div
                             className={`${styles.submenuItem} ${isActive('/smt/printing') ? styles.activeSubmenu : ''}`}
@@ -195,7 +209,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                 <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Track Items" className={styles.imageIcon} />
                             </span> Track Items
                         </div>
-
                     </div>
                 )}
             </div>

@@ -80,6 +80,38 @@ const PCBGeneration: React.FC = () => {
     const [showRemainingModal, setShowRemainingModal] = useState(false);
 
     const [exportingWoId, setExportingWoId] = useState<string | null>(null);
+    const [qmsMap, setQmsMap] = useState<Record<string, any>>({});
+
+    const fetchQmsRecords = async () => {
+        try {
+            const res = await fetch('/api/smt/qms/records');
+            if (res.ok) {
+                const data = await res.json();
+                const map: Record<string, any> = {};
+                if (Array.isArray(data)) {
+                    data.forEach((item: any) => {
+                        map[item.work_order_number] = item;
+                    });
+                }
+                setQmsMap(map);
+            }
+        } catch (err) {
+            console.error("Failed to load QMS records", err);
+        }
+    };
+
+    const renderQmsDocs = (workOrderId: string) => {
+        const qms = qmsMap[workOrderId];
+        if (!qms || !qms.files_metadata) return <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>None</span>;
+        const meta = qms.files_metadata;
+        const items = [];
+        if (meta.bom) items.push(<a key="bom" href={`/api/smt/qms/files/download/${qms.id}/bom`} title={`BOM: ${meta.bom.originalName}`} style={{ color: '#4f46e5', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>BOM</a>);
+        if (meta.pfc) items.push(<a key="pfc" href={`/api/smt/qms/files/download/${qms.id}/pfc`} title={`PFC: ${meta.pfc.originalName}`} style={{ color: '#0f766e', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>PFC</a>);
+        if (meta.xy) items.push(<a key="xy" href={`/api/smt/qms/files/download/${qms.id}/xy`} title={`XY: ${meta.xy.originalName}`} style={{ color: '#b45309', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>XY</a>);
+        if (meta.ecn) items.push(<a key="ecn" href={`/api/smt/qms/files/download/${qms.id}/ecn`} title={`ECN: ${meta.ecn.originalName}`} style={{ color: '#be185d', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>ECN</a>);
+        if (meta.drawing) items.push(<a key="drawing" href={`/api/smt/qms/files/download/${qms.id}/drawing`} title={`Drawing: ${meta.drawing.originalName}`} style={{ color: '#4338ca', fontWeight: 'bold', textDecoration: 'underline' }}>DWG</a>);
+        return items.length > 0 ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', fontSize: '0.75rem' }}>{items}</div> : <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>None</span>;
+    };
 
     const handleExportExcel = async (workOrderId: string, processStep: string) => {
         if (exportingWoId !== null) return;
@@ -112,6 +144,7 @@ const PCBGeneration: React.FC = () => {
     useEffect(() => {
         if (!activeBatch) {
             fetchBatches();
+            fetchQmsRecords();
         }
     }, [activeBatch]);
 
@@ -940,6 +973,7 @@ const PCBGeneration: React.FC = () => {
                                         <th>Completed Qty</th>
                                         <th>Pending Qty</th>
                                         <th>Status</th>
+                                        <th>Document Process Documents</th>
                                         <th>Download</th>
                                         <th>Action</th>
                                     </tr>
@@ -984,6 +1018,9 @@ const PCBGeneration: React.FC = () => {
                                                 0
                                             </td>
                                             <td><span className={`${styles.badge} ${styles.badgeSuccess}`}>COMPLETED</span></td>
+                                            <td>
+                                                {renderQmsDocs(batch.id)}
+                                            </td>
                                             <td>
                                                 <button 
                                                     className={styles.secondaryButton}

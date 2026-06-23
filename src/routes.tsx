@@ -29,6 +29,12 @@ import PreAoi from './pages/smt/PreAoi';
 import SMTFG from './pages/smt/SMTFG';
 import SmtTrackItems from './pages/smt/SmtTrackItems';
 import SolderPasteManagement from './pages/smt/SolderPasteManagement';
+import Document from './pages/smt/Document';
+import BomView from './pages/smt/BomView';
+import MaterialManagement from './pages/smt/MaterialManagement';
+import MaterialBomView from './pages/smt/MaterialBomView';
+import MaterialReturn from './pages/smt/MaterialReturn';
+import MaterialReturnBomView from './pages/smt/MaterialReturnBomView';
 
 import WorkOrderBackend from './pages/backend/WorkOrder';
 import PTH from './pages/backend/PTH';
@@ -309,6 +315,34 @@ export const router = createBrowserRouter([
                     {
                         path: 'track-items',
                         element: <SmtTrackItems />,
+                    },
+                    {
+                        path: 'qms',
+                        element: <Document />,
+                    },
+                    {
+                        path: 'qms/bom-view/:revisionId',
+                        element: <BomView />,
+                    },
+                    {
+                        path: 'material-management',
+                        element: <Navigate to="/smt/material-management/requests" replace />,
+                    },
+                    {
+                        path: 'material-management/requests',
+                        element: <MaterialManagement />,
+                    },
+                    {
+                        path: 'material-management/return',
+                        element: <MaterialReturn />,
+                    },
+                    {
+                        path: 'material-management/return/bom-view/:id',
+                        element: <MaterialReturnBomView />,
+                    },
+                    {
+                        path: 'material-management/bom-view/:id',
+                        element: <MaterialBomView />,
                     },
 
                 ]

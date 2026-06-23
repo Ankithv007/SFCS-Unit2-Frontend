@@ -17,6 +17,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     const { showToast } = useToast();
     const [expandedModule, setExpandedModule] = useState<string | null>(null);
     const [isMaterialMgmtExpanded, setIsMaterialMgmtExpanded] = useState(false);
+    const [isSolderPasteMgmtExpanded, setIsSolderPasteMgmtExpanded] = useState(false);
 
     const isSmtAdmin = smtUser && ['Super Admin', 'Admin', 'Manager'].includes(smtUser.role);
 
@@ -26,6 +27,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
             setExpandedModule('smt');
             if (location.pathname.startsWith('/smt/material-management')) {
                 setIsMaterialMgmtExpanded(true);
+            }
+            if (location.pathname.startsWith('/smt/solder-paste')) {
+                setIsSolderPasteMgmtExpanded(true);
             }
         }
         else if (location.pathname.startsWith('/backend')) setExpandedModule('backend');
@@ -142,6 +146,45 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     }}
                                 >
                                     <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Material Return
+                                </div>
+                            </div>
+                        )}
+                        <div
+                            className={`${styles.submenuItem} ${isSolderPasteMgmtExpanded ? styles.activeSubmenuParent : ''}`}
+                            onClick={() => setIsSolderPasteMgmtExpanded(!isSolderPasteMgmtExpanded)}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Solder Paste Management" className={styles.imageIcon} />
+                            </span> Solder Paste Management
+                        </div>
+                        {isSolderPasteMgmtExpanded && (
+                            <div className={styles.subSubmenu}>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/solder-paste/removal') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/solder-paste/removal');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Removal from Fridge
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/solder-paste/thawing') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/solder-paste/thawing');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Thawing
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/solder-paste/mixing') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/solder-paste/mixing');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Solder Paste Mixing
                                 </div>
                             </div>
                         )}

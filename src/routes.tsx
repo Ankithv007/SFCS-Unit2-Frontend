@@ -29,6 +29,9 @@ import PreAoi from './pages/smt/PreAoi';
 import SMTFG from './pages/smt/SMTFG';
 import SmtTrackItems from './pages/smt/SmtTrackItems';
 import SolderPasteManagement from './pages/smt/SolderPasteManagement';
+import RemovalFromFridge from './pages/smt/RemovalFromFridge';
+import Thawing from './pages/smt/Thawing';
+import SolderPasteMixing from './pages/smt/SolderPasteMixing';
 import Document from './pages/smt/Document';
 import BomView from './pages/smt/BomView';
 import MaterialManagement from './pages/smt/MaterialManagement';
@@ -291,6 +294,18 @@ export const router = createBrowserRouter([
                     {
                         path: 'solder-paste',
                         element: <SolderPasteManagement />,
+                    },
+                    {
+                        path: 'solder-paste/removal',
+                        element: <RemovalFromFridge />,
+                    },
+                    {
+                        path: 'solder-paste/thawing',
+                        element: <Thawing />,
+                    },
+                    {
+                        path: 'solder-paste/mixing',
+                        element: <SolderPasteMixing />,
                     },
                     {
                         path: 'spi',

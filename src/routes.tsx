@@ -29,7 +29,7 @@ import PreAoi from './pages/smt/PreAoi';
 import SMTFG from './pages/smt/SMTFG';
 import SmtTrackItems from './pages/smt/SmtTrackItems';
 import SolderPasteManagement from './pages/smt/SolderPasteManagement';
-import RemovalFromFridge from './pages/smt/RemovalFromFridge';
+import RemovalFromRefrigerator from './pages/smt/RemovalFromRefrigerator';
 import Thawing from './pages/smt/Thawing';
 import SolderPasteMixing from './pages/smt/SolderPasteMixing';
 import Document from './pages/smt/Document';
@@ -38,6 +38,8 @@ import MaterialManagement from './pages/smt/MaterialManagement';
 import MaterialBomView from './pages/smt/MaterialBomView';
 import MaterialReturn from './pages/smt/MaterialReturn';
 import MaterialReturnBomView from './pages/smt/MaterialReturnBomView';
+import StencilMasterRecord from './pages/smt/StencilMasterRecord';
+import StencilLifecycleManagement from './pages/smt/StencilLifecycleManagement';
 
 import WorkOrderBackend from './pages/backend/WorkOrder';
 import PTH from './pages/backend/PTH';
@@ -297,7 +299,7 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: 'solder-paste/removal',
-                        element: <RemovalFromFridge />,
+                        element: <RemovalFromRefrigerator />,
                     },
                     {
                         path: 'solder-paste/thawing',
@@ -358,6 +360,14 @@ export const router = createBrowserRouter([
                     {
                         path: 'material-management/bom-view/:id',
                         element: <MaterialBomView />,
+                    },
+                    {
+                        path: 'stencil/master',
+                        element: <StencilMasterRecord />,
+                    },
+                    {
+                        path: 'stencil/lifecycle',
+                        element: <StencilLifecycleManagement />,
                     },
 
                 ]

@@ -18,6 +18,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     const [expandedModule, setExpandedModule] = useState<string | null>(null);
     const [isMaterialMgmtExpanded, setIsMaterialMgmtExpanded] = useState(false);
     const [isSolderPasteMgmtExpanded, setIsSolderPasteMgmtExpanded] = useState(false);
+    const [isStencilMgmtExpanded, setIsStencilMgmtExpanded] = useState(false);
 
     const isSmtAdmin = smtUser && ['Super Admin', 'Admin', 'Manager'].includes(smtUser.role);
 
@@ -30,6 +31,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
             }
             if (location.pathname.startsWith('/smt/solder-paste')) {
                 setIsSolderPasteMgmtExpanded(true);
+            }
+            if (location.pathname.startsWith('/smt/stencil')) {
+                setIsStencilMgmtExpanded(true);
             }
         }
         else if (location.pathname.startsWith('/backend')) setExpandedModule('backend');
@@ -166,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                         navigate('/smt/solder-paste/removal');
                                     }}
                                 >
-                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Removal from Fridge
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Removal from Refrigerator
                                 </div>
                                 <div
                                     className={`${styles.subSubmenuItem} ${isActive('/smt/solder-paste/thawing') ? styles.activeSubSubmenu : ''}`}
@@ -185,6 +189,36 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     }}
                                 >
                                     <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Solder Paste Mixing
+                                </div>
+                            </div>
+                        )}
+                        <div
+                            className={`${styles.submenuItem} ${isStencilMgmtExpanded ? styles.activeSubmenuParent : ''}`}
+                            onClick={() => setIsStencilMgmtExpanded(!isStencilMgmtExpanded)}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Stencil Management" className={styles.imageIcon} />
+                            </span> Stencil Management
+                        </div>
+                        {isStencilMgmtExpanded && (
+                            <div className={styles.subSubmenu}>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/stencil/master') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/stencil/master');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Stencil Master Record
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/stencil/lifecycle') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/stencil/lifecycle');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Life Cycle Management
                                 </div>
                             </div>
                         )}

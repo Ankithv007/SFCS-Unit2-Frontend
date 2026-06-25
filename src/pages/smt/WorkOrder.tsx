@@ -108,9 +108,12 @@ export const WorkOrder: React.FC = () => {
     const [quantity, setQuantity] = useState('');
     const [pcbPerPanel, setPcbPerPanel] = useState('');
     const [panelQuantity, setPanelQuantity] = useState('');
+    const [sides, setSides] = useState('');
     const [createdBy, setCreatedBy] = useState('');
     const [priority, setPriority] = useState('medium');
     const [error, setError] = useState('');
+    const [editingWorkOrderId, setEditingWorkOrderId] = useState<string | null>(null);
+    const [viewDetailWo, setViewDetailWo] = useState<any | null>(null);
 
     const [workOrders, setWorkOrders] = useState<any[]>([]);
     const [selectedCount, setSelectedCount] = useState<{
@@ -201,6 +204,7 @@ export const WorkOrder: React.FC = () => {
                         product_description: wo.product_description,
                         quantity: wo.quantity,
                         panel_quantity: wo.panel_quantity,
+                        sides: wo.sides,
                         line_id: wo.line_id,
                         priority: wo.priority,
                         created_by: wo.created_by,
@@ -336,6 +340,56 @@ export const WorkOrder: React.FC = () => {
          document.body.removeChild(a);
      };
 
+    const handleCancelEdit = () => {
+        setEditingWorkOrderId(null);
+        setWorkOrderId('');
+        setPoId('');
+        setRemark('');
+        setProductName('');
+        setProductDescription('');
+        setQuantity('');
+        setPcbPerPanel('');
+        setPanelQuantity('');
+        setSides('');
+        setPriority('medium');
+        setSelectedFile(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+        setError('');
+    };
+
+    const handleEditClick = (wo: any) => {
+        setEditingWorkOrderId(wo.work_order_id);
+        setWorkOrderId(wo.work_order_id);
+        setPoId(wo.po_id);
+        setRemark(wo.remark || '');
+        setLineId(wo.line_id);
+        setPriority(wo.priority);
+        setProductName(wo.product_name);
+        setProductDescription(wo.product_description);
+        setQuantity(wo.quantity.toString());
+        
+        const computedPpp = wo.panel_quantity > 0 ? Math.round(wo.quantity / wo.panel_quantity) : 1;
+        setPcbPerPanel(computedPpp.toString());
+        setPanelQuantity(wo.panel_quantity.toString());
+        setSides(wo.sides || '');
+        
+        if (wo.po_document_name) {
+            setSelectedFile({
+                name: wo.po_document_name,
+                type: wo.po_document_type || '',
+                size: 0,
+                data: '' // Keep as blank to represent "existing file, unmodified"
+            });
+        } else {
+            setSelectedFile(null);
+        }
+        
+        setError('');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     const handleCreateWorkOrder = async () => {
         // Validation & Normalization
         const finalWorkOrderId = workOrderId.trim().toUpperCase();
@@ -371,10 +425,15 @@ export const WorkOrder: React.FC = () => {
             return;
         }
         
+        if (!sides) {
+            setError('Sides is required.');
+            return;
+        }
+
         setError('');
         setIsCreating(true);
 
-        const payload = {
+        const payload: any = {
             work_order_id: finalWorkOrderId,
             po_id: finalPoId,
             remark: remark,
@@ -384,14 +443,29 @@ export const WorkOrder: React.FC = () => {
             product_description: productDescription,
             quantity: parseInt(quantity),
             panel_quantity: parseInt(panelQuantity),
+            sides: sides,
             priority: priority,
-            created_by: createdBy,
-            po_document: selectedFile
+            created_by: createdBy
         };
 
+        if (selectedFile) {
+            if (selectedFile.data) {
+                payload.po_document = selectedFile;
+            } else {
+                payload.po_document = undefined;
+            }
+        } else {
+            payload.po_document = null;
+        }
+
         try {
-            const res = await fetch('/api/smt/work-orders', {
-                method: 'POST',
+            const url = editingWorkOrderId 
+                ? `/api/smt/work-orders/${editingWorkOrderId}` 
+                : '/api/smt/work-orders';
+            const method = editingWorkOrderId ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+                method: method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
@@ -399,22 +473,10 @@ export const WorkOrder: React.FC = () => {
             const data = await res.json();
 
             if (res.ok && data.success) {
-                addToast("Work Order created successfully.", "success");
+                addToast(editingWorkOrderId ? "Work Order updated successfully." : "Work Order created successfully.", "success");
                 
                 // Clear Form
-                setWorkOrderId('');
-                setPoId('');
-                setRemark('');
-                setProductName('');
-                setProductDescription('');
-                setQuantity('');
-                setPcbPerPanel('');
-                setPanelQuantity('');
-                setPriority('medium');
-                setSelectedFile(null);
-                if (fileInputRef.current) {
-                    fileInputRef.current.value = '';
-                }
+                handleCancelEdit();
 
                 // Reset search and return to page 1
                 setSearchQuery('');
@@ -422,7 +484,7 @@ export const WorkOrder: React.FC = () => {
                 setCurrentPage(1);
                 fetchWorkOrders(1, pageSize, '');
             } else {
-                setError(`Failed to create Work Order: ${data.message || 'Unknown error'}`);
+                setError(`Failed to ${editingWorkOrderId ? 'update' : 'create'} Work Order: ${data.message || 'Unknown error'}`);
             }
         } catch (err) {
             console.error("API error:", err);
@@ -546,7 +608,7 @@ export const WorkOrder: React.FC = () => {
                 </div>
 
                 <div className={styles.card}>
-                    <h3>Create New Work Order</h3>
+                    <h3>{editingWorkOrderId ? `Edit Work Order: ${editingWorkOrderId}` : 'Create New Work Order'}</h3>
 
                     {error && <div style={{ color: 'var(--error-color)', marginBottom: '1rem', fontWeight: 'bold' }}>{error}</div>}
 
@@ -560,11 +622,12 @@ export const WorkOrder: React.FC = () => {
                                 onChange={(e) => setWorkOrderId(e.target.value)}
                                 placeholder="e.g. WO2026060200016"
                                 className={styles.input}
-                                style={{ height: '42px', boxSizing: 'border-box' }}
+                                style={{ height: '42px', boxSizing: 'border-box', ...(editingWorkOrderId ? { backgroundColor: '#e9ecef', color: '#6c757d', cursor: 'not-allowed' } : {}) }}
                                 spellCheck={false}
                                 autoComplete="off"
                                 autoCorrect="off"
                                 autoCapitalize="none"
+                                disabled={!!editingWorkOrderId}
                             />
                         </div>
 
@@ -700,7 +763,7 @@ export const WorkOrder: React.FC = () => {
                                 type="number"
                                 value={panelQuantity}
                                 readOnly
-                                placeholder="Calculated"
+                                placeholder="Calculated Automatically"
                                 className={styles.input}
                                 style={{
                                     boxSizing: 'border-box',
@@ -712,8 +775,20 @@ export const WorkOrder: React.FC = () => {
                             />
                         </div>
 
-                        {/* Empty slot to balance 4 columns */}
-                        <div></div>
+                        <div className={styles.inputGroup}>
+                            <label>Sides *</label>
+                            <select
+                                value={sides}
+                                onChange={(e) => setSides(e.target.value)}
+                                className={styles.select}
+                                style={{ height: '42px', boxSizing: 'border-box' }}
+                            >
+                                <option value="">Select Sides</option>
+                                <option value="Top">Top</option>
+                                <option value="Bottom">Bottom</option>
+                                <option value="Top / Bottom">Top / Bottom</option>
+                            </select>
+                        </div>
 
                         {/* --- ROW 5: PO Document & Remark Side-by-Side --- */}
                         <div style={{
@@ -751,7 +826,7 @@ export const WorkOrder: React.FC = () => {
                                     />
                                     <span className={styles.uploadIcon} style={{ fontSize: '1.1rem', marginBottom: '2px' }}>📤</span>
                                     <span className={styles.uploadText} style={{ fontSize: '0.75rem' }}>
-                                        <strong>Drop file or click to upload</strong>
+                                        <strong>Drop PDF or Excel file here (Max 5 MB)</strong>
                                     </span>
                                     <span className={styles.uploadSubtext} style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
                                         PDF / Excel • 5MB max
@@ -802,7 +877,7 @@ export const WorkOrder: React.FC = () => {
                                 <textarea
                                     value={remark}
                                     onChange={(e) => setRemark(e.target.value)}
-                                    placeholder="Enter additional remarks, notes, or production instructions..."
+                                    placeholder="Enter work order remarks"
                                     className={styles.input}
                                     style={{ 
                                         boxSizing: 'border-box', 
@@ -817,7 +892,7 @@ export const WorkOrder: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className={styles.actions} style={{ marginTop: '30px' }}>
+                    <div className={styles.actions} style={{ marginTop: '30px', display: 'flex', gap: '10px' }}>
                         <button 
                             className={`${styles.button} ${isCreating ? styles.buttonWithSpinner : ''}`} 
                             onClick={handleCreateWorkOrder}
@@ -825,12 +900,22 @@ export const WorkOrder: React.FC = () => {
                         >
                             {isCreating ? (
                                 <>
-                                    <span className={styles.spinner}></span> Creating...
+                                    <span className={styles.spinner}></span> Saving...
                                 </>
                             ) : (
-                                'Create Work Order'
+                                editingWorkOrderId ? 'Save Changes' : 'Create Work Order'
                             )}
                         </button>
+                        {editingWorkOrderId && (
+                            <button
+                                className={styles.secondaryButton}
+                                onClick={handleCancelEdit}
+                                disabled={isCreating}
+                                style={{ height: '42px' }}
+                            >
+                                Cancel
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -882,6 +967,7 @@ export const WorkOrder: React.FC = () => {
                                             <th>PO ID</th>
                                             <th>PRODUCT NAME</th>
                                             <th>PRODUCT DESCRIPTION</th>
+                                            <th>SIDES</th>
                                             <th>QUANTITY</th>
                                             <th>PANEL QTY</th>
                                             <th>LINE ID</th>
@@ -900,6 +986,7 @@ export const WorkOrder: React.FC = () => {
                                                 <td style={{ fontWeight: 500, color: '#374151' }}>{wo.po_id || '-'}</td>
                                                 <td>{wo.product_name}</td>
                                                 <DescriptionCell text={wo.product_description} />
+                                                <td style={{ fontWeight: 500, color: '#475569' }}>{wo.sides || '-'}</td>
                                                 <td 
                                                     className="smt-clickable-count smt-total" 
                                                     onClick={() => setSelectedCount({
@@ -971,14 +1058,30 @@ export const WorkOrder: React.FC = () => {
                                                 </td>
                                                 <RemarkCell remark={wo.remark} workOrderId={wo.work_order_id} onOpen={(text) => setRemarkModal({ workOrderId: wo.work_order_id, remark: text })} />
                                                 <td>
-                                                    <button
-                                                        onClick={() => handleDeleteWorkOrder(wo.work_order_id)}
-                                                        className={styles.deleteButton}
-                                                        disabled={deletingId === wo.work_order_id}
-                                                        style={{ opacity: deletingId === wo.work_order_id ? 0.5 : 1 }}
-                                                    >
-                                                        {deletingId === wo.work_order_id ? 'Deleting...' : 'Delete'}
-                                                    </button>
+                                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                                        <button
+                                                            onClick={() => setViewDetailWo(wo)}
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', border: '1px solid #4b5563', color: '#4b5563' }}
+                                                        >
+                                                            👁️ View
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleEditClick(wo)}
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', borderColor: '#4f46e5', color: '#4f46e5' }}
+                                                        >
+                                                            ✏️ Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteWorkOrder(wo.work_order_id)}
+                                                            className={styles.deleteButton}
+                                                            disabled={deletingId === wo.work_order_id}
+                                                            style={{ opacity: deletingId === wo.work_order_id ? 0.5 : 1, padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                                                        >
+                                                            {deletingId === wo.work_order_id ? '...' : '🗑️'}
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -1180,6 +1283,137 @@ export const WorkOrder: React.FC = () => {
                     label={selectedCount.label}
                     onClose={() => setSelectedCount(null)}
                 />
+            )}
+
+            {/* View Details Dialog */}
+            {viewDetailWo && (
+                <div className={styles.modalOverlay} onClick={() => setViewDetailWo(null)}>
+                    <div className={styles.modalContent} style={{ maxWidth: '750px', width: '90%', maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <h4 className={styles.modalTitle}>
+                                🔍 Work Order Details - {viewDetailWo.work_order_id}
+                            </h4>
+                            <button className={styles.modalCloseBtn} onClick={() => setViewDetailWo(null)}>
+                                ❌
+                            </button>
+                        </div>
+                        <div className={styles.modalBody}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '0.5rem 0' }}>
+                                <div>
+                                    <strong>Work Order ID:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.work_order_id}</div>
+                                </div>
+                                <div>
+                                    <strong>PO ID:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.po_id || '-'}</div>
+                                </div>
+                                <div>
+                                    <strong>Area ID:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151' }}>SMT</div>
+                                </div>
+                                <div>
+                                    <strong>Line ID:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.line_id}</div>
+                                </div>
+                                <div>
+                                    <strong>Priority:</strong>
+                                    <div style={{ marginTop: '4px' }}>
+                                        <span style={{
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.8rem',
+                                            fontWeight: 'bold',
+                                            backgroundColor: viewDetailWo.priority === 'high' ? '#fee2e2' : viewDetailWo.priority === 'medium' ? '#fef3c7' : '#e0e7ff',
+                                            color: viewDetailWo.priority === 'high' ? '#991b1b' : viewDetailWo.priority === 'medium' ? '#92400e' : '#3730a3'
+                                        }}>
+                                            {(viewDetailWo.priority || 'MEDIUM').toUpperCase()}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <strong>Sides:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151', fontWeight: 600 }}>{viewDetailWo.sides || '-'}</div>
+                                </div>
+                                <div>
+                                    <strong>Product Name:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.product_name}</div>
+                                </div>
+                                <div>
+                                    <strong>Product Description:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151', whiteSpace: 'pre-wrap' }}>{viewDetailWo.product_description}</div>
+                                </div>
+                                <div>
+                                    <strong>Quantity:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.quantity} units</div>
+                                </div>
+                                <div>
+                                    <strong>Panel Quantity:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.panel_quantity} panels</div>
+                                </div>
+                                <div>
+                                    <strong>Created By:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.created_by || 'System'}</div>
+                                </div>
+                                <div>
+                                    <strong>Date Created:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151' }}>
+                                        {new Date(viewDetailWo.created_at).toLocaleString()}
+                                    </div>
+                                </div>
+                                <div style={{ gridColumn: 'span 2' }}>
+                                    <strong>PO Document:</strong>
+                                    <div style={{ marginTop: '6px' }}>
+                                        {viewDetailWo.po_document_path ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                {viewDetailWo.po_document_type === 'application/pdf' ? '📕' : '📗'}
+                                                <span style={{ fontSize: '0.9rem', color: '#4b5563' }}>{viewDetailWo.po_document_name}</span>
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+                                                    onClick={() => handleOpenPreview(viewDetailWo.work_order_id)}
+                                                >
+                                                    👁️ View Preview
+                                                </button>
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+                                                    onClick={() => handleDownloadPo(viewDetailWo.work_order_id, viewDetailWo.po_document_name)}
+                                                >
+                                                    📥 Download
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <span style={{ color: '#9ca3af' }}>No PO document uploaded</span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div style={{ gridColumn: 'span 2' }}>
+                                    <strong>Remark:</strong>
+                                    <div style={{ marginTop: '4px', color: '#374151', whiteSpace: 'pre-wrap', backgroundColor: '#f9fafb', padding: '0.5rem', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
+                                        {viewDetailWo.remark || <span style={{ color: '#9ca3af' }}>No remarks</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            padding: '1rem 1.5rem',
+                            borderTop: '1px solid #e2e8f0',
+                            marginTop: 'auto',
+                            backgroundColor: '#f8fafc'
+                        }}>
+                            <button
+                                className={styles.button}
+                                onClick={() => setViewDetailWo(null)}
+                                style={{ minWidth: '120px' }}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     );

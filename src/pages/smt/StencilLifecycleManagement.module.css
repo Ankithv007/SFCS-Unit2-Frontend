@@ -599,3 +599,75 @@
     margin: 0.5rem 0;
     width: 100%;
 }
+
+/* Warning Banners */
+.warningBanner {
+    padding: 1rem;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    border: 1px solid transparent;
+    text-align: left;
+}
+
+.warningYellow {
+    background-color: #fefbeb;
+    color: #b45309;
+    border-color: #fde68a;
+}
+
+.warningOrange {
+    background-color: #fff7ed;
+    color: #c2410c;
+    border-color: #fed7aa;
+}
+
+.warningRed {
+    background-color: #fef2f2;
+    color: #b91c1c;
+    border-color: #fca5a5;
+}
+
+.warningTitle {
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+}
+
+/* Badges for Life Cycle Status */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badgeYellow {
+    background-color: #fefbeb;
+    color: #b45309;
+}
+
+.badgeOrange {
+    background-color: #fff7ed;
+    color: #c2410c;
+}
+
+.badgeRed {
+    background-color: #fef2f2;
+    color: #b91c1c;
+}
+
+.badgeGreen {
+    background-color: #f0fdf4;
+    color: #15803d;
+}
+

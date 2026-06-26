@@ -223,6 +223,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             </div>
                         )}
                         <div
+                            className={`${styles.submenuItem} ${isActive('/smt/baking-tracking') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/baking-tracking')}
+                        >
+                            <span className={styles.menuIcon}>
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Baking Tracking Record" className={styles.imageIcon} />
+                            </span> Baking Tracking Record
+                        </div>
+                        <div
                             className={`${styles.submenuItem} ${isActive('/smt/pcb-generation') ? styles.activeSubmenu : ''}`}
                             onClick={() => navigate('/smt/pcb-generation')}
                         >

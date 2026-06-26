@@ -40,6 +40,7 @@ import MaterialReturn from './pages/smt/MaterialReturn';
 import MaterialReturnBomView from './pages/smt/MaterialReturnBomView';
 import StencilMasterRecord from './pages/smt/StencilMasterRecord';
 import StencilLifecycleManagement from './pages/smt/StencilLifecycleManagement';
+import BakingTrackingRecord from './pages/smt/BakingTrackingRecord';
 
 import WorkOrderBackend from './pages/backend/WorkOrder';
 import PTH from './pages/backend/PTH';
@@ -368,6 +369,10 @@ export const router = createBrowserRouter([
                     {
                         path: 'stencil/lifecycle',
                         element: <StencilLifecycleManagement />,
+                    },
+                    {
+                        path: 'baking-tracking',
+                        element: <BakingTrackingRecord />,
                     },
 
                 ]

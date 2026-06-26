@@ -8,6 +8,7 @@ interface Stencil {
     id: string;
     stencil_id: string;
     stencil_name: string;
+    job_number: string;
     revision: string;
     thickness_mills: string;
     manufacturing_date: string;
@@ -53,6 +54,10 @@ interface LifecycleRecord {
     remarks: string | null;
     created_by_name: string;
     created_at: string;
+    updated_by_name?: string | null;
+    updated_at?: string | null;
+    deleted_by_name?: string | null;
+    deleted_at?: string | null;
 }
 
 interface DetailModalData {
@@ -99,10 +104,91 @@ const StencilLifecycleManagement: React.FC = () => {
     const [viewDetailData, setViewDetailData] = useState<DetailModalData | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
-
     const isSuperAdmin = smtUser?.role === 'Super Admin';
 
-    // Fetch initial setup data
+    const lastWarnedRef = useRef<{ stencilId: string; level: number } | null>(null);
+
+    const getWarningDetails = (remaining: number) => {
+        if (remaining <= 1000) {
+            return {
+                level: 3,
+                icon: '🚨',
+                title: 'Final Warning',
+                message: 'This stencil is very close to reaching its maximum life cycle.',
+                suggestion: 'Replace this stencil as soon as possible.',
+                toastType: 'error' as const,
+                bannerColor: 'red'
+            };
+        } else if (remaining <= 2500) {
+            return {
+                level: 2,
+                icon: '⚠️',
+                title: 'Critical Warning',
+                message: 'This stencil has very few prints remaining.',
+                suggestion: 'Please schedule a stencil replacement.',
+                toastType: 'info' as const,
+                bannerColor: 'orange'
+            };
+        } else if (remaining <= 5000) {
+            return {
+                level: 1,
+                icon: '⚠️',
+                title: 'Warning',
+                message: 'This stencil is approaching its maximum life cycle.',
+                suggestion: 'Please prepare a replacement stencil soon.',
+                toastType: 'info' as const,
+                bannerColor: 'yellow'
+            };
+        }
+        return null;
+    };
+
+    const getWarningLevel = (remaining: number) => {
+        if (remaining <= 1000) return 3;
+        if (remaining <= 2500) return 2;
+        if (remaining <= 5000) return 1;
+        return 0;
+    };
+
+    // Auto-refresh selectedStencil when stencils list changes (e.g. after create, delete, reload)
+    useEffect(() => {
+        if (selectedStencil && stencils.length > 0) {
+            const updated = stencils.find(s => s.id === selectedStencil.id);
+            if (updated) {
+                if (updated.print_count !== selectedStencil.print_count || updated.status !== selectedStencil.status) {
+                    setSelectedStencil(updated);
+                }
+            } else {
+                setSelectedStencil(null);
+            }
+        }
+    }, [stencils, selectedStencil]);
+
+    // Evaluate selectedStencil warning toasts to prevent duplicates during re-renders
+    useEffect(() => {
+        if (selectedStencil) {
+            const remaining = selectedStencil.target_life_cycle - selectedStencil.print_count;
+            const level = getWarningLevel(remaining);
+            const lastWarned = lastWarnedRef.current;
+
+            const isNewStencil = !lastWarned || lastWarned.stencilId !== selectedStencil.id;
+            const isNewLevel = !lastWarned || lastWarned.level !== level;
+
+            if (level > 0 && (isNewStencil || isNewLevel)) {
+                lastWarnedRef.current = { stencilId: selectedStencil.id, level };
+                const warning = getWarningDetails(remaining);
+                if (warning) {
+                    const formattedRemaining = remaining.toLocaleString();
+                    const toastMsg = `${warning.title}\n\nRemaining Prints: ${formattedRemaining}\n\n${warning.message}\n\n${warning.suggestion}`;
+                    showToast(toastMsg, warning.toastType);
+                }
+            } else if (isNewStencil || isNewLevel) {
+                lastWarnedRef.current = { stencilId: selectedStencil.id, level };
+            }
+        } else {
+            lastWarnedRef.current = null;
+        }
+    }, [selectedStencil, showToast]);
     useEffect(() => {
         fetchActiveStencils();
         fetchWorkOrders();
@@ -209,7 +295,7 @@ const StencilLifecycleManagement: React.FC = () => {
 
         setSubmitting(true);
         try {
-            await apiFetch('/api/smt/stencil-lifecycle/create', {
+            const res = await apiFetch('/api/smt/stencil-lifecycle/create', {
                 method: 'POST',
                 body: JSON.stringify({
                     stencil_record_id: selectedStencil.id,
@@ -218,8 +304,6 @@ const StencilLifecycleManagement: React.FC = () => {
                 })
             });
 
-            showToast('Stencil Lifecycle Record Created Successfully.', 'success');
-            
             // Reset selection inputs
             setSelectedStencil(null);
             setSelectedWorkOrder(null);
@@ -227,9 +311,23 @@ const StencilLifecycleManagement: React.FC = () => {
             setWoSearch('');
             setRemarks('');
 
-            // Reload data
+            // Reload data before triggering toast so that the tables and states update first
             fetchActiveStencils();
             fetchRecords();
+
+            const remaining = res.record?.balance_life_cycle;
+            if (remaining !== undefined && remaining !== null) {
+                const warning = getWarningDetails(remaining);
+                if (warning) {
+                    const formattedRemaining = remaining.toLocaleString();
+                    const toastMsg = `${warning.title}\n\nRemaining Prints: ${formattedRemaining}\n\n${warning.message}\n\n${warning.suggestion}`;
+                    showToast(toastMsg, warning.toastType);
+                } else {
+                    showToast('Stencil Lifecycle Record Created Successfully.', 'success');
+                }
+            } else {
+                showToast('Stencil Lifecycle Record Created Successfully.', 'success');
+            }
         } catch (err: any) {
             console.error('Lifecycle creation error:', err);
             showToast(err.message || 'Failed to create record.', 'error');
@@ -258,7 +356,7 @@ const StencilLifecycleManagement: React.FC = () => {
 
             showToast('Lifecycle record deleted and stencil print count updated successfully.', 'success');
             setConfirmDeleteId(null);
-            
+
             // Reload all
             fetchActiveStencils();
             fetchRecords();
@@ -278,22 +376,13 @@ const StencilLifecycleManagement: React.FC = () => {
         setCurrentPage(1);
     };
 
-    const getStatusStyle = (status: string) => {
-        switch (status) {
-            case 'Available': return `${styles.statusBadge} ${styles.statusAvailable}`;
-            case 'Running': return `${styles.statusBadge} ${styles.statusRunning}`;
-            case 'Completed': return `${styles.statusBadge} ${styles.statusCompleted}`;
-            case 'Expired': return `${styles.statusBadge} ${styles.statusExpired}`;
-            default: return styles.statusBadge;
-        }
-    };
 
     return (
         <div className={styles.container}>
             {/* Header row */}
             <div className={styles.headerRow}>
                 <div className={styles.headerContent}>
-                    <h2>🔄 Stencil Life Cycle Management</h2>
+                    <h2> Stencil Life Cycle Management</h2>
                     <p>Track stencil print limit consumption and assign work orders safely.</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -406,6 +495,33 @@ const StencilLifecycleManagement: React.FC = () => {
                                             <span className={styles.detailLabel}>Remaining Prints</span>
                                             <span className={styles.detailValue}>{selectedStencil.target_life_cycle - selectedStencil.print_count}</span>
                                         </div>
+
+                                        {(() => {
+                                            const remaining = selectedStencil.target_life_cycle - selectedStencil.print_count;
+                                            const warning = getWarningDetails(remaining);
+                                            if (!warning) return null;
+
+                                            let bannerClass = '';
+                                            if (warning.bannerColor === 'red') bannerClass = styles.warningRed;
+                                            else if (warning.bannerColor === 'orange') bannerClass = styles.warningOrange;
+                                            else if (warning.bannerColor === 'yellow') bannerClass = styles.warningYellow;
+
+                                            return (
+                                                <div className={`${styles.warningBanner} ${bannerClass}`} style={{ gridColumn: 'span 2', marginTop: '0.5rem' }}>
+                                                    <div className={styles.warningTitle}>
+                                                        <span>{warning.icon}</span>
+                                                        <span>{warning.title}</span>
+                                                    </div>
+                                                    <div style={{ fontWeight: 'bold' }}>
+                                                        Remaining Prints: {remaining.toLocaleString()}
+                                                    </div>
+                                                    <div>{warning.message}</div>
+                                                    <div style={{ fontSize: '0.825rem', opacity: 0.9, fontStyle: 'italic' }}>
+                                                        {warning.suggestion}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 ) : (
                                     <div className={styles.emptyState}>Select a stencil to view details</div>
@@ -602,26 +718,19 @@ const StencilLifecycleManagement: React.FC = () => {
                                 <th onClick={() => handleSort('balance_life_cycle')} className={styles.sortable}>
                                     Balance Life Cycle {sortBy === 'balance_life_cycle' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
-                                <th>Created By</th>
-                                <th onClick={() => handleSort('created_at')} className={styles.sortable}>
-                                    Created Date {sortBy === 'created_at' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
-                                <th onClick={() => handleSort('status')} className={styles.sortable}>
-                                    Status {sortBy === 'status' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
                                 <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loadingTable ? (
                                 <tr>
-                                    <td colSpan={11} style={{ textAlign: 'center', padding: '2rem' }}>
+                                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
                                         Loading lifecycle records...
                                     </td>
                                 </tr>
                             ) : records.length === 0 ? (
                                 <tr>
-                                    <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                                         No lifecycle records found.
                                     </td>
                                 </tr>
@@ -636,13 +745,6 @@ const StencilLifecycleManagement: React.FC = () => {
                                         <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{rec.qty_life_cycle}</td>
                                         <td style={{ textAlign: 'center', color: rec.balance_life_cycle === 0 ? '#ef4444' : 'inherit' }}>
                                             {rec.balance_life_cycle}
-                                        </td>
-                                        <td>{rec.created_by_name}</td>
-                                        <td>{new Date(rec.created_at).toLocaleDateString()}</td>
-                                        <td>
-                                            <span className={getStatusStyle(rec.status)}>
-                                                {rec.status}
-                                            </span>
                                         </td>
                                         <td>
                                             <div className={styles.actionCell}>
@@ -713,42 +815,50 @@ const StencilLifecycleManagement: React.FC = () => {
                             <div>
                                 <div className={styles.modalSectionTitle}>Stencil Master Record Information</div>
                                 <div className={styles.modalGrid}>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Stencil Name</span>
-                                        <span className={styles.modalValue}>{viewDetailData.record.stencil_name}</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Stencil ID</span>
-                                        <span className={styles.modalValue}>{viewDetailData.record.stencil_id}</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Manufacturer</span>
-                                        <span className={styles.modalValue}>VELANKANI</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Material</span>
-                                        <span className={styles.modalValue}>Stainless Steel</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Thickness</span>
-                                        <span className={styles.modalValue}>{viewDetailData.stencil?.thickness_mills || 'N/A'} mills</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Mesh Type</span>
-                                        <span className={styles.modalValue}>Laser-Cut Fine Line</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Frame Size</span>
-                                        <span className={styles.modalValue}>29 x 29 inches</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Revision</span>
-                                        <span className={styles.modalValue}>{viewDetailData.stencil?.revision || 'N/A'}</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Storage Location</span>
-                                        <span className={styles.modalValue}>{viewDetailData.stencil?.storage_location || '-'}</span>
-                                    </div>
+                                    {viewDetailData.record.stencil_name && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Stencil / Model Name</span>
+                                            <span className={styles.modalValue}>{viewDetailData.record.stencil_name}</span>
+                                        </div>
+                                    )}
+                                    {viewDetailData.stencil?.job_number && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Job Number</span>
+                                            <span className={styles.modalValue}>{viewDetailData.stencil.job_number}</span>
+                                        </div>
+                                    )}
+                                    {viewDetailData.stencil?.revision && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Revision</span>
+                                            <span className={styles.modalValue}>{viewDetailData.stencil.revision}</span>
+                                        </div>
+                                    )}
+                                    {viewDetailData.stencil?.thickness_mills && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Thickness</span>
+                                            <span className={styles.modalValue}>{viewDetailData.stencil.thickness_mills} mills</span>
+                                        </div>
+                                    )}
+                                    {viewDetailData.stencil?.manufacturing_date && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Manufacturing Date</span>
+                                            <span className={styles.modalValue}>
+                                                {new Date(viewDetailData.stencil.manufacturing_date).toISOString().split('T')[0]}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {viewDetailData.stencil?.side && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Sides</span>
+                                            <span className={styles.modalValue}>{viewDetailData.stencil.side}</span>
+                                        </div>
+                                    )}
+                                    {viewDetailData.stencil?.remarks && viewDetailData.stencil.remarks.trim() && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Remark</span>
+                                            <span className={styles.modalValue}>{viewDetailData.stencil.remarks}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -783,8 +893,8 @@ const StencilLifecycleManagement: React.FC = () => {
                                     <div className={styles.modalField}>
                                         <span className={styles.modalLabel}>PCB Per Panel</span>
                                         <span className={styles.modalValue}>
-                                            {viewDetailData.workOrder && viewDetailData.workOrder.panel_quantity > 0 
-                                                ? Math.round(viewDetailData.workOrder.quantity / viewDetailData.workOrder.panel_quantity) 
+                                            {viewDetailData.workOrder && viewDetailData.workOrder.panel_quantity > 0
+                                                ? Math.round(viewDetailData.workOrder.quantity / viewDetailData.workOrder.panel_quantity)
                                                 : 1}
                                         </span>
                                     </div>
@@ -847,9 +957,33 @@ const StencilLifecycleManagement: React.FC = () => {
                                         <span className={styles.modalValue}>{viewDetailData.record.created_by_name}</span>
                                     </div>
                                     <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Created Time</span>
+                                        <span className={styles.modalLabel}>Created Date</span>
                                         <span className={styles.modalValue}>{new Date(viewDetailData.record.created_at).toLocaleString()}</span>
                                     </div>
+                                    {viewDetailData.record.updated_by_name && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Updated By</span>
+                                            <span className={styles.modalValue}>{viewDetailData.record.updated_by_name}</span>
+                                        </div>
+                                    )}
+                                    {viewDetailData.record.updated_by_name && viewDetailData.record.updated_at && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Updated Date</span>
+                                            <span className={styles.modalValue}>{new Date(viewDetailData.record.updated_at).toLocaleString()}</span>
+                                        </div>
+                                    )}
+                                    {viewDetailData.record.deleted_by_name && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Deleted By</span>
+                                            <span className={styles.modalValue}>{viewDetailData.record.deleted_by_name}</span>
+                                        </div>
+                                    )}
+                                    {viewDetailData.record.deleted_at && (
+                                        <div className={styles.modalField}>
+                                            <span className={styles.modalLabel}>Deleted Date</span>
+                                            <span className={styles.modalValue}>{new Date(viewDetailData.record.deleted_at).toLocaleString()}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

@@ -7,12 +7,14 @@ import { apiFetch } from '../../utils/api';
 interface BakingRecord {
     id: string;
     model_name: string;
-    vepl_part_number: string;
-    manufacturing_part_number: string;
     msl_level: string;
-    reel_qty: number;
     baking_temperature: string;
-    component_thickness: string;
+    components?: {
+        vepl_part_number: string;
+        manufacturer_part_number: string;
+        reel_qty: number;
+        component_thickness: string;
+    }[];
     baking_in_time: string;
     baking_out_time: string | null;
     baking_duration: string | null;
@@ -40,14 +42,29 @@ const BakingTrackingRecord: React.FC = () => {
 
     // 1. Create Form State
     const [modelName, setModelName] = useState('');
-    const [veplPartNumber, setVeplPartNumber] = useState('');
-    const [manufacturingPartNumber, setManufacturingPartNumber] = useState('');
     const [mslLevel, setMslLevel] = useState('');
-    const [reelQty, setReelQty] = useState('');
     const [bakingTemperature, setBakingTemperature] = useState('');
-    const [componentThickness, setComponentThickness] = useState('');
     const [remarks, setRemarks] = useState('');
+    const [components, setComponents] = useState([
+        { vepl_part_number: '', manufacturer_part_number: '', reel_qty: '', component_thickness: '' }
+    ]);
     const [creating, setCreating] = useState(false);
+
+    const handleComponentChange = (index: number, field: string, value: string) => {
+        const updated = [...components];
+        updated[index] = { ...updated[index], [field]: value };
+        setComponents(updated);
+    };
+
+    const addComponent = () => {
+        setComponents([...components, { vepl_part_number: '', manufacturer_part_number: '', reel_qty: '', component_thickness: '' }]);
+    };
+
+    const removeComponent = (index: number) => {
+        if (components.length > 1) {
+            setComponents(components.filter((_, i) => i !== index));
+        }
+    };
 
     // 2. Pending Records State
     const [pendingRecords, setPendingRecords] = useState<BakingRecord[]>([]);
@@ -209,23 +226,21 @@ const BakingTrackingRecord: React.FC = () => {
     // Handle Create Submission
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (
-            !modelName.trim() ||
-            !veplPartNumber.trim() ||
-            !manufacturingPartNumber.trim() ||
-            !mslLevel.trim() ||
-            !reelQty.trim() ||
-            !bakingTemperature.trim() ||
-            !componentThickness.trim()
-        ) {
+        if (!modelName.trim() || !mslLevel.trim() || !bakingTemperature.trim()) {
             showToast('Please fill all mandatory fields.', 'error');
             return;
         }
 
-        const qty = parseInt(reelQty, 10);
-        if (isNaN(qty) || qty <= 0) {
-            showToast('Reel Quantity must be greater than zero.', 'error');
-            return;
+        for (const comp of components) {
+            if (!comp.vepl_part_number.trim() || !comp.manufacturer_part_number.trim() || !comp.reel_qty.trim() || !comp.component_thickness.trim()) {
+                showToast('All fields in each component are mandatory.', 'error');
+                return;
+            }
+            const qty = parseInt(comp.reel_qty, 10);
+            if (isNaN(qty) || qty <= 0) {
+                showToast('Reel Quantity must be greater than zero for all components.', 'error');
+                return;
+            }
         }
 
         setCreating(true);
@@ -237,13 +252,10 @@ const BakingTrackingRecord: React.FC = () => {
                 },
                 body: JSON.stringify({
                     model_name: modelName,
-                    vepl_part_number: veplPartNumber,
-                    manufacturing_part_number: manufacturingPartNumber,
                     msl_level: mslLevel,
-                    reel_qty: qty,
                     baking_temperature: bakingTemperature,
-                    component_thickness: componentThickness,
-                    remarks: remarks || null
+                    remarks: remarks || null,
+                    components
                 })
             });
 
@@ -251,13 +263,10 @@ const BakingTrackingRecord: React.FC = () => {
             
             // Clear inputs
             setModelName('');
-            setVeplPartNumber('');
-            setManufacturingPartNumber('');
             setMslLevel('');
-            setReelQty('');
             setBakingTemperature('');
-            setComponentThickness('');
             setRemarks('');
+            setComponents([{ vepl_part_number: '', manufacturer_part_number: '', reel_qty: '', component_thickness: '' }]);
 
             // Reload Pending Table
             setPendingPage(1);
@@ -365,6 +374,17 @@ const BakingTrackingRecord: React.FC = () => {
         setCompletedPage(1);
     };
 
+    // Fetch full record for View Details
+    const handleViewDetails = async (id: string) => {
+        try {
+            const res = await apiFetch(`/api/smt/baking-tracking/records/${id}`);
+            setViewRecord(res);
+        } catch (err: any) {
+            console.error('Failed to fetch record details:', err);
+            showToast('Failed to load record details.', 'error');
+        }
+    };
+
     // Check if record update exists
     const hasBeenUpdated = (rec: BakingRecord) => {
         // If updated_at is equal to created_at and no updated_by is set, it means never updated
@@ -412,30 +432,6 @@ const BakingTrackingRecord: React.FC = () => {
                         </div>
 
                         <div className={styles.inputGroup}>
-                            <label>VEPL Part Number <span>*</span></label>
-                            <input
-                                type="text"
-                                className={styles.input}
-                                placeholder="Enter VEPL Part Number"
-                                value={veplPartNumber}
-                                onChange={(e) => setVeplPartNumber(e.target.value)}
-                                required
-                            />
-                        </div>
-
-                        <div className={styles.inputGroup}>
-                            <label>Manufacturing Part Number <span>*</span></label>
-                            <input
-                                type="text"
-                                className={styles.input}
-                                placeholder="Enter Manufacturing Part Number"
-                                value={manufacturingPartNumber}
-                                onChange={(e) => setManufacturingPartNumber(e.target.value)}
-                                required
-                            />
-                        </div>
-
-                        <div className={styles.inputGroup}>
                             <label>MSL Level <span>*</span></label>
                             <input
                                 type="text"
@@ -443,18 +439,6 @@ const BakingTrackingRecord: React.FC = () => {
                                 placeholder="Enter MSL Level"
                                 value={mslLevel}
                                 onChange={(e) => setMslLevel(e.target.value)}
-                                required
-                            />
-                        </div>
-
-                        <div className={styles.inputGroup}>
-                            <label>Reel Qty <span>*</span></label>
-                            <input
-                                type="number"
-                                className={styles.input}
-                                placeholder="Enter Reel Quantity"
-                                value={reelQty}
-                                onChange={(e) => setReelQty(e.target.value)}
                                 required
                             />
                         </div>
@@ -471,19 +455,78 @@ const BakingTrackingRecord: React.FC = () => {
                             />
                         </div>
 
-                        <div className={styles.inputGroup}>
-                            <label>Component Thickness <span>*</span></label>
-                            <input
-                                type="text"
-                                className={styles.input}
-                                placeholder="Enter Component Thickness"
-                                value={componentThickness}
-                                onChange={(e) => setComponentThickness(e.target.value)}
-                                required
-                            />
+                        {/* Components Section */}
+                        <div style={{ gridColumn: '1 / -1', width: '100%', marginBottom: '0.5rem' }}>
+                            <h4 style={{ marginBottom: '0.5rem', color: '#1e293b', fontSize: '0.95rem' }}>Components</h4>
+                            {/* Column Headers - shown once */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 140px', gap: '0.5rem', padding: '0.4rem 0.75rem', background: '#f8fafc', borderRadius: '6px 6px 0 0', border: '1px solid #e2e8f0', borderBottom: 'none' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>VEPL Part Number *</span>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Manufacturer Part No *</span>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Reel Qty *</span>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Thickness *</span>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase', textAlign: 'center' }}>Actions</span>
+                            </div>
+                            {/* Component Rows */}
+                            {components.map((comp, index) => (
+                                <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 140px', gap: '0.5rem', padding: '0.4rem 0.75rem', border: '1px solid #e2e8f0', borderTop: index === 0 ? '1px solid #e2e8f0' : 'none', background: '#fff', alignItems: 'center' }}>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="VEPL Part Number"
+                                        value={comp.vepl_part_number}
+                                        onChange={(e) => handleComponentChange(index, 'vepl_part_number', e.target.value)}
+                                        required
+                                        style={{ padding: '0.35rem 0.5rem', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box', margin: 0, borderRadius: '4px' }}
+                                    />
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Manufacturer Part No"
+                                        value={comp.manufacturer_part_number}
+                                        onChange={(e) => handleComponentChange(index, 'manufacturer_part_number', e.target.value)}
+                                        required
+                                        style={{ padding: '0.35rem 0.5rem', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box', margin: 0, borderRadius: '4px' }}
+                                    />
+                                    <input
+                                        type="number"
+                                        className={styles.input}
+                                        placeholder="Reel Qty"
+                                        value={comp.reel_qty}
+                                        onChange={(e) => handleComponentChange(index, 'reel_qty', e.target.value)}
+                                        required
+                                        style={{ padding: '0.35rem 0.5rem', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box', margin: 0, borderRadius: '4px' }}
+                                    />
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Thickness"
+                                        value={comp.component_thickness}
+                                        onChange={(e) => handleComponentChange(index, 'component_thickness', e.target.value)}
+                                        required
+                                        style={{ padding: '0.35rem 0.5rem', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box', margin: 0, borderRadius: '4px' }}
+                                    />
+                                    <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
+                                        <button
+                                            type="button"
+                                            onClick={addComponent}
+                                            style={{ background: '#e0f2fe', color: '#0284c7', border: '1px solid #bae6fd', borderRadius: '4px', padding: '0.25rem 0.5rem', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                        >
+                                            + Add
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeComponent(index)}
+                                            disabled={components.length === 1}
+                                            style={{ background: components.length === 1 ? '#f1f5f9' : '#fee2e2', color: components.length === 1 ? '#94a3b8' : '#ef4444', border: '1px solid', borderColor: components.length === 1 ? '#e2e8f0' : '#fecaca', borderRadius: '4px', padding: '0.25rem 0.5rem', fontSize: '0.75rem', fontWeight: 600, cursor: components.length === 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center' }}
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
 
-                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                        <div className={styles.inputGroup} style={{ gridColumn: '1 / -1' }}>
                             <label>Remarks</label>
                             <input
                                 type="text"
@@ -501,13 +544,10 @@ const BakingTrackingRecord: React.FC = () => {
                             className={styles.secondaryButton}
                             onClick={() => {
                                 setModelName('');
-                                setVeplPartNumber('');
-                                setManufacturingPartNumber('');
                                 setMslLevel('');
-                                setReelQty('');
                                 setBakingTemperature('');
-                                setComponentThickness('');
                                 setRemarks('');
+                                setComponents([{ vepl_part_number: '', manufacturer_part_number: '', reel_qty: '', component_thickness: '' }]);
                             }}
                             disabled={creating}
                         >
@@ -549,23 +589,11 @@ const BakingTrackingRecord: React.FC = () => {
                                 <th onClick={() => handlePendingSort('model_name')} className={styles.sortable}>
                                     Model Name {pendingSortBy === 'model_name' ? (pendingSortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
-                                <th onClick={() => handlePendingSort('vepl_part_number')} className={styles.sortable}>
-                                    VEPL Part No {pendingSortBy === 'vepl_part_number' ? (pendingSortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
-                                <th onClick={() => handlePendingSort('manufacturing_part_number')} className={styles.sortable}>
-                                    MPN {pendingSortBy === 'manufacturing_part_number' ? (pendingSortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
                                 <th onClick={() => handlePendingSort('msl_level')} className={styles.sortable}>
                                     MSL Level {pendingSortBy === 'msl_level' ? (pendingSortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
-                                <th onClick={() => handlePendingSort('reel_qty')} className={styles.sortable}>
-                                    Reel Qty {pendingSortBy === 'reel_qty' ? (pendingSortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
                                 <th onClick={() => handlePendingSort('baking_temperature')} className={styles.sortable}>
                                     Temp {pendingSortBy === 'baking_temperature' ? (pendingSortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
-                                <th onClick={() => handlePendingSort('component_thickness')} className={styles.sortable}>
-                                    Thickness {pendingSortBy === 'component_thickness' ? (pendingSortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
                                 <th onClick={() => handlePendingSort('baking_in_time')} className={styles.sortable}>
                                     Baking In Time {pendingSortBy === 'baking_in_time' ? (pendingSortOrder === 'ASC' ? '▲' : '▼') : ''}
@@ -590,17 +618,13 @@ const BakingTrackingRecord: React.FC = () => {
                                 pendingRecords.map((rec) => (
                                     <tr key={rec.id}>
                                         <td style={{ fontWeight: 600 }}>{rec.model_name}</td>
-                                        <td>{rec.vepl_part_number}</td>
-                                        <td>{rec.manufacturing_part_number}</td>
                                         <td>{rec.msl_level}</td>
-                                        <td>{rec.reel_qty}</td>
                                         <td>{rec.baking_temperature}</td>
-                                        <td>{rec.component_thickness}</td>
                                         <td>{formatTimestamp(rec.baking_in_time)}</td>
                                         <td>
                                             <div className={styles.actionCell}>
                                                 <button
-                                                    onClick={() => setViewRecord(rec)}
+                                                    onClick={() => handleViewDetails(rec.id)}
                                                     className={styles.viewButton}
                                                 >
                                                     View
@@ -671,23 +695,11 @@ const BakingTrackingRecord: React.FC = () => {
                                 <th onClick={() => handleCompletedSort('model_name')} className={styles.sortable}>
                                     Model Name {completedSortBy === 'model_name' ? (completedSortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
-                                <th onClick={() => handleCompletedSort('vepl_part_number')} className={styles.sortable}>
-                                    VEPL Part No {completedSortBy === 'vepl_part_number' ? (completedSortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
-                                <th onClick={() => handleCompletedSort('manufacturing_part_number')} className={styles.sortable}>
-                                    MPN {completedSortBy === 'manufacturing_part_number' ? (completedSortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
                                 <th onClick={() => handleCompletedSort('msl_level')} className={styles.sortable}>
                                     MSL Level {completedSortBy === 'msl_level' ? (completedSortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
-                                <th onClick={() => handleCompletedSort('reel_qty')} className={styles.sortable}>
-                                    Reel Qty {completedSortBy === 'reel_qty' ? (completedSortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
                                 <th onClick={() => handleCompletedSort('baking_temperature')} className={styles.sortable}>
                                     Temp {completedSortBy === 'baking_temperature' ? (completedSortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
-                                <th onClick={() => handleCompletedSort('component_thickness')} className={styles.sortable}>
-                                    Thickness {completedSortBy === 'component_thickness' ? (completedSortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
                                 <th onClick={() => handleCompletedSort('baking_in_time')} className={styles.sortable}>
                                     Baking In Time {completedSortBy === 'baking_in_time' ? (completedSortOrder === 'ASC' ? '▲' : '▼') : ''}
@@ -716,19 +728,15 @@ const BakingTrackingRecord: React.FC = () => {
                                 completedRecords.map((rec) => (
                                     <tr key={rec.id}>
                                         <td style={{ fontWeight: 600 }}>{rec.model_name}</td>
-                                        <td>{rec.vepl_part_number}</td>
-                                        <td>{rec.manufacturing_part_number}</td>
                                         <td>{rec.msl_level}</td>
-                                        <td>{rec.reel_qty}</td>
                                         <td>{rec.baking_temperature}</td>
-                                        <td>{rec.component_thickness}</td>
                                         <td>{formatTimestamp(rec.baking_in_time)}</td>
                                         <td>{formatTimestamp(rec.baking_out_time)}</td>
                                         <td>{calculateTotalBakingTime(rec.baking_in_time, rec.baking_out_time)}</td>
                                         <td>
                                             <div className={styles.actionCell}>
                                                 <button
-                                                    onClick={() => setViewRecord(rec)}
+                                                    onClick={() => handleViewDetails(rec.id)}
                                                     className={styles.viewButton}
                                                 >
                                                     View
@@ -794,28 +802,12 @@ const BakingTrackingRecord: React.FC = () => {
                                         <span className={styles.modalValue}>{viewRecord.model_name}</span>
                                     </div>
                                     <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>VEPL Part Number</span>
-                                        <span className={styles.modalValue}>{viewRecord.vepl_part_number}</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Manufacturing Part Number</span>
-                                        <span className={styles.modalValue}>{viewRecord.manufacturing_part_number}</span>
-                                    </div>
-                                    <div className={styles.modalField}>
                                         <span className={styles.modalLabel}>MSL Level</span>
                                         <span className={styles.modalValue}>{viewRecord.msl_level}</span>
                                     </div>
                                     <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Reel Qty</span>
-                                        <span className={styles.modalValue}>{viewRecord.reel_qty}</span>
-                                    </div>
-                                    <div className={styles.modalField}>
                                         <span className={styles.modalLabel}>Baking Temperature</span>
                                         <span className={styles.modalValue}>{viewRecord.baking_temperature}</span>
-                                    </div>
-                                    <div className={styles.modalField}>
-                                        <span className={styles.modalLabel}>Component Thickness</span>
-                                        <span className={styles.modalValue}>{viewRecord.component_thickness}</span>
                                     </div>
                                     <div className={styles.modalField}>
                                         <span className={styles.modalLabel}>Baking In Time</span>
@@ -833,6 +825,35 @@ const BakingTrackingRecord: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Section 1B: Components Table */}
+                            {viewRecord.components && viewRecord.components.length > 0 && (
+                                <div style={{ marginTop: '1.5rem' }}>
+                                    <h4 className={styles.modalSectionTitle}>Components</h4>
+                                    <table className={styles.table} style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                                        <thead style={{ background: '#f8fafc' }}>
+                                            <tr>
+                                                <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>S.No</th>
+                                                <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>VEPL Part Number</th>
+                                                <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>Manufacturer Part Number</th>
+                                                <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>Reel Qty</th>
+                                                <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>Component Thickness</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {viewRecord.components.map((comp, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                                    <td style={{ padding: '0.5rem' }}>{i + 1}</td>
+                                                    <td style={{ padding: '0.5rem' }}>{comp.vepl_part_number}</td>
+                                                    <td style={{ padding: '0.5rem' }}>{comp.manufacturer_part_number || '—'}</td>
+                                                    <td style={{ padding: '0.5rem' }}>{comp.reel_qty}</td>
+                                                    <td style={{ padding: '0.5rem' }}>{comp.component_thickness || '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
 
                             {/* Section 2: QA Information */}
                             <div>

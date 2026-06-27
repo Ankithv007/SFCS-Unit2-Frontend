@@ -184,7 +184,7 @@ const UnitTesting: React.FC = () => {
     const [totalRecords, setTotalRecords] = useState(0);
     const [editingScan, setEditingScan] = useState<ScanRecord | null>(null);
 
-    const isAdmin = user?.role === 'Super Admin' || user?.role === 'Admin';
+    const isAdmin = user?.role === 'Super Admin' || user?.role === 'Admin' || user?.role === 'User';
 
     const [activeModal, setActiveModal] = useState<{
         batchId: number;

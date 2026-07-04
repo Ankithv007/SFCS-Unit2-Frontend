@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet, useParams } from 'react-router-dom';
 import { Login } from './pages/auth/Login';
 import { Signup } from './pages/auth/Signup';
 import { Forgot } from './pages/auth/Forgot';
@@ -36,8 +36,8 @@ import Document from './pages/smt/Document';
 import BomView from './pages/smt/BomView';
 import MaterialManagement from './pages/smt/MaterialManagement';
 import MaterialBomView from './pages/smt/MaterialBomView';
-import MaterialReturn from './pages/smt/MaterialReturn';
-import MaterialReturnBomView from './pages/smt/MaterialReturnBomView';
+import MsdTracker from './pages/smt/MsdTracker';
+import MsdBomView from './pages/smt/MsdBomView';
 import StencilMasterRecord from './pages/smt/StencilMasterRecord';
 import StencilLifecycleManagement from './pages/smt/StencilLifecycleManagement';
 import BakingTrackingRecord from './pages/smt/BakingTrackingRecord';
@@ -63,6 +63,11 @@ import { BackendLogin } from './pages/backend/BackendLogin';
 
 import { SmtProtectedRoute } from './components/SmtProtectedRoute';
 import { SmtLogin } from './pages/smt/SmtLogin';
+
+const LegacyReturnBomRedirect: React.FC = () => {
+    const { id } = useParams<{ id: string }>();
+    return <Navigate to={`/smt/material-management/bom-view/${id}`} replace />;
+};
 
 export const router = createBrowserRouter([
     {
@@ -344,23 +349,31 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: 'material-management',
-                        element: <Navigate to="/smt/material-management/requests" replace />,
-                    },
-                    {
-                        path: 'material-management/requests',
                         element: <MaterialManagement />,
                     },
                     {
+                        path: 'material-management/requests',
+                        element: <Navigate to="/smt/material-management" replace />,
+                    },
+                    {
                         path: 'material-management/return',
-                        element: <MaterialReturn />,
+                        element: <Navigate to="/smt/material-management" replace />,
                     },
                     {
                         path: 'material-management/return/bom-view/:id',
-                        element: <MaterialReturnBomView />,
+                        element: <LegacyReturnBomRedirect />,
                     },
                     {
                         path: 'material-management/bom-view/:id',
                         element: <MaterialBomView />,
+                    },
+                    {
+                        path: 'msd-tracker',
+                        element: <MsdTracker />,
+                    },
+                    {
+                        path: 'msd-tracker/bom-view/:id',
+                        element: <MsdBomView />,
                     },
                     {
                         path: 'stencil/master',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'react-qr-code';
-import styles from './Spi.module.css'; // sharing premium CSS styles
+import styles from './SmtStage.module.css'; // sharing premium CSS styles
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../utils/api';

@@ -21,7 +21,6 @@ import { WorkOrder } from './pages/smt/WorkOrder';
 import { WorkOrderHistory } from './pages/smt/WorkOrderHistory';
 import { SerialNumber } from './pages/smt/SerialNumber';
 import { Printing } from './pages/smt/Printing';
-import Spi from './pages/smt/Spi';
 import PostAoi from './pages/smt/PostAoi';
 import Rework from './pages/smt/Rework';
 import PreAoi from './pages/smt/PreAoi';
@@ -309,10 +308,6 @@ export const router = createBrowserRouter([
                     {
                         path: 'solder-paste/mixing',
                         element: <SolderPasteMixing />,
-                    },
-                    {
-                        path: 'spi',
-                        element: <Spi />,
                     },
                     {
                         path: 'pre-aoi',

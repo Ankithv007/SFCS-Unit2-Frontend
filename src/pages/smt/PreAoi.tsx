@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QRCode from 'react-qr-code';
-import styles from './Spi.module.css';
+import styles from './SmtStage.module.css';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../utils/api';
@@ -106,10 +106,10 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName,
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // Fetch all serials for this WO with their latest SPI step status
+            // Fetch all serials for this WO with their latest Printing step status
             const totalUrl = new URL('/api/smt/serial-numbers', window.location.origin);
             totalUrl.searchParams.set('work_order_id', woId);
-            totalUrl.searchParams.set('current_step', 'SPI');
+            totalUrl.searchParams.set('current_step', 'Printing');
             const totalRes = await fetch(totalUrl.toString());
             if (totalRes.ok) {
                 const totalData = await totalRes.json();
@@ -265,18 +265,18 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName,
             return;
         }
 
-        // Validate SPI status
+        // Validate Printing status
         if (match.step_status === 'FAIL') {
-            addToast(`Previous stage failed: Barcode failed in SPI. Cannot continue to Pre AOI.`, 'error');
-            alert(`Previous stage failed: Barcode "${barcodeInput}" failed in SPI stage. Cannot continue to Pre AOI.`);
+            addToast(`Previous stage failed: Barcode failed in Printing. Cannot continue to Pre AOI.`, 'error');
+            alert(`Previous stage failed: Barcode "${barcodeInput}" failed in Printing stage. Cannot continue to Pre AOI.`);
             setScanBarcode('');
             scanInputRef.current?.focus();
             return;
         }
 
         if (!match.step_status || match.step_status !== 'PASS') {
-            addToast(`Previous stage not completed: Barcode has not passed SPI stage.`, 'error');
-            alert(`Previous stage not completed: Barcode "${barcodeInput}" has not passed SPI stage. Cannot continue to Pre AOI.`);
+            addToast(`Previous stage not completed: Barcode has not passed Printing stage.`, 'error');
+            alert(`Previous stage not completed: Barcode "${barcodeInput}" has not passed Printing stage. Cannot continue to Pre AOI.`);
             setScanBarcode('');
             scanInputRef.current?.focus();
             return;
@@ -372,7 +372,7 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName,
         return timeB - timeA;
     });
 
-    const spiPassedSerials = allWoSerials.filter(s => s.step_status === 'PASS');
+    const printingPassedSerials = allWoSerials.filter(s => s.step_status === 'PASS');
 
     const activeSerials = Object.values(
         tableSerials.reduce((acc, s) => {
@@ -401,12 +401,12 @@ const PreAoiDetail: React.FC<PreAoiDetailProps> = ({ woId, onBack, operatorName,
                         <div>
                             <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b', marginBottom: '0.5rem' }}>🤖 Pre AOI Detail: {woId}</h3>
                             <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span style={{ color: '#3b82f6' }}>SPI Passed:{' '}
+                                <span style={{ color: '#3b82f6' }}>Printing Passed:{' '}
                                     <strong 
                                         className="smt-clickable-count smt-previous-passed"
-                                        onClick={() => onCountClick && onCountClick('SPI', 'passed', 'SPI Passed')}
+                                        onClick={() => onCountClick && onCountClick('Printing', 'passed', 'Printing Passed')}
                                     >
-                                        {spiPassedSerials.length}
+                                        {printingPassedSerials.length}
                                     </strong>
                                 </span>
                                 <span style={{ color: '#475569' }}>Total Scanned:{' '}
@@ -649,7 +649,7 @@ const PreAoi: React.FC = () => {
     const [createdBy, setCreatedBy] = useState('');
     const [savedEntries, setSavedEntries] = useState<any[]>([]);
     const [inspections, setInspections] = useState<any[]>([]);
-    const [spiInspections, setSpiInspections] = useState<any[]>([]);
+    const [printingInspections, setPrintingInspections] = useState<any[]>([]);
 
     const fetchData = useCallback(async () => {
         try {
@@ -671,10 +671,10 @@ const PreAoi: React.FC = () => {
                 setInspections(data);
             }
 
-            const spiInspRes = await fetch('/api/smt/inspections?process_step=SPI');
-            if (spiInspRes.ok) {
-                const data = await spiInspRes.json();
-                setSpiInspections(data);
+            const printingInspRes = await fetch('/api/smt/inspections?process_step=Printing');
+            if (printingInspRes.ok) {
+                const data = await printingInspRes.json();
+                setPrintingInspections(data);
             }
 
             if (smtUser) {
@@ -766,8 +766,8 @@ const PreAoi: React.FC = () => {
         return Object.values(latestBySerial).filter(status => status === 'FAIL').length;
     };
 
-    const getSpiPassedCount = (woId: string) => {
-        const woInspections = spiInspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
+    const getPrintingPassedCount = (woId: string) => {
+        const woInspections = printingInspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
         const latestBySerial: { [key: number]: string } = {};
         const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
         sorted.forEach(i => {
@@ -899,7 +899,7 @@ const PreAoi: React.FC = () => {
                                             <th>PRODUCT NAME</th>
                                             <th>WO QTY</th>
                                             <th>PANEL QTY</th>
-                                            <th>SPI PASSED</th>
+                                            <th>PRINTING PASSED</th>
                                             <th>PASSED</th>
                                             <th>FAILED</th>
                                             <th>PENDING</th>
@@ -911,7 +911,7 @@ const PreAoi: React.FC = () => {
                                         {pendingEntries.map((entry) => {
                                             const passedVal = getPassedCount(entry.work_order_id);
                                             const failedVal = getFailedCount(entry.work_order_id);
-                                            const spiPassedVal = getSpiPassedCount(entry.work_order_id);
+                                            const spiPassedVal = getPrintingPassedCount(entry.work_order_id);
                                             const totalVal = entry.quantity || entry.wo_qty || 0;
                                             const pendingVal = Math.max(0, totalVal - passedVal);
                                             return (
@@ -944,9 +944,9 @@ const PreAoi: React.FC = () => {
                                                         className="smt-clickable-count smt-previous-passed"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
-                                                            stage: 'SPI',
+                                                            stage: 'Printing',
                                                             type: 'passed',
-                                                            label: 'SPI Passed'
+                                                            label: 'Printing Passed'
                                                         })}
                                                         style={{ fontWeight: 'bold' }}
                                                     >
@@ -1043,7 +1043,7 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                             <th>PRODUCT NAME</th>
                                             <th>WO QTY</th>
                                             <th>PANEL QTY</th>
-                                            <th>SPI PASSED</th>
+                                            <th>PRINTING PASSED</th>
                                             <th>PASSED</th>
                                             <th>FAILED</th>
                                             <th>PENDING</th>
@@ -1056,7 +1056,7 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                         {completedEntries.map((entry) => {
                                             const passedVal = getPassedCount(entry.work_order_id);
                                             const failedVal = getFailedCount(entry.work_order_id);
-                                            const spiPassedVal = getSpiPassedCount(entry.work_order_id);
+                                            const spiPassedVal = getPrintingPassedCount(entry.work_order_id);
                                             const totalVal = entry.quantity || entry.wo_qty || 0;
                                             const pendingVal = Math.max(0, totalVal - passedVal);
                                             return (
@@ -1089,9 +1089,9 @@ setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
                                                         className="smt-clickable-count smt-previous-passed"
                                                         onClick={() => setSelectedCount({
                                                             workOrderId: entry.work_order_id,
-                                                            stage: 'SPI',
+                                                            stage: 'Printing',
                                                             type: 'passed',
-                                                            label: 'SPI Passed'
+                                                            label: 'Printing Passed'
                                                         })}
                                                         style={{ fontWeight: 'bold' }}
                                                     >

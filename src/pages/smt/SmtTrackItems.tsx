@@ -40,12 +40,11 @@ interface SmtTrackResult {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SMT_PIPELINE = ['Serial Number', 'Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
+const SMT_PIPELINE = ['Serial Number', 'Printing', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
 
 const STAGE_ROUTES: Record<string, string> = {
     'Serial Number': '/smt/serial-number',
     'Printing': '/smt/printing',
-    'SPI': '/smt/spi',
     'Pre AOI': '/smt/pre-aoi',
     'Post AOI': '/smt/post-aoi',
     'Rework': '/smt/rework',

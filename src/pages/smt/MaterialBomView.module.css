@@ -939,4 +939,120 @@
     background-color: #f8fafc;
 }
 
+.scannerContainer {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.25rem;
+}
+
+@media (max-width: 1024px) {
+    .scannerContainer {
+        grid-template-columns: 1fr;
+    }
+}
+
+.pendingScanBadge {
+    background-color: #fef3c7;
+    border: 1px solid #f59e0b;
+    color: #b45309;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+    text-transform: uppercase;
+}
+
+.completedScanBadge {
+    background-color: #dcfce7;
+    border: 1px solid #16a34a;
+    color: #15803d;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+    text-transform: uppercase;
+}
+
+.transactionPanelCard {
+    background: #ffffff;
+    padding: 1.25rem 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.transactionPanelHeader {
+    margin: 0 0 1rem 0;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.transactionActionsGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.completeTxBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s ease-in-out;
+    width: 100%;
+}
+
+.completeIssueBtn {
+    background-color: #15803d;
+    color: #ffffff;
+    box-shadow: 0 2px 4px 0 rgba(21, 128, 61, 0.1);
+}
+
+.completeIssueBtn:hover:not(:disabled) {
+    background-color: #166534;
+}
+
+.completeReturnBtn {
+    background-color: #7e22ce;
+    color: #ffffff;
+    box-shadow: 0 2px 4px 0 rgba(126, 34, 206, 0.1);
+}
+
+.completeReturnBtn:hover:not(:disabled) {
+    background-color: #6b21a8;
+}
+
+.completeTxBtn:disabled {
+    background-color: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #94a3b8;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.txSummaryRow {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: #475569;
+    padding: 0.25rem 0;
+}
+
+.txSummaryVal {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+
 

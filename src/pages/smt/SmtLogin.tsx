@@ -69,6 +69,19 @@ export const SmtLogin: React.FC = () => {
     const isSuperAdmin = mainUser?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
 
     useEffect(() => {
+         const authorizedRoles = ['Super Admin', 'Admin', 'Manager'];
+         if (mainUser && authorizedRoles.includes(mainUser.role)) {
+             smtLogin({
+                 id: mainUser.id.toString(),
+                 name: mainUser.name || '',
+                 userId: mainUser.email || '',
+                 role: mainUser.role || 'Operator'
+             }, from);
+             navigate(from, { replace: true });
+         }
+     }, [mainUser, smtLogin, navigate, from]);
+
+    useEffect(() => {
         if (isAdminMode) {
             fetchEmployees();
         }

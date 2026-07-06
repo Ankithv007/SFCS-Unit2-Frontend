@@ -24,7 +24,6 @@ import { Printing } from './pages/smt/Printing';
 import Spi from './pages/smt/Spi';
 import PostAoi from './pages/smt/PostAoi';
 import Rework from './pages/smt/Rework';
-import PCBGeneration from './pages/smt/PCBGeneration';
 import PreAoi from './pages/smt/PreAoi';
 import SMTFG from './pages/smt/SMTFG';
 import SmtTrackItems from './pages/smt/SmtTrackItems';
@@ -290,10 +289,6 @@ export const router = createBrowserRouter([
                     {
                         path: 'serial-number',
                         element: <SerialNumber />,
-                    },
-                    {
-                        path: 'pcb-generation',
-                        element: <PCBGeneration />,
                     },
                     {
                         path: 'printing',

@@ -62,36 +62,7 @@ const DescriptionCell: React.FC<{ text: string }> = ({ text }) => {
     );
 };
 
-const RemarkCell: React.FC<{ remark: string | null; workOrderId: string; onOpen: (remark: string) => void }> = ({ remark, onOpen }) => {
-    if (!remark) return <td><span style={{ color: '#94a3b8' }}>-</span></td>;
-    
-    const isLong = remark.length > 40;
-    const displayContent = isLong ? remark.slice(0, 40) + '...' : remark;
-    
-    return (
-        <td style={{ maxWidth: '200px', whiteSpace: 'normal', wordWrap: 'break-word', lineHeight: '1.5', fontSize: '0.9rem', color: '#475569' }}>
-            <span>{displayContent}</span>
-            {isLong && (
-                <button
-                    onClick={() => onOpen(remark)}
-                    style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#4f46e5',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        padding: 0,
-                        marginLeft: '4px',
-                        textDecoration: 'underline',
-                        fontSize: '0.85rem'
-                    }}
-                >
-                    View More
-                </button>
-            )}
-        </td>
-    );
-};
+
 
 export const WorkOrder: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
@@ -213,7 +184,8 @@ export const WorkOrder: React.FC = () => {
                         po_document_path: wo.po_document_path,
                         po_document_type: wo.po_document_type,
                         po_id: wo.po_id,
-                        remark: wo.remark
+                        remark: wo.remark,
+                        solder_paste_status: wo.solder_paste_status
                     })));
                     setTotalRecords(responseData.total || 0);
                     setTotalPages(responseData.totalPages || 0);
@@ -970,12 +942,7 @@ export const WorkOrder: React.FC = () => {
                                             <th>SIDES</th>
                                             <th>QUANTITY</th>
                                             <th>PANEL QTY</th>
-                                            <th>LINE ID</th>
-                                            <th>PRIORITY</th>
                                             <th style={{ textAlign: 'center' }}>PO DOCUMENT</th>
-                                            <th>CREATED BY</th>
-                                            <th>DATE CREATED</th>
-                                            <th>REMARK</th>
                                             <th>ACTION</th>
                                         </tr>
                                     </thead>
@@ -1009,19 +976,6 @@ export const WorkOrder: React.FC = () => {
                                                 >
                                                     {wo.panel_quantity}
                                                 </td>
-                                                <td>{wo.line_id}</td>
-                                                <td>
-                                                    <span style={{
-                                                        padding: '4px 8px',
-                                                        borderRadius: '4px',
-                                                        fontSize: '0.85rem',
-                                                        fontWeight: 'bold',
-                                                        backgroundColor: wo.priority === 'high' ? '#fee2e2' : wo.priority === 'medium' ? '#fef3c7' : '#e0e7ff',
-                                                        color: wo.priority === 'high' ? '#991b1b' : wo.priority === 'medium' ? '#92400e' : '#3730a3'
-                                                    }}>
-                                                        {(wo.priority || 'MEDIUM').toUpperCase()}
-                                                    </span>
-                                                </td>
                                                  <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
                                                      {wo.po_document_path ? (
                                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'nowrap' }}>
@@ -1049,14 +1003,6 @@ export const WorkOrder: React.FC = () => {
                                                          <span style={{ color: '#94a3b8' }}>-</span>
                                                      )}
                                                  </td>
-                                                <td>{wo.created_by || 'System'}</td>
-                                                <td>
-                                                    {new Date(wo.created_at).toLocaleDateString()} <br />
-                                                    <small style={{ color: '#6b7280' }}>
-                                                        {new Date(wo.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                                    </small>
-                                                </td>
-                                                <RemarkCell remark={wo.remark} workOrderId={wo.work_order_id} onOpen={(text) => setRemarkModal({ workOrderId: wo.work_order_id, remark: text })} />
                                                 <td>
                                                     <div style={{ display: 'flex', gap: '6px' }}>
                                                         <button
@@ -1288,7 +1234,7 @@ export const WorkOrder: React.FC = () => {
             {/* View Details Dialog */}
             {viewDetailWo && (
                 <div className={styles.modalOverlay} onClick={() => setViewDetailWo(null)}>
-                    <div className={styles.modalContent} style={{ maxWidth: '750px', width: '90%', maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
+                    <div className={styles.modalContent} style={{ maxWidth: '850px', width: '90%', maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
                             <h4 className={styles.modalTitle}>
                                 🔍 Work Order Details - {viewDetailWo.work_order_id}
@@ -1298,116 +1244,197 @@ export const WorkOrder: React.FC = () => {
                             </button>
                         </div>
                         <div className={styles.modalBody}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '0.5rem 0' }}>
-                                <div>
-                                    <strong>Work Order ID:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.work_order_id}</div>
-                                </div>
-                                <div>
-                                    <strong>PO ID:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.po_id || '-'}</div>
-                                </div>
-                                <div>
-                                    <strong>Area ID:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151' }}>SMT</div>
-                                </div>
-                                <div>
-                                    <strong>Line ID:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.line_id}</div>
-                                </div>
-                                <div>
-                                    <strong>Priority:</strong>
-                                    <div style={{ marginTop: '4px' }}>
-                                        <span style={{
-                                            padding: '2px 6px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.8rem',
-                                            fontWeight: 'bold',
-                                            backgroundColor: viewDetailWo.priority === 'high' ? '#fee2e2' : viewDetailWo.priority === 'medium' ? '#fef3c7' : '#e0e7ff',
-                                            color: viewDetailWo.priority === 'high' ? '#991b1b' : viewDetailWo.priority === 'medium' ? '#92400e' : '#3730a3'
-                                        }}>
-                                            {(viewDetailWo.priority || 'MEDIUM').toUpperCase()}
-                                        </span>
+                            <div className={styles.detailGrid}>
+                                
+                                {/* Work Order Information */}
+                                <div className={`${styles.detailCard} ${styles.detailCardFullWidth}`}>
+                                    <div className={styles.detailCardHeader}>
+                                        📋 Work Order Information
+                                    </div>
+                                    <div className={styles.detailItemGrid}>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Work Order ID</span>
+                                            <span className={styles.detailValue} style={{ fontWeight: 600 }}>{viewDetailWo.work_order_id}</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>PO ID</span>
+                                            <span className={styles.detailValue}>{viewDetailWo.po_id || '-'}</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Product Name</span>
+                                            <span className={styles.detailValue}>{viewDetailWo.product_name}</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Number of Sides</span>
+                                            <span className={styles.detailValue}>{viewDetailWo.sides || '-'}</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Quantity</span>
+                                            <span className={styles.detailValue}>{viewDetailWo.quantity} units</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Panel Quantity</span>
+                                            <span className={styles.detailValue}>{viewDetailWo.panel_quantity} panels</span>
+                                        </div>
+                                        <div className={`${styles.detailItem} ${styles.detailItemFullWidth}`} style={{ marginTop: '0.5rem' }}>
+                                            <span className={styles.detailLabel}>Product Description</span>
+                                            <span className={styles.detailValue} style={{ whiteSpace: 'pre-wrap' }}>
+                                                {viewDetailWo.product_description || '-'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div>
-                                    <strong>Sides:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151', fontWeight: 600 }}>{viewDetailWo.sides || '-'}</div>
-                                </div>
-                                <div>
-                                    <strong>Product Name:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.product_name}</div>
-                                </div>
-                                <div>
-                                    <strong>Product Description:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151', whiteSpace: 'pre-wrap' }}>{viewDetailWo.product_description}</div>
-                                </div>
-                                <div>
-                                    <strong>Quantity:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.quantity} units</div>
-                                </div>
-                                <div>
-                                    <strong>Panel Quantity:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.panel_quantity} panels</div>
-                                </div>
-                                <div>
-                                    <strong>Created By:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151' }}>{viewDetailWo.created_by || 'System'}</div>
-                                </div>
-                                <div>
-                                    <strong>Date Created:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151' }}>
-                                        {new Date(viewDetailWo.created_at).toLocaleString()}
+
+                                {/* Production Information */}
+                                <div className={styles.detailCard}>
+                                    <div className={styles.detailCardHeader}>
+                                        ⚙️ Production Information
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Line ID</span>
+                                            <span className={styles.detailValue}>{viewDetailWo.line_id}</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Priority</span>
+                                            <div>
+                                                <span style={{
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: 'bold',
+                                                    backgroundColor: viewDetailWo.priority === 'high' ? '#fee2e2' : viewDetailWo.priority === 'medium' ? '#fef3c7' : '#e0e7ff',
+                                                    color: viewDetailWo.priority === 'high' ? '#991b1b' : viewDetailWo.priority === 'medium' ? '#92400e' : '#3730a3'
+                                                }}>
+                                                    {(viewDetailWo.priority || 'MEDIUM').toUpperCase()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Current Solder Paste Status</span>
+                                            <span className={styles.detailValue}>
+                                                <span style={{
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: 'bold',
+                                                    backgroundColor: viewDetailWo.solder_paste_status === 'Completed' ? '#d1fae5' : viewDetailWo.solder_paste_status === 'In Progress' ? '#dbeafe' : '#f3f4f6',
+                                                    color: viewDetailWo.solder_paste_status === 'Completed' ? '#065f46' : viewDetailWo.solder_paste_status === 'In Progress' ? '#1e40af' : '#374151'
+                                                }}>
+                                                    {viewDetailWo.solder_paste_status || 'Pending'}
+                                                </span>
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div style={{ gridColumn: 'span 2' }}>
-                                    <strong>PO Document:</strong>
-                                    <div style={{ marginTop: '6px' }}>
-                                        {viewDetailWo.po_document_path ? (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                {viewDetailWo.po_document_type === 'application/pdf' ? '📕' : '📗'}
-                                                <span style={{ fontSize: '0.9rem', color: '#4b5563' }}>{viewDetailWo.po_document_name}</span>
+
+                                {/* Document Information */}
+                                <div className={styles.detailCard}>
+                                    <div className={styles.detailCardHeader}>
+                                        📁 Document Information
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>PO Document</span>
+                                            <span className={styles.detailValue} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                {viewDetailWo.po_document_path ? (
+                                                    <>
+                                                        {viewDetailWo.po_document_type === 'application/pdf' ? '📕' : '📗'}
+                                                        <span style={{ fontSize: '0.9rem', color: '#4b5563', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '180px' }} title={viewDetailWo.po_document_name}>
+                                                            {viewDetailWo.po_document_name}
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <span style={{ color: '#9ca3af' }}>No PO document uploaded</span>
+                                                )}
+                                            </span>
+                                        </div>
+                                        {viewDetailWo.po_document_path && (
+                                            <div style={{ display: 'flex', gap: '8px', marginTop: '0.25rem' }}>
                                                 <button
                                                     className={styles.secondaryButton}
-                                                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+                                                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
                                                     onClick={() => handleOpenPreview(viewDetailWo.work_order_id)}
                                                 >
                                                     👁️ View Preview
                                                 </button>
                                                 <button
                                                     className={styles.secondaryButton}
-                                                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+                                                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
                                                     onClick={() => handleDownloadPo(viewDetailWo.work_order_id, viewDetailWo.po_document_name)}
                                                 >
                                                     📥 Download
                                                 </button>
                                             </div>
-                                        ) : (
-                                            <span style={{ color: '#9ca3af' }}>No PO document uploaded</span>
                                         )}
                                     </div>
                                 </div>
-                                <div style={{ gridColumn: 'span 2' }}>
-                                    <strong>Remark:</strong>
-                                    <div style={{ marginTop: '4px', color: '#374151', whiteSpace: 'pre-wrap', backgroundColor: '#f9fafb', padding: '0.5rem', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
-                                        {viewDetailWo.remark || <span style={{ color: '#9ca3af' }}>No remarks</span>}
+
+                                {/* Audit Information */}
+                                <div className={`${styles.detailCard} ${styles.detailCardFullWidth}`}>
+                                    <div className={styles.detailCardHeader}>
+                                        🛡️ Audit Information
+                                    </div>
+                                    <div className={styles.detailItemGrid}>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Created By</span>
+                                            <span className={styles.detailValue}>{viewDetailWo.created_by || 'System'}</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Date Created</span>
+                                            <span className={styles.detailValue}>
+                                                {new Date(viewDetailWo.created_at).toLocaleString()}
+                                            </span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Last Updated By</span>
+                                            <span className={styles.detailValue} style={{ color: '#9ca3af' }}>N/A</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Last Updated Date</span>
+                                            <span className={styles.detailValue} style={{ color: '#9ca3af' }}>N/A</span>
+                                        </div>
                                     </div>
                                 </div>
+
+                                {/* Additional Information */}
+                                <div className={`${styles.detailCard} ${styles.detailCardFullWidth}`}>
+                                    <div className={styles.detailCardHeader}>
+                                        📝 Additional Information
+                                    </div>
+                                    <div className={styles.detailItem}>
+                                        <span className={styles.detailLabel}>Remarks</span>
+                                        <div style={{
+                                            marginTop: '6px',
+                                            color: '#374151',
+                                            whiteSpace: 'pre-wrap',
+                                            backgroundColor: '#f1f5f9',
+                                            padding: '0.75rem',
+                                            borderRadius: '6px',
+                                            border: '1px solid #e2e8f0',
+                                            fontSize: '0.9rem',
+                                            lineHeight: '1.5',
+                                            wordBreak: 'break-word'
+                                        }}>
+                                            {viewDetailWo.remark || <span style={{ color: '#9ca3af' }}>No remarks</span>}
+                                        </div>
+                                    </div>
+                                </div>
+
                             </div>
                         </div>
-                        <div style={{
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            padding: '1rem 1.5rem',
-                            borderTop: '1px solid #e2e8f0',
-                            marginTop: 'auto',
-                            backgroundColor: '#f8fafc'
-                        }}>
+                        <div className={styles.modalFooter}>
+                            <button
+                                className={styles.secondaryButton}
+                                onClick={() => window.print()}
+                                style={{ padding: '0.5rem 1rem' }}
+                            >
+                                🖨️ Print Details
+                            </button>
                             <button
                                 className={styles.button}
                                 onClick={() => setViewDetailWo(null)}
-                                style={{ minWidth: '120px' }}
+                                style={{ minWidth: '100px', padding: '0.5rem 1.5rem' }}
                             >
                                 Close
                             </button>

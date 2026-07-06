@@ -854,3 +854,166 @@
     font-size: 0.9rem;
     font-weight: 500;
 }
+
+/* Enterprise Details View Styles */
+.detailGrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+    padding: 0.25rem 0;
+}
+
+.detailCard {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+}
+
+.detailCard:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    border-color: #cbd5e1;
+}
+
+.detailCardFullWidth {
+    grid-column: span 2;
+}
+
+.detailCardHeader {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1e293b;
+    border-bottom: 2px solid #f1f5f9;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.detailItemGrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.detailItem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.detailItemFullWidth {
+    grid-column: span 2;
+}
+
+.detailLabel {
+    font-size: 0.725rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.detailValue {
+    font-size: 0.925rem;
+    color: #334155;
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.modalFooter {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #e2e8f0;
+    margin-top: auto;
+    background-color: #f8fafc;
+    gap: 10px;
+}
+
+/* Mobile & Tablet Responsiveness */
+@media (max-width: 768px) {
+    .detailGrid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .detailCardFullWidth {
+        grid-column: span 1;
+    }
+    
+    .detailItemGrid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .detailItemFullWidth {
+        grid-column: span 1;
+    }
+}
+
+/* Print Styling */
+@media print {
+    /* Hide everything on the page */
+    body * {
+        visibility: hidden !important;
+    }
+    
+    /* Display only the modal content and its children */
+    .modalOverlay,
+    .modalOverlay * {
+        visibility: visible !important;
+    }
+    
+    /* Position the modal overlays flat on the print page */
+    .modalOverlay {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+    }
+    
+    .modalContent {
+        box-shadow: none !important;
+        border: none !important;
+        max-height: none !important;
+        overflow: visible !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .modalBody {
+        overflow: visible !important;
+        max-height: none !important;
+        padding: 0 !important;
+    }
+    
+    /* Hide header buttons like the close emoji and dialog footer with actions */
+    .modalCloseBtn,
+    .modalFooter {
+        display: none !important;
+    }
+    
+    /* Ensure cards print with borders and clear spacing */
+    .detailCard {
+        page-break-inside: avoid;
+        margin-bottom: 1rem;
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+    }
+}
+

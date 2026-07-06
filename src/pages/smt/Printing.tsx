@@ -65,8 +65,8 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
     const fetchSerials = async () => {
         setLoading(true);
         try {
-            // Fetch only those that passed PCB Registration
-            const res = await fetch(`/api/smt/serial-numbers?work_order_id=${encodeURIComponent(woId)}&filter_step=PCB Registration&filter_status=PASS&current_step=Printing`);
+            // Fetch all serials for this work order
+            const res = await fetch(`/api/smt/serial-numbers?work_order_id=${encodeURIComponent(woId)}&current_step=Printing`);
             if (res.ok) {
                 const data = await res.json();
                 setSerials(data);
@@ -121,7 +121,7 @@ const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorN
         );
 
         if (!serialObj) {
-            addToast(`Serial Number "${barcodeInput}" not found, does not belong to this Work Order, or has not passed PCB Registration stage!`, "error");
+            addToast(`Serial Number "${barcodeInput}" not found or does not belong to this Work Order!`, "error");
             setScanBarcode('');
             scanInputRef.current?.focus();
             return false;

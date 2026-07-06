@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styles from './MaterialBomView.module.css';
 import { 
-    ArrowLeft, RefreshCw, Save, CheckCircle, Search, FileSpreadsheet, X
+    ArrowLeft, RefreshCw, Save, Search, FileSpreadsheet, X
 } from 'lucide-react';
 
 interface Toast {
@@ -18,6 +18,7 @@ interface ScannedUid {
     returned_qty: number;
     scanned_by: string;
     scanned_at: string;
+    material_issue_transaction_id?: string | null;
 }
 
 interface ReturnedUid {
@@ -26,6 +27,7 @@ interface ReturnedUid {
     remaining_qty_after: number;
     returned_by: string;
     returned_at: string;
+    material_return_transaction_id?: string | null;
 }
 
 interface BomItem {
@@ -85,7 +87,7 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
 
 // Compact Uids list helper component
 const UidCompactList: React.FC<{
-    uids: { uid: string; qty: number }[];
+    uids: { uid: string; qty: number; isPending?: boolean }[];
     title: string;
 }> = ({ uids, title }) => {
     const [expanded, setExpanded] = useState(false);
@@ -99,7 +101,11 @@ const UidCompactList: React.FC<{
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             <div className={styles.uidBadgeList}>
                 {displayed.map(u => (
-                    <span key={u.uid} className={styles.uidBadge} title={`${title}: ${u.uid} | Qty: ${u.qty}`}>
+                    <span 
+                        key={u.uid} 
+                        className={u.isPending ? styles.pendingScanBadge : styles.completedScanBadge} 
+                        title={`${title}: ${u.uid} | Qty: ${u.qty} | Status: ${u.isPending ? 'Pending Commit' : 'Committed'}`}
+                    >
                         {u.uid} → {u.qty}
                     </span>
                 ))}
@@ -159,13 +165,17 @@ const BomRow: React.FC<BomRowProps> = React.memo(({
 
     // Aggregate returned UIDs for display
     const aggregatedReturnedUids = React.useMemo(() => {
-        const uidsMap = new Map<string, number>();
+        const uidsMap = new Map<string, { qty: number; isPending: boolean }>();
         (item.returned_uids || []).forEach(u => {
-            uidsMap.set(u.uid, (uidsMap.get(u.uid) || 0) + u.returned_qty);
+            const current = uidsMap.get(u.uid) || { qty: 0, isPending: false };
+            uidsMap.set(u.uid, {
+                qty: current.qty + u.returned_qty,
+                isPending: current.isPending || !u.material_return_transaction_id
+            });
         });
-        const list: { uid: string; qty: number }[] = [];
-        uidsMap.forEach((qty, uid) => {
-            list.push({ uid, qty });
+        const list: { uid: string; qty: number; isPending?: boolean }[] = [];
+        uidsMap.forEach((val, uid) => {
+            list.push({ uid, qty: val.qty, isPending: val.isPending });
         });
         return list;
     }, [item.returned_uids]);
@@ -209,7 +219,11 @@ const BomRow: React.FC<BomRowProps> = React.memo(({
             {/* UID Issued */}
             <td>
                 <UidCompactList 
-                    uids={(item.issued_uids || []).map(u => ({ uid: u.uid, qty: u.issued_qty }))} 
+                    uids={(item.issued_uids || []).map(u => ({ 
+                        uid: u.uid, 
+                        qty: u.issued_qty,
+                        isPending: !u.material_issue_transaction_id
+                    }))} 
                     title="Issued" 
                 />
             </td>
@@ -301,6 +315,11 @@ const MaterialBomView: React.FC = () => {
         time: string;
     } | null>(null);
     const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
+
+    // Transaction States
+    const [txModalOpen, setTxModalOpen] = useState(false);
+    const [txType, setTxType] = useState<'issue' | 'return'>('issue');
+    const [isCompletingTx, setIsCompletingTx] = useState(false);
 
     // Refs
     const globalScanInputRef = useRef<HTMLInputElement>(null);
@@ -636,6 +655,13 @@ const MaterialBomView: React.FC = () => {
         let totalRequestScanned = 0;
         let totalReturnScanned = 0;
 
+        let pendingIssueScansCount = 0;
+        let pendingReturnScansCount = 0;
+        let pendingIssueUniqueParts = new Set<string>();
+        let pendingReturnUniqueParts = new Set<string>();
+        let pendingIssueTotalQty = 0;
+        let pendingReturnTotalQty = 0;
+
         bomItems.forEach(item => {
             if (item.issued_qty > 0) {
                 totalRequestScanned++;
@@ -643,12 +669,40 @@ const MaterialBomView: React.FC = () => {
             if (item.return_qty > 0) {
                 totalReturnScanned++;
             }
+
+            // Check issued UIDs for pending issue transaction
+            if (item.issued_uids) {
+                item.issued_uids.forEach(uidObj => {
+                    if (!uidObj.material_issue_transaction_id) {
+                        pendingIssueScansCount++;
+                        pendingIssueUniqueParts.add(item.vepl_part_no);
+                        pendingIssueTotalQty += uidObj.issued_qty;
+                    }
+                });
+            }
+
+            // Check returned UIDs for pending return transaction
+            if (item.returned_uids) {
+                item.returned_uids.forEach(uidObj => {
+                    if (!uidObj.material_return_transaction_id) {
+                        pendingReturnScansCount++;
+                        pendingReturnUniqueParts.add(item.vepl_part_no);
+                        pendingReturnTotalQty += uidObj.returned_qty;
+                    }
+                });
+            }
         });
 
         return {
             totalComponents,
             totalRequestScanned,
-            totalReturnScanned
+            totalReturnScanned,
+            pendingIssueScansCount,
+            pendingReturnScansCount,
+            pendingIssueUniquePartsCount: pendingIssueUniqueParts.size,
+            pendingReturnUniquePartsCount: pendingReturnUniqueParts.size,
+            pendingIssueTotalQty,
+            pendingReturnTotalQty
         };
     }, [bomItems]);
 
@@ -673,6 +727,44 @@ const MaterialBomView: React.FC = () => {
             addToast(err.message || 'Error occurred while synchronizing.', 'error');
         } finally {
             setIsSyncing(false);
+        }
+    };
+
+    const handleCompleteTransaction = async () => {
+        setIsCompletingTx(true);
+        try {
+            const token = localStorage.getItem('auth_token') || '';
+            const endpoint = txType === 'issue'
+                ? `/api/smt/material-management/records/${id}/complete-issue`
+                : `/api/smt/material-management/records/${id}/complete-return`;
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || `Failed to complete ${txType} transaction.`);
+            }
+
+            addToast(
+                result.message || `Transaction ${result.transactionNumber} completed successfully.`,
+                'success'
+            );
+
+            // Close modal & reload data
+            setTxModalOpen(false);
+            await fetchData();
+
+        } catch (err: any) {
+            addToast(err.message || 'Error completing transaction.', 'error');
+        } finally {
+            setIsCompletingTx(false);
         }
     };
 
@@ -814,19 +906,11 @@ const MaterialBomView: React.FC = () => {
                     </div>
 
                     <button 
-                        className={styles.btnSecondary} 
+                        className={styles.btnPrimary} 
                         onClick={() => handleSave(selectedStatus)} 
                         disabled={isSaving}
                     >
-                        <Save size={16} /> {selectedStatus === 'COMPLETED' || selectedStatus === 'CLOSED' ? 'Save Changes' : 'Save Draft'}
-                    </button>
-                    
-                    <button 
-                        className={styles.btnPrimary} 
-                        onClick={() => handleSave('COMPLETED')} 
-                        disabled={isSaving}
-                    >
-                        <CheckCircle size={16} /> Complete Material Issue
+                        <Save size={16} /> {selectedStatus === 'COMPLETED' || selectedStatus === 'CLOSED' ? 'Save Status' : 'Save Status'}
                     </button>
                 </div>
             </div>
@@ -890,74 +974,249 @@ const MaterialBomView: React.FC = () => {
                 </div>
             </div>
 
-            {/* Global Material Scanner */}
-            <div className={`${styles.card} ${styles.stickyScanner}`} style={{ marginBottom: '1.25rem' }}>
-                <h3 className={styles.scannerHeader}>Global Material Scanner</h3>
-                <div className={styles.lockToggleGroup}>
-                    <button
-                        type="button"
-                        className={`${styles.lockBtn} ${lockMode === 'request' ? styles.lockBtnActive : styles.lockBtnInactive}`}
-                        onClick={() => {
-                            setLockMode('request');
-                            setTimeout(() => globalScanInputRef.current?.focus(), 50);
-                        }}
-                    >
-                        Request Lock
-                    </button>
-                    <button
-                        type="button"
-                        className={`${styles.lockBtn} ${lockMode === 'return' ? styles.lockBtnActive : styles.lockBtnInactive}`}
-                        onClick={() => {
-                            setLockMode('return');
-                            setTimeout(() => globalScanInputRef.current?.focus(), 50);
-                        }}
-                    >
-                        Return Lock
-                    </button>
+            {/* Global Material Scanner & Transaction Control Panel */}
+            <div className={styles.scannerContainer}>
+                {/* Global Material Scanner */}
+                <div className={`${styles.card} ${styles.stickyScanner}`} style={{ marginBottom: 0 }}>
+                    <h3 className={styles.scannerHeader}>Global Material Scanner</h3>
+                    <div className={styles.lockToggleGroup}>
+                        <button
+                            type="button"
+                            className={`${styles.lockBtn} ${lockMode === 'request' ? styles.lockBtnActive : styles.lockBtnInactive}`}
+                            onClick={() => {
+                                setLockMode('request');
+                                setTimeout(() => globalScanInputRef.current?.focus(), 50);
+                            }}
+                        >
+                            Request Lock
+                        </button>
+                        <button
+                            type="button"
+                            className={`${styles.lockBtn} ${lockMode === 'return' ? styles.lockBtnActive : styles.lockBtnInactive}`}
+                            onClick={() => {
+                                setLockMode('return');
+                                setTimeout(() => globalScanInputRef.current?.focus(), 50);
+                            }}
+                        >
+                            Return Lock
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleGlobalScanSubmit}>
+                        <div className={styles.inputGroup}>
+                            <label htmlFor="global-barcode-scan">Barcode Scan</label>
+                            <input
+                                id="global-barcode-scan"
+                                type="text"
+                                ref={globalScanInputRef}
+                                value={globalBarcodeInput}
+                                onChange={(e) => setGlobalBarcodeInput(e.target.value)}
+                                placeholder="Scan reel barcode here..."
+                                className={styles.globalScanInput}
+                                disabled={isGlobalScanning}
+                                autoComplete="off"
+                            />
+                        </div>
+                    </form>
+
+                    {globalScanError && (
+                        <div className={styles.scannerErrorMsg}>
+                            ❌ {globalScanError}
+                        </div>
+                    )}
+                    {lastScannedInfo && (
+                        <div className={styles.scannerSuccessMsg}>
+                            <div className={styles.successTitle}>✔ {lastScannedInfo.message}</div>
+                            <div className={styles.successDetails}>
+                                <span><strong>UID:</strong> {lastScannedInfo.uid}</span>
+                                <span><strong>VEPL Part No:</strong> {lastScannedInfo.veplPartNo}</span>
+                                {lastScannedInfo.mode === 'return' ? (
+                                    <>
+                                        <span><strong>Requested Qty:</strong> {lastScannedInfo.issuedQty}</span>
+                                        <span><strong>Current Return Qty:</strong> {lastScannedInfo.quantity}</span>
+                                        <span><strong>Remaining Qty:</strong> {lastScannedInfo.remainingQty}</span>
+                                    </>
+                                ) : (
+                                    <span><strong>Quantity:</strong> {lastScannedInfo.quantity}</span>
+                                )}
+                                <span><strong>Time:</strong> {lastScannedInfo.time}</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                <form onSubmit={handleGlobalScanSubmit}>
-                    <div className={styles.inputGroup}>
-                        <label htmlFor="global-barcode-scan">Barcode Scan</label>
-                        <input
-                            id="global-barcode-scan"
-                            type="text"
-                            ref={globalScanInputRef}
-                            value={globalBarcodeInput}
-                            onChange={(e) => setGlobalBarcodeInput(e.target.value)}
-                            placeholder="Scan reel barcode here..."
-                            className={styles.globalScanInput}
-                            disabled={isGlobalScanning}
-                            autoComplete="off"
-                        />
-                    </div>
-                </form>
+                {/* Transaction Control Panel */}
+                <div className={styles.transactionPanelCard}>
+                    <div>
+                        <h3 className={styles.transactionPanelHeader}>Transaction Control Panel</h3>
+                        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem', lineHeight: '1.4' }}>
+                            Commit pending shop-floor barcode scans into immutable records. This updates the MSD Tracker and transaction audit history.
+                        </p>
+                        
+                        <div style={{ marginBottom: '1rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.75rem' }}>
+                            <div className={styles.txSummaryRow}>
+                                <span>Pending Issue Scans:</span>
+                                <span className={styles.txSummaryVal}>{summary.pendingIssueScansCount}</span>
+                            </div>
+                            <div className={styles.txSummaryRow}>
+                                <span>Unique Issue Parts:</span>
+                                <span className={styles.txSummaryVal}>{summary.pendingIssueUniquePartsCount}</span>
+                            </div>
+                            <div className={styles.txSummaryRow}>
+                                <span>Total Issue Qty:</span>
+                                <span className={styles.txSummaryVal}>{summary.pendingIssueTotalQty}</span>
+                            </div>
+                        </div>
 
-                {globalScanError && (
-                    <div className={styles.scannerErrorMsg}>
-                        ❌ {globalScanError}
-                    </div>
-                )}
-                {lastScannedInfo && (
-                    <div className={styles.scannerSuccessMsg}>
-                        <div className={styles.successTitle}>✔ {lastScannedInfo.message}</div>
-                        <div className={styles.successDetails}>
-                            <span><strong>UID:</strong> {lastScannedInfo.uid}</span>
-                            <span><strong>VEPL Part No:</strong> {lastScannedInfo.veplPartNo}</span>
-                            {lastScannedInfo.mode === 'return' ? (
-                                <>
-                                    <span><strong>Requested Qty:</strong> {lastScannedInfo.issuedQty}</span>
-                                    <span><strong>Current Return Qty:</strong> {lastScannedInfo.quantity}</span>
-                                    <span><strong>Remaining Qty:</strong> {lastScannedInfo.remainingQty}</span>
-                                </>
-                            ) : (
-                                <span><strong>Quantity:</strong> {lastScannedInfo.quantity}</span>
-                            )}
-                            <span><strong>Time:</strong> {lastScannedInfo.time}</span>
+                        <div style={{ marginBottom: '1.25rem' }}>
+                            <div className={styles.txSummaryRow}>
+                                <span>Pending Return Scans:</span>
+                                <span className={styles.txSummaryVal}>{summary.pendingReturnScansCount}</span>
+                            </div>
+                            <div className={styles.txSummaryRow}>
+                                <span>Unique Return Parts:</span>
+                                <span className={styles.txSummaryVal}>{summary.pendingReturnUniquePartsCount}</span>
+                            </div>
+                            <div className={styles.txSummaryRow}>
+                                <span>Total Return Qty:</span>
+                                <span className={styles.txSummaryVal}>{summary.pendingReturnTotalQty}</span>
+                            </div>
                         </div>
                     </div>
-                )}
+
+                    <div className={styles.transactionActionsGrid}>
+                        <button
+                            type="button"
+                            className={`${styles.completeTxBtn} ${styles.completeIssueBtn}`}
+                            disabled={summary.pendingIssueScansCount === 0 || isCompletingTx}
+                            onClick={() => {
+                                setTxType('issue');
+                                setTxModalOpen(true);
+                            }}
+                        >
+                            Complete Material Issue ({summary.pendingIssueScansCount})
+                        </button>
+                        <button
+                            type="button"
+                            className={`${styles.completeTxBtn} ${styles.completeReturnBtn}`}
+                            disabled={summary.pendingReturnScansCount === 0 || isCompletingTx}
+                            onClick={() => {
+                                setTxType('return');
+                                setTxModalOpen(true);
+                            }}
+                        >
+                            Complete Material Return ({summary.pendingReturnScansCount})
+                        </button>
+                    </div>
+                </div>
             </div>
+
+            {/* Transaction Confirmation Modal */}
+            {txModalOpen && (
+                <div className={styles.modalOverlay}>
+                    <div className={styles.modalContent} style={{ maxWidth: '480px' }}>
+                        <div className={styles.modalHeader}>
+                            <h3>Confirm {txType === 'issue' ? 'Material Issue' : 'Material Return'} Transaction</h3>
+                            <button 
+                                className={styles.closeModalBtn}
+                                onClick={() => setTxModalOpen(false)}
+                                disabled={isCompletingTx}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className={styles.modalBody}>
+                            <div style={{ textAlign: 'center', margin: '0.5rem 0' }}>
+                                <div style={{ 
+                                    fontSize: '3rem', 
+                                    marginBottom: '0.75rem',
+                                    color: txType === 'issue' ? '#15803d' : '#7e22ce'
+                                }}>
+                                    {txType === 'issue' ? '📥' : '📤'}
+                                </div>
+                                <p style={{ fontSize: '0.95rem', color: '#334155', fontWeight: 500 }}>
+                                    Are you sure you want to commit this transaction?
+                                </p>
+                                <p style={{ fontSize: '0.825rem', color: '#64748b', marginTop: '0.25rem' }}>
+                                    This action will write an immutable audit trail and update the MSD Tracker immediately.
+                                </p>
+                            </div>
+
+                            <div className={styles.scanItemInfo} style={{ gridTemplateColumns: '1fr', gap: '0.5rem' }}>
+                                <div className={styles.txSummaryRow}>
+                                    <span>Transaction Type:</span>
+                                    <span className={styles.txSummaryVal} style={{ textTransform: 'capitalize' }}>
+                                        {txType === 'issue' ? 'Material Issue' : 'Material Return'}
+                                    </span>
+                                </div>
+                                <div className={styles.txSummaryRow}>
+                                    <span>Total Scanned Items:</span>
+                                    <span className={styles.txSummaryVal}>
+                                        {txType === 'issue' ? summary.pendingIssueScansCount : summary.pendingReturnScansCount}
+                                    </span>
+                                </div>
+                                <div className={styles.txSummaryRow}>
+                                    <span>Unique Part Numbers:</span>
+                                    <span className={styles.txSummaryVal}>
+                                        {txType === 'issue' ? summary.pendingIssueUniquePartsCount : summary.pendingReturnUniquePartsCount}
+                                    </span>
+                                </div>
+                                <div className={styles.txSummaryRow}>
+                                    <span>Total Part Quantity:</span>
+                                    <span className={styles.txSummaryVal}>
+                                        {txType === 'issue' ? summary.pendingIssueTotalQty : summary.pendingReturnTotalQty}
+                                    </span>
+                                </div>
+                                <div className={styles.txSummaryRow}>
+                                    <span>Work Order:</span>
+                                    <span className={styles.txSummaryVal}>
+                                        {recordDetails?.work_order_number}
+                                    </span>
+                                </div>
+                                <div className={styles.txSummaryRow}>
+                                    <span>Operator Account:</span>
+                                    <span className={styles.txSummaryVal}>
+                                        {localStorage.getItem('user_name') || 'Logged-in Operator'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                <button
+                                    type="button"
+                                    className={styles.btnSecondary}
+                                    style={{ flex: 1, justifyContent: 'center' }}
+                                    onClick={() => setTxModalOpen(false)}
+                                    disabled={isCompletingTx}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    className={styles.btnPrimary}
+                                    style={{ 
+                                        flex: 1, 
+                                        justifyContent: 'center',
+                                        backgroundColor: txType === 'issue' ? '#15803d' : '#7e22ce',
+                                        borderColor: txType === 'issue' ? '#15803d' : '#7e22ce'
+                                    }}
+                                    onClick={handleCompleteTransaction}
+                                    disabled={isCompletingTx}
+                                >
+                                    {isCompletingTx ? (
+                                        <>
+                                            <RefreshCw className={styles.spinner} size={16} />
+                                            Committing...
+                                        </>
+                                    ) : (
+                                        'Confirm & Commit'
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* BOM Table */}
             <div className={styles.card} style={{ padding: 0 }}>

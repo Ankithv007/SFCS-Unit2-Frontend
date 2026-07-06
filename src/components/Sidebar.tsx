@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSmtAuth } from '../context/SmtAuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { useToast } from './Toast';
 import styles from './Sidebar.module.css';
 
@@ -14,12 +15,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     const navigate = useNavigate();
     const location = useLocation();
     const { smtUser } = useSmtAuth();
+    const { user } = useAuth();
     const { showToast } = useToast();
     const [expandedModule, setExpandedModule] = useState<string | null>(null);
     const [isSolderPasteMgmtExpanded, setIsSolderPasteMgmtExpanded] = useState(false);
     const [isStencilMgmtExpanded, setIsStencilMgmtExpanded] = useState(false);
+    const [isSmtLineExpanded, setIsSmtLineExpanded] = useState(false);
 
-    const isSmtAdmin = smtUser && ['Super Admin', 'Admin', 'Manager'].includes(smtUser.role);
+    const isSmtAdmin = (smtUser && ['Super Admin', 'Admin', 'Manager'].includes(smtUser.role)) || 
+                       (user && ['Super Admin', 'Admin', 'Manager'].includes(user.role));
+
 
     useEffect(() => {
         if (location.pathname.startsWith('/pre-testing')) setExpandedModule('pre-testing');
@@ -31,6 +36,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
             }
             if (location.pathname.startsWith('/smt/stencil')) {
                 setIsStencilMgmtExpanded(true);
+            }
+            if (
+                location.pathname.startsWith('/smt/serial-number') ||
+                location.pathname.startsWith('/smt/printing') ||
+                location.pathname.startsWith('/smt/spi') ||
+                location.pathname.startsWith('/smt/pre-aoi') ||
+                location.pathname.startsWith('/smt/post-aoi') ||
+                location.pathname.startsWith('/smt/rework') ||
+                location.pathname.startsWith('/smt/smt-fg') ||
+                location.pathname.startsWith('/smt/track-items')
+            ) {
+                setIsSmtLineExpanded(true);
             }
         }
         else if (location.pathname.startsWith('/backend')) setExpandedModule('backend');
@@ -214,69 +231,90 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             </span> Baking Tracking Record
                         </div>
                         <div
-                            className={`${styles.submenuItem} ${isActive('/smt/pcb-generation') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/pcb-generation')}
+                            className={`${styles.submenuItem} ${isSmtLineExpanded ? styles.activeSubmenuParent : ''}`}
+                            onClick={() => setIsSmtLineExpanded(!isSmtLineExpanded)}
                         >
                             <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> PCB Generation
+                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="SMT Line" className={styles.imageIcon} />
+                            </span> SMT Line
                         </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/printing') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/printing')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Printing
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/spi') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/spi')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> SPI
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/pre-aoi') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/pre-aoi')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Pre AOI
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/post-aoi') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/post-aoi')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Post AOI
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/rework') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/rework')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Rework
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/smt-fg') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/smt-fg')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> SMT FG
-                        </div>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/track-items') ? styles.activeSubmenu : ''}`}
-                            onClick={() => navigate('/smt/track-items')}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Track Items" className={styles.imageIcon} />
-                            </span> Track Items
-                        </div>
+                        {isSmtLineExpanded && (
+                            <div className={styles.subSubmenu}>
+
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/serial-number') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/serial-number');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Serial Generation
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/printing') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/printing');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Printing
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/spi') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/spi');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> SPI
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/pre-aoi') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/pre-aoi');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Pre AOI
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/post-aoi') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/post-aoi');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Post AOI
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/rework') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/rework');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Rework
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/smt-fg') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/smt-fg');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> SMT FG
+                                </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/track-items') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/track-items');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Track Items
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

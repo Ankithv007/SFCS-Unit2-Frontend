@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styles from './MsdTracker.module.css';
+import { WorkOrderSelector } from '../../components/WorkOrderSelector';
 import { 
     Search, RefreshCw, Eye, X, FileSpreadsheet, PlusCircle
 } from 'lucide-react';
@@ -148,8 +149,7 @@ const MsdTracker: React.FC = () => {
     }, [statusFilter]);
 
     // Handle Work Order selection change
-    const handleWoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const val = e.target.value;
+    const handleWoChange = (val: string) => {
         setSelectedWoId(val);
         const match = eligibleWos.find(w => w.work_order_id === val);
         setSelectedWoDetails(match || null);
@@ -279,19 +279,17 @@ const MsdTracker: React.FC = () => {
                     <div className={styles.formGrid2}>
                         <div className={styles.inputGroup}>
                             <label>Work Order *</label>
-                            <select 
-                                className={styles.select} 
-                                value={selectedWoId} 
+                            <WorkOrderSelector
+                                options={eligibleWos}
+                                value={selectedWoId}
                                 onChange={handleWoChange}
+                                placeholder="-- Select Eligible Work Order --"
+                                valueKey="work_order_id"
+                                labelKey="work_order_id"
+                                productNameKey="product_name"
+                                quantityKey="quantity"
                                 required
-                            >
-                                <option value="">-- Select Eligible Work Order --</option>
-                                {eligibleWos.map(wo => (
-                                    <option key={wo.work_order_id} value={wo.work_order_id}>
-                                        {wo.work_order_id} ({wo.product_name})
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </div>
                         <div className={styles.inputGroup}>
                             <label>Remarks</label>

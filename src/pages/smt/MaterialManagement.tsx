@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styles from './MaterialManagement.module.css';
+import { WorkOrderSelector } from '../../components/WorkOrderSelector';
 import { 
     Search, RefreshCw, Eye, X, FileSpreadsheet
 } from 'lucide-react';
@@ -309,18 +310,17 @@ const MaterialManagement: React.FC = () => {
                     <div className={styles.formGrid4}>
                         <div className={styles.inputGroup}>
                             <label>Work Order Number *</label>
-                            <select 
-                                className={styles.select} 
-                                value={selectedWoId} 
-                                onChange={(e) => handleWoChange(e.target.value)}
-                            >
-                                <option value="">Select Work Order...</option>
-                                {eligibleWos.map(wo => (
-                                    <option key={wo.id} value={wo.id}>
-                                        {wo.work_order_number}
-                                    </option>
-                                ))}
-                            </select>
+                            <WorkOrderSelector
+                                options={eligibleWos}
+                                value={selectedWoId}
+                                onChange={handleWoChange}
+                                placeholder="Select Work Order..."
+                                valueKey="id"
+                                labelKey="work_order_number"
+                                productNameKey="product_name"
+                                quantityKey="quantity"
+                                required
+                            />
                         </div>
                         <div className={styles.inputGroup}>
                             <label>PO Number</label>

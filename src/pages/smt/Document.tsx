@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../utils/api';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import styles from './Document.module.css';
+import { WorkOrderSelector } from '../../components/WorkOrderSelector';
 import { 
     Download, Eye, Trash2, UploadCloud, X, RefreshCw, Search
 } from 'lucide-react';
@@ -139,8 +140,7 @@ const Document: React.FC = () => {
         }
     };
 
-    const handleWoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const woNum = e.target.value;
+    const handleWoChange = (woNum: string) => {
         setSelectedWoNum(woNum);
         const details = workOrders.find(w => w.work_order_number === woNum);
         setWoDetails(details || null);
@@ -507,18 +507,17 @@ const Document: React.FC = () => {
                     <div className={styles.formGrid4}>
                         <div className={styles.inputGroup}>
                             <label>Work Order Number *</label>
-                            <select 
-                                className={styles.select} 
-                                value={selectedWoNum} 
+                            <WorkOrderSelector
+                                options={workOrders}
+                                value={selectedWoNum}
                                 onChange={handleWoChange}
-                            >
-                                <option value="">Select Work Order...</option>
-                                {workOrders.map(wo => (
-                                    <option key={wo.work_order_number} value={wo.work_order_number}>
-                                        {wo.work_order_number}
-                                    </option>
-                                ))}
-                            </select>
+                                placeholder="Select Work Order..."
+                                valueKey="work_order_number"
+                                labelKey="work_order_number"
+                                productNameKey="product_name"
+                                quantityKey="quantity"
+                                required
+                            />
                         </div>
                         <div className={styles.inputGroup}>
                             <label>PO Number</label>

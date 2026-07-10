@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import styles from './SolderPasteManagement.module.css';
+import { WorkOrderSelector } from '../../components/WorkOrderSelector';
 
 interface Toast {
     id: number;
@@ -623,18 +624,17 @@ export const SolderPasteManagement: React.FC = () => {
                             <div className={styles.formGrid}>
                                 <div className={styles.inputGroup}>
                                     <label>Select Work Order *</label>
-                                    <select
-                                        className={styles.select}
+                                    <WorkOrderSelector
+                                        options={eligibleWos}
                                         value={selectedWoId}
-                                        onChange={(e) => handleSelectWo(e.target.value)}
-                                    >
-                                        <option value="">-- Choose Work Order --</option>
-                                        {eligibleWos.map(wo => (
-                                            <option key={wo.id} value={wo.id}>
-                                                {wo.id} - {wo.product_name} (Qty: {wo.quantity})
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={handleSelectWo}
+                                        placeholder="-- Choose Work Order --"
+                                        valueKey="id"
+                                        labelKey="id"
+                                        productNameKey="product_name"
+                                        quantityKey="quantity"
+                                        required
+                                    />
                                 </div>
 
                                 <div className={styles.inputGroup}>
@@ -737,18 +737,17 @@ export const SolderPasteManagement: React.FC = () => {
                         <div className={styles.formGrid}>
                             <div className={styles.inputGroup}>
                                 <label>Select Work Order *</label>
-                                <select
-                                    className={styles.select}
+                                <WorkOrderSelector
+                                    options={eligibleWos}
                                     value={selectedWoId}
-                                    onChange={(e) => handleSelectWo(e.target.value)}
-                                >
-                                    <option value="">-- Choose Work Order --</option>
-                                    {eligibleWos.map(wo => (
-                                        <option key={wo.id} value={wo.id}>
-                                            {wo.id} - {wo.product_name} [Paste: {wo.solder_paste_barcode}]
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={handleSelectWo}
+                                    placeholder="-- Choose Work Order --"
+                                    valueKey="id"
+                                    labelKey="id"
+                                    productNameKey="product_name"
+                                    quantityKey="quantity"
+                                    required
+                                />
                             </div>
                         </div>
 
@@ -857,18 +856,17 @@ export const SolderPasteManagement: React.FC = () => {
                         <div className={styles.formGrid}>
                             <div className={styles.inputGroup}>
                                 <label>Select Work Order *</label>
-                                <select
-                                    className={styles.select}
+                                <WorkOrderSelector
+                                    options={eligibleWos}
                                     value={selectedWoId}
-                                    onChange={(e) => handleSelectWo(e.target.value)}
-                                >
-                                    <option value="">-- Choose Work Order --</option>
-                                    {eligibleWos.map(wo => (
-                                        <option key={wo.id} value={wo.id}>
-                                            {wo.id} - {wo.product_name}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={handleSelectWo}
+                                    placeholder="-- Choose Work Order --"
+                                    valueKey="id"
+                                    labelKey="id"
+                                    productNameKey="product_name"
+                                    quantityKey="quantity"
+                                    required
+                                />
                             </div>
                         </div>
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import styles from './Rework.module.css';
+import { WorkOrderSelector } from '../../components/WorkOrderSelector';
 import { apiFetch } from '../../utils/api';
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
@@ -1262,19 +1263,17 @@ const Rework: React.FC = () => {
                     <div className={styles.card} style={{ marginBottom: '0' }}>
                         <h3>Select Work Order</h3>
                         <div className={styles.inputGroup} style={{ maxWidth: '480px' }}>
-                            <select
-                                className={styles.select}
+                            <WorkOrderSelector
+                                options={eligibleWos}
                                 value={selectedWoId}
-                                onChange={e => setSelectedWoId(e.target.value)}
+                                onChange={setSelectedWoId}
+                                placeholder="-- Select Eligible Work Order --"
+                                valueKey="work_order_id"
+                                labelKey="work_order_id"
+                                productNameKey="product_name"
+                                quantityKey="work_order_quantity"
                                 required
-                            >
-                                <option value="">-- Select Eligible Work Order --</option>
-                                {eligibleWos.map(wo => (
-                                    <option key={wo.work_order_id} value={wo.work_order_id}>
-                                        {wo.work_order_id} - {wo.product_name} (Qty: {wo.work_order_quantity})
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </div>
                     </div>
 

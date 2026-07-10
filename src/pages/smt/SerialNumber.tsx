@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styles from './SerialNumber.module.css';
+import { WorkOrderSelector } from '../../components/WorkOrderSelector';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../utils/api';
@@ -960,18 +961,17 @@ export const SerialNumber: React.FC = () => {
                             
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Work Order ID *</label>
-                                <select
-                                    className={styles.select}
+                                <WorkOrderSelector
+                                    options={workOrders}
                                     value={selectedWoId}
-                                    onChange={(e) => setSelectedWoId(e.target.value)}
-                                >
-                                    <option value="">-- Choose Pending Work Order --</option>
-                                    {workOrders.map((wo, i) => (
-                                        <option key={i} value={wo.id}>
-                                            {wo.id} ({wo.product_name})
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={setSelectedWoId}
+                                    placeholder="-- Choose Pending Work Order --"
+                                    valueKey="id"
+                                    labelKey="id"
+                                    productNameKey="product_name"
+                                    quantityKey="quantity"
+                                    required
+                                />
                             </div>
 
                             {selectedWo ? (

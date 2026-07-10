@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styles from './StencilLifecycleManagement.module.css';
+import { WorkOrderSelector } from '../../components/WorkOrderSelector';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import { useToast } from '../../components/Toast';
 import { apiFetch } from '../../utils/api';
@@ -81,12 +82,8 @@ const StencilLifecycleManagement: React.FC = () => {
     // Searchable Dropdowns search inputs
     const [stencilSearch, setStencilSearch] = useState('');
     const [stencilDropdownOpen, setStencilDropdownOpen] = useState(false);
-    const [woSearch, setWoSearch] = useState('');
-    const [woDropdownOpen, setWoDropdownOpen] = useState(false);
-
     // Dropdown references for clicking outside
     const stencilRef = useRef<HTMLDivElement>(null);
-    const woRef = useRef<HTMLDivElement>(null);
 
     // Table state
     const [searchText, setSearchText] = useState('');
@@ -199,9 +196,6 @@ const StencilLifecycleManagement: React.FC = () => {
             if (stencilRef.current && !stencilRef.current.contains(event.target as Node)) {
                 setStencilDropdownOpen(false);
             }
-            if (woRef.current && !woRef.current.contains(event.target as Node)) {
-                setWoDropdownOpen(false);
-            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -270,19 +264,7 @@ const StencilLifecycleManagement: React.FC = () => {
             });
     };
 
-    const getFilteredWorkOrders = () => {
-        const q = woSearch.trim().toLowerCase();
-        if (!q) return workOrders;
-        return [...workOrders]
-            .filter(wo => wo.id.toLowerCase().includes(q) || wo.product_name.toLowerCase().includes(q))
-            .sort((a, b) => {
-                const aIdMatch = a.id.toLowerCase().startsWith(q);
-                const bIdMatch = b.id.toLowerCase().startsWith(q);
-                if (aIdMatch && !bIdMatch) return -1;
-                if (!aIdMatch && bIdMatch) return 1;
-                return 0;
-            });
-    };
+
 
     const handleCreateLifecycle = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -306,7 +288,6 @@ const StencilLifecycleManagement: React.FC = () => {
             setSelectedStencil(null);
             setSelectedWorkOrder(null);
             setStencilSearch('');
-            setWoSearch('');
             setRemarks('');
 
             // Reload data before triggering toast so that the tables and states update first
@@ -535,49 +516,22 @@ const StencilLifecycleManagement: React.FC = () => {
 
                         {/* Work Order Search & Preview */}
                         <div className={styles.formGrid}>
-                            <div className={styles.inputGroup} ref={woRef}>
+                            <div className={styles.inputGroup}>
                                 <label>Work Order <span>*</span></label>
-                                <div className={styles.dropdownWrapper}>
-                                    <div className={styles.dropdownInputWrapper}>
-                                        <input
-                                            type="text"
-                                            className={styles.input}
-                                            placeholder="Select Work Order"
-                                            value={selectedWorkOrder ? selectedWorkOrder.id : woSearch}
-                                            onChange={(e) => {
-                                                setWoSearch(e.target.value);
-                                                setSelectedWorkOrder(null);
-                                                setWoDropdownOpen(true);
-                                            }}
-                                            onFocus={() => setWoDropdownOpen(true)}
-                                        />
-                                        <span className={styles.dropdownArrow}>▼</span>
-                                    </div>
-                                    {woDropdownOpen && (
-                                        <ul className={styles.dropdownList}>
-                                            {getFilteredWorkOrders().length === 0 ? (
-                                                <li className={styles.noOptions}>No Work Orders found</li>
-                                            ) : (
-                                                getFilteredWorkOrders().map((wo) => (
-                                                    <li
-                                                        key={wo.id}
-                                                        className={styles.dropdownOption}
-                                                        onClick={() => {
-                                                            setSelectedWorkOrder(wo);
-                                                            setWoSearch(wo.id);
-                                                            setWoDropdownOpen(false);
-                                                        }}
-                                                    >
-                                                        <span className={styles.dropdownOptionMain}>{wo.id}</span>
-                                                        <span className={styles.dropdownOptionSub}>
-                                                            PO: {wo.po_id} | Product: {wo.product_name} | Qty: {wo.quantity}
-                                                        </span>
-                                                    </li>
-                                                ))
-                                            )}
-                                        </ul>
-                                    )}
-                                </div>
+                                <WorkOrderSelector
+                                    options={workOrders}
+                                    value={selectedWorkOrder ? selectedWorkOrder.id : ''}
+                                    onChange={(val) => {
+                                        const wo = workOrders.find(w => w.id === val);
+                                        setSelectedWorkOrder(wo || null);
+                                    }}
+                                    placeholder="Select Work Order"
+                                    valueKey="id"
+                                    labelKey="id"
+                                    productNameKey="product_name"
+                                    quantityKey="quantity"
+                                    required
+                                />
                             </div>
 
                             {/* Work order details display */}
@@ -661,7 +615,6 @@ const StencilLifecycleManagement: React.FC = () => {
                                 setSelectedStencil(null);
                                 setSelectedWorkOrder(null);
                                 setStencilSearch('');
-                                setWoSearch('');
                                 setRemarks('');
                             }}
                             disabled={submitting}

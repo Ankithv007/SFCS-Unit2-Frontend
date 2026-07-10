@@ -96,6 +96,8 @@ export const SerialNumber: React.FC = () => {
     const [scannedBarcodes, setScannedBarcodes] = useState<string[]>([]);
     const [duplicateScanCount, setDuplicateScanCount] = useState(0);
     const [duplicateScanLog, setDuplicateScanLog] = useState<any[]>([]);
+    const [existingBatch, setExistingBatch] = useState<SerialGenerationRecord | null>(null);
+    const [savedBarcodes, setSavedBarcodes] = useState<string[]>([]);
 
     // LASER file specific state
     const [laserFile, setLaserFile] = useState<File | null>(null);
@@ -178,10 +180,51 @@ export const SerialNumber: React.FC = () => {
         fetchRecords();
     }, [currentPage, searchQuery]);
 
+    const fetchActiveCustomerBatch = useCallback(async (woId: string) => {
+        try {
+            const data = await apiFetch(`/api/smt/v1/smt/serial-generation-records/active-customer/${woId}`);
+            if (data?.success && data?.hasExisting) {
+                setExistingBatch(data.batch);
+                setSavedBarcodes(data.serials);
+                setRemarks(data.batch.serial_generation_remarks || '');
+                setAdditionalNotes(data.batch.additional_notes || '');
+            } else {
+                setExistingBatch(null);
+                setSavedBarcodes([]);
+                setRemarks('');
+                setAdditionalNotes('');
+            }
+        } catch (err) {
+            console.error('Error fetching active customer batch:', err);
+            setExistingBatch(null);
+            setSavedBarcodes([]);
+            setRemarks('');
+            setAdditionalNotes('');
+        }
+    }, []);
+
+    useEffect(() => {
+        if (selectedWoId && barcodeSource === 'CUSTOMER') {
+            fetchActiveCustomerBatch(selectedWoId);
+        } else {
+            setExistingBatch(null);
+            setSavedBarcodes([]);
+        }
+    }, [selectedWoId, barcodeSource, fetchActiveCustomerBatch]);
+
     useEffect(() => {
         if (selectedWoId) {
             const wo = workOrders.find(w => w.id === selectedWoId);
-            setSelectedWo(wo || null);
+            if (wo) {
+                setSelectedWo(wo);
+            } else {
+                setSelectedWo(null);
+                setSelectedWoId('');
+                setExistingBatch(null);
+                setSavedBarcodes([]);
+                setRemarks('');
+                setAdditionalNotes('');
+            }
         } else {
             setSelectedWo(null);
         }
@@ -237,7 +280,14 @@ export const SerialNumber: React.FC = () => {
         const code = scanInput.trim();
         if (!code) return;
 
-        if (scannedBarcodes.includes(code)) {
+        const totalScanned = savedBarcodes.length + scannedBarcodes.length;
+        if (selectedWo && totalScanned >= selectedWo.quantity) {
+            addToast('Cannot scan more barcodes. Work Order quantity limit reached.', 'error');
+            setScanInput('');
+            return;
+        }
+
+        if (scannedBarcodes.includes(code) || savedBarcodes.includes(code)) {
             setDuplicateScanCount(prev => prev + 1);
             setDuplicateScanLog(prev => [
                 { barcode: code, scannedAt: new Date().toLocaleTimeString() },
@@ -579,10 +629,16 @@ export const SerialNumber: React.FC = () => {
 
                 if (res?.success) {
                     addToast(`Customer barcodes registered successfully. Quantity: ${res.record.generated_quantity}`, 'success');
-                    resetForm();
+                    setScanInput('');
+                    setScannedBarcodes([]);
+                    setDuplicateScanCount(0);
+                    setDuplicateScanLog([]);
                     setCurrentPage(1);
                     fetchWorkOrders();
                     fetchRecords();
+                    if (res.record.status !== 'Completed') {
+                        fetchActiveCustomerBatch(selectedWoId);
+                    }
                 }
 
             } else if (barcodeSource === 'LASER') {
@@ -911,7 +967,9 @@ export const SerialNumber: React.FC = () => {
         ? Math.max(0, selectedWo.quantity - Number(selectedWo.generated_count || 0))
         : 0;
 
-    const currentPendingCount = Math.max(0, woRemainingQty - scannedBarcodes.length);
+    const currentPendingCount = barcodeSource === 'CUSTOMER'
+        ? Math.max(0, (selectedWo?.quantity || 0) - (savedBarcodes.length + scannedBarcodes.length))
+        : Math.max(0, woRemainingQty - scannedBarcodes.length);
 
     const getBarcodeSourceLabel = (src: string) => {
         if (src === 'GENERATE') return 'Generate Barcode';
@@ -1182,62 +1240,73 @@ export const SerialNumber: React.FC = () => {
                                 )}
 
                                 {/* 2. CUSTOMER SCAN CARD CONTENT */}
-                                {barcodeSource === 'CUSTOMER' && (
-                                    <div>
-                                        <div className={styles.scanStats}>
-                                            <div className={styles.scanStatItem}>
-                                                <span className={styles.scanStatLabel}>Scanned Count</span>
-                                                <span className={styles.scanStatVal} style={{ color: '#059669' }}>
-                                                    {scannedBarcodes.length}
-                                                </span>
-                                            </div>
-                                            <div className={styles.scanStatItem}>
-                                                <span className={styles.scanStatLabel}>Pending Count</span>
-                                                <span className={styles.scanStatVal} style={{ color: '#4f46e5' }}>
-                                                    {currentPendingCount}
-                                                </span>
-                                            </div>
-                                        </div>
+                                {barcodeSource === 'CUSTOMER' && (() => {
+                                    const totalScannedCount = savedBarcodes.length + scannedBarcodes.length;
+                                    const isLimitReached = selectedWo ? totalScannedCount >= selectedWo.quantity : false;
+                                    return (
+                                        <div>
+                                            {existingBatch && (
+                                                <div className={`${styles.alert} ${styles.alertInfo}`} style={{ marginBottom: '1rem', borderLeft: '4px solid #3b82f6', backgroundColor: '#eff6ff', color: '#1e40af', padding: '0.75rem' }}>
+                                                    🔄 <strong>Resume Mode Active</strong>: Resuming existing Customer Barcode session. <strong>{savedBarcodes.length}</strong> barcodes already saved in the database.
+                                                </div>
+                                            )}
 
-                                        <form onSubmit={handleScanSubmit} style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
-                                            <input
-                                                type="text"
-                                                className={styles.input}
-                                                placeholder="Scan or type customer serial and press Enter..."
-                                                value={scanInput}
-                                                onChange={(e) => setScanInput(e.target.value)}
-                                            />
-                                            <button type="submit" className={styles.button} style={{ backgroundColor: '#10b981' }}>
-                                                Add
-                                            </button>
-                                        </form>
+                                            <div className={styles.scanStats}>
+                                                <div className={styles.scanStatItem}>
+                                                    <span className={styles.scanStatLabel}>Scanned Count</span>
+                                                    <span className={styles.scanStatVal} style={{ color: '#059669' }}>
+                                                        {totalScannedCount}
+                                                    </span>
+                                                </div>
+                                                <div className={styles.scanStatItem}>
+                                                    <span className={styles.scanStatLabel}>Pending Count</span>
+                                                    <span className={styles.scanStatVal} style={{ color: '#4f46e5' }}>
+                                                        {currentPendingCount}
+                                                    </span>
+                                                </div>
+                                            </div>
 
-                                        {scannedBarcodes.length > 0 ? (
-                                            <div className={styles.scanListContainer}>
-                                                {scannedBarcodes.map((bar, idx) => (
-                                                    <div key={idx} className={styles.scanListItem}>
-                                                        <div>
-                                                            <span className={styles.scanListIndex}>#{scannedBarcodes.length - idx}</span>
-                                                            <span className={styles.scanListBarcode}>{bar}</span>
+                                            <form onSubmit={handleScanSubmit} style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
+                                                <input
+                                                    type="text"
+                                                    className={styles.input}
+                                                    placeholder={isLimitReached ? "Work Order quantity limit reached." : "Scan or type customer serial and press Enter..."}
+                                                    value={scanInput}
+                                                    onChange={(e) => setScanInput(e.target.value)}
+                                                    disabled={isLimitReached}
+                                                />
+                                                <button type="submit" className={styles.button} style={{ backgroundColor: '#10b981' }} disabled={isLimitReached}>
+                                                    Add
+                                                </button>
+                                            </form>
+
+                                            {scannedBarcodes.length > 0 ? (
+                                                <div className={styles.scanListContainer}>
+                                                    {scannedBarcodes.map((bar, idx) => (
+                                                        <div key={idx} className={styles.scanListItem}>
+                                                            <div>
+                                                                <span className={styles.scanListIndex}>#{scannedBarcodes.length - idx}</span>
+                                                                <span className={styles.scanListBarcode}>{bar}</span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                className={styles.fileRemoveBtn}
+                                                                onClick={() => handleRemoveScan(idx)}
+                                                                title="Delete Scan"
+                                                            >
+                                                                🗑️
+                                                            </button>
                                                         </div>
-                                                        <button
-                                                            type="button"
-                                                            className={styles.fileRemoveBtn}
-                                                            onClick={() => handleRemoveScan(idx)}
-                                                            title="Delete Scan"
-                                                        >
-                                                            🗑️
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className={`${styles.alert} ${styles.alertWarning}`}>
-                                                Scan queue is empty. Serial numbers will be registered under 'Customer Barcode' mapping.
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className={`${styles.alert} ${styles.alertWarning}`}>
+                                                    {isLimitReached ? "All serial numbers have been scanned and saved." : "Scan queue is empty. Serial numbers will be registered under 'Customer Barcode' mapping."}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* 3. LASER MACHINE CARD CONTENT */}
                                 {barcodeSource === 'LASER' && (

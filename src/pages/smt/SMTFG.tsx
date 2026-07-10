@@ -1,981 +1,1447 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import QRCode from 'react-qr-code';
-import styles from './SmtStage.module.css'; // sharing premium CSS styles
 import { useSmtAuth } from '../../context/SmtAuthContext';
-import { useAuth } from '../../hooks/useAuth';
+import styles from './SMTFG.module.css';
 import { apiFetch } from '../../utils/api';
-import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
+import QRCode from 'qrcode';
+import JSZip from 'jszip';
+import { jsPDF } from 'jspdf';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
-interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+interface Toast { 
+    id: number; 
+    message: string; 
+    type: 'success' | 'error' | 'info'; 
+}
 
 const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
     <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column-reverse', gap: '0.5rem' }}>
         {toasts.map(t => (
             <div key={t.id} onClick={() => onRemove(t.id)} style={{
-                padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
-                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#e0f2fe',
-                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#0c4a6e',
-                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#7dd3fc'}`,
-                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                animation: 'slideIn 0.2s ease'
+                padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '320px',
+                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#eff6ff',
+                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#1e40af',
+                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#bfdbfe'}`,
+                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                animation: 'slideIn 0.2s ease', display: 'flex', alignItems: 'center', gap: '8px'
             }}>
-                {t.type === 'error' ? '❌ ' : t.type === 'success' ? '✅ ' : 'ℹ️ '}{t.message}
+                <span>{t.type === 'error' ? '❌' : t.type === 'success' ? '✅' : 'ℹ️'}</span>
+                <span>{t.message}</span>
             </div>
         ))}
     </div>
 );
 
-// ─── Detail View Component (Internal) ──────────────────────────────────────────
-interface SmtFgDetailProps {
-    woId: string;
-    onBack: () => void;
-    operatorName: string;
-    onCountClick?: (stage: string, type: string, label: string) => void;
+// --- TS Typings ---
+interface EligibleWorkOrder {
+    work_order_id: string;
+    work_order_number: string;
+    po_id: string;
+    product_name: string;
+    product_description: string;
+    work_order_quantity: number;
+    panel_quantity: number;
+    sides: string;
+    line_id: string;
+    work_order_remarks: string;
 }
 
-const SmtFgDetail: React.FC<SmtFgDetailProps> = ({ woId, onBack, operatorName, onCountClick }) => {
-    const [tableSerials, setTableSerials] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [scanBarcode, setScanBarcode] = useState('');
-    const [toasts, setToasts] = useState<Toast[]>([]);
-    const toastId = useRef(0);
+interface FgSession {
+    id: string;
+    work_order_id: string;
+    stencil_lifecycle_id: string;
+    squeegee_number: string;
+    solder_paste_barcode: string;
+    side: string;
+    status: string; // Pending, In Progress, Completed, Paused, Cancelled, Aborted
+    created_by: string;
+    created_by_name: string;
+    created_at: string;
+    updated_by?: string;
+    updated_by_name?: string;
+    updated_at?: string;
+    duplicate_scan_count: number;
+    product_name?: string;
+    work_order_quantity?: number;
+    stencil_name?: string;
+    stencil_version?: string;
+    remaining_life?: number;
+}
+
+interface ScanRecord {
+    scan_id: string;
+    barcode: string;
+    result: 'PASS' | 'INVALID';
+    remark: string | null;
+    scanned_by: string;
+    scanned_at: string;
+}
+
+const SMTFG: React.FC = () => {
+    const { smtUser } = useSmtAuth();
+    const isSuperAdmin = smtUser?.role === 'Super Admin';
+
+    const formatTimestamp = (dStr: string | null | undefined) => {
+        if (!dStr) return '—';
+        return new Date(dStr).toLocaleString('en-IN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+    };
+
+    // Session Management State
+    const [eligibleWos, setEligibleWos] = useState<EligibleWorkOrder[]>([]);
+    const [selectedWoId, setSelectedWoId] = useState('');
+    const [autoPopulatedDetails, setAutoPopulatedDetails] = useState<any | null>(null);
+    const [detailsLoading, setDetailsLoading] = useState(false);
+    const [detailsError, setDetailsError] = useState('');
+
+    // UI View State
+    const [activeSession, setActiveSession] = useState<FgSession | null>(null);
+    const [activeSessionsList, setActiveSessionsList] = useState<FgSession[]>([]);
+    const [completedSessionsList, setCompletedSessionsList] = useState<FgSession[]>([]);
+    const [sessionsLoading, setSessionsLoading] = useState(false);
+
+    // Pagination & Search States for Active Sessions
+    const [activePage, setActivePage] = useState(1);
+    const [activeLimit, setActiveLimit] = useState(5);
+    const [activeSearch, setActiveSearch] = useState('');
+    const [activeTotal, setActiveTotal] = useState(0);
+
+    // Pagination & Search States for Completed Sessions
+    const [completedPage, setCompletedPage] = useState(1);
+    const [completedLimit, setCompletedLimit] = useState(5);
+    const [completedSearch, setCompletedSearch] = useState('');
+    const [completedTotal, setCompletedTotal] = useState(0);
+
+    // Active Scan Dashboard State
+    const [stats, setStats] = useState<{
+        workOrderQuantity: number;
+        processedQuantity: number;
+        passed: number;
+        failed: number;
+        pending: number;
+        invalid: number;
+        duplicate: number;
+        scans: ScanRecord[];
+    }>({
+        workOrderQuantity: 0,
+        processedQuantity: 0,
+        passed: 0,
+        failed: 0,
+        pending: 0,
+        invalid: 0,
+        duplicate: 0,
+        scans: []
+    });
+    const [scanBarcodeVal, setScanBarcodeVal] = useState('');
+    const [isScanning, setIsScanning] = useState(false);
+
+    // Dialogs / Modals State
+    const [selectedQrBarcode, setSelectedQrBarcode] = useState<string | null>(null);
+    const [singleQrDataUrl, setSingleQrDataUrl] = useState<string | null>(null);
+    const [isZipping, setIsZipping] = useState(false);
+
+    // Focus Lock Ref
     const scanInputRef = useRef<HTMLInputElement>(null);
-    const [allWoSerials, setAllWoSerials] = useState<any[]>([]);
+
+    // Toasts System
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastIdRef = useRef(0);
 
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
-        const id = ++toastId.current;
+        const id = ++toastIdRef.current;
         setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, 4000);
     }, []);
 
-    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
+    const removeToast = (id: number) => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+    };
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
+    // Load Eligible Work Orders
+    const loadEligibleWos = async () => {
         try {
-            // Fetch all serials for this WO with their latest Post AOI step status
-            const totalUrl = new URL('/api/smt/serial-numbers', window.location.origin);
-            totalUrl.searchParams.set('work_order_id', woId);
-            totalUrl.searchParams.set('current_step', 'Post AOI');
-            const totalRes = await fetch(totalUrl.toString());
-            if (totalRes.ok) {
-                const totalData = await totalRes.json();
-                setAllWoSerials(totalData);
-            }
-
-            // Fetch SMT FG history
-            const inspUrl = new URL('/api/smt/inspections', window.location.origin);
-            inspUrl.searchParams.set('work_order_id', woId);
-            inspUrl.searchParams.set('process_step', 'SMT FG');
-            const res = await fetch(inspUrl.toString());
-            const data = res.ok ? await res.json() : [];
-
-            const visited = data.map((i: any) => ({
-                id: i.serial_id,
-                serial_number: i.serial_number,
-                barcode: i.serial_number,
-                last_status: i.status,
-                last_step: i.process_step,
-                scanned_by: i.scanned_by,
-                scanned_at: i.scanned_at,
-                rework_reason: i.rework_reason
-            }));
-            setTableSerials(visited);
-        } catch (err) {
-            console.error('Error fetching SMT FG data:', err);
-            addToast('Failed to load SMT FG data.', 'error');
-        } finally {
-            setLoading(false);
+            const data = await apiFetch('/api/smt/smt-fg/eligible-wos');
+            setEligibleWos(data || []);
+        } catch (err: any) {
+            console.error(err);
+            addToast(err.message || 'Failed to load eligible work orders.', 'error');
         }
-    }, [woId, addToast]);
+    };
+
+    // Fetch combined auto-populated details
+    const fetchAutoPopulateDetails = async (woId: string, currentSide?: string) => {
+        setDetailsLoading(true);
+        setDetailsError('');
+        try {
+            let url = `/api/smt/smt-fg/auto-populate-details/${encodeURIComponent(woId)}`;
+            if (currentSide) {
+                url += `?side=${encodeURIComponent(currentSide)}`;
+            }
+            const data = await apiFetch(url);
+            setAutoPopulatedDetails(data);
+        } catch (err: any) {
+            console.error('Error fetching auto-populate details:', err);
+            setAutoPopulatedDetails(null);
+            setDetailsError(err.message || 'Failed to load details for this Work Order.');
+            addToast(err.message || 'Failed to load details for this Work Order.', 'error');
+        } finally {
+            setDetailsLoading(false);
+        }
+    };
+
+    // Load auto-populate details when selected Work Order changes
+    useEffect(() => {
+        if (selectedWoId) {
+            fetchAutoPopulateDetails(selectedWoId);
+        } else {
+            setAutoPopulatedDetails(null);
+            setDetailsError('');
+        }
+    }, [selectedWoId]);
+
+    // Also fetch auto-populate details when activeSession changes
+    useEffect(() => {
+        if (activeSession) {
+            fetchAutoPopulateDetails(activeSession.work_order_id, activeSession.side);
+        } else {
+            if (selectedWoId) {
+                fetchAutoPopulateDetails(selectedWoId);
+            } else {
+                setAutoPopulatedDetails(null);
+                setDetailsError('');
+            }
+        }
+    }, [activeSession]);
+
+    // Dropdown Change Handler
+    const handleWoChange = (woId: string) => {
+        setSelectedWoId(woId);
+    };
+
+    // Fetch Session Statistics & Scan Log
+    const fetchSessionStats = async (sessionId: string) => {
+        try {
+            const data = await apiFetch(`/api/smt/smt-fg/sessions/${sessionId}/stats`);
+            if (data) {
+                setStats({
+                    workOrderQuantity: data.workOrderQuantity || 0,
+                    processedQuantity: data.processedQuantity || 0,
+                    passed: data.passed || 0,
+                    failed: data.failed || 0,
+                    pending: data.pending || 0,
+                    invalid: data.invalid || 0,
+                    duplicate: data.duplicate || 0,
+                    scans: data.scans || []
+                });
+
+                // If backend flags the session as completed, update status locally to Completed
+                if (data.isCompleted && activeSession?.status !== 'Completed') {
+                    addToast('SMT FG Session completed successfully.', 'success');
+                    setActiveSession(prev => prev ? { ...prev, status: 'Completed' } : null);
+                    fetchSessionsLists();
+                }
+            }
+        } catch (err: any) {
+            console.error(err);
+            addToast('Failed to refresh session statistics.', 'error');
+        }
+    };
+
+    const fetchActiveSessions = async (pageVal = activePage, limitVal = activeLimit, searchVal = activeSearch) => {
+        setSessionsLoading(true);
+        try {
+            const query = `status=InProgress&page=${pageVal}&limit=${limitVal}&search=${encodeURIComponent(searchVal)}`;
+            const res = await apiFetch(`/api/smt/smt-fg/sessions?${query}`);
+            if (res) {
+                setActiveSessionsList(res.data || []);
+                setActiveTotal(res.pagination?.total || 0);
+            }
+        } catch (err: any) {
+            console.error('Error loading active SMT FG sessions:', err);
+        } finally {
+            setSessionsLoading(false);
+        }
+    };
+
+    const fetchCompletedSessions = async (pageVal = completedPage, limitVal = completedLimit, searchVal = completedSearch) => {
+        setSessionsLoading(true);
+        try {
+            const query = `status=Completed&page=${pageVal}&limit=${limitVal}&search=${encodeURIComponent(searchVal)}`;
+            const res = await apiFetch(`/api/smt/smt-fg/sessions?${query}`);
+            if (res) {
+                setCompletedSessionsList(res.data || []);
+                setCompletedTotal(res.pagination?.total || 0);
+            }
+        } catch (err: any) {
+            console.error('Error loading completed SMT FG sessions:', err);
+        } finally {
+            setSessionsLoading(false);
+        }
+    };
+
+    // Fetch list of Active & Completed SMT FG Sessions (unified delegator)
+    const fetchSessionsLists = () => {
+        fetchActiveSessions(activePage, activeLimit, activeSearch);
+        fetchCompletedSessions(completedPage, completedLimit, completedSearch);
+    };
+
+    const handleActiveSearchSubmit = () => {
+        setActivePage(1);
+        fetchActiveSessions(1, activeLimit, activeSearch);
+    };
+
+    const handleActiveClear = () => {
+        setActiveSearch('');
+        setActivePage(1);
+        fetchActiveSessions(1, activeLimit, '');
+    };
+
+    const handleCompletedSearchSubmit = () => {
+        setCompletedPage(1);
+        fetchCompletedSessions(1, completedLimit, completedSearch);
+    };
+
+    const handleCompletedClear = () => {
+        setCompletedSearch('');
+        setCompletedPage(1);
+        fetchCompletedSessions(1, completedLimit, '');
+    };
 
     useEffect(() => {
-        fetchData();
-        scanInputRef.current?.focus();
-    }, [fetchData]);
+        loadEligibleWos();
+        fetchActiveSessions(1, activeLimit, '');
+        fetchCompletedSessions(1, completedLimit, '');
+    }, []);
 
-    const handlePass = async (serialId: number) => {
+    // Keep scanner input focus locked
+    useEffect(() => {
+        if (activeSession && activeSession.status === 'In Progress') {
+            const interval = setInterval(() => {
+                if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+                    scanInputRef.current?.focus();
+                }
+            }, 1000);
+            return () => clearInterval(interval);
+        }
+    }, [activeSession]);
+
+    // Handle Start SMT FG Session
+    const handleStartSession = async () => {
+        if (!selectedWoId) {
+            addToast('Please select a Work Order first.', 'error');
+            return;
+        }
+        if (!autoPopulatedDetails) {
+            addToast('Please ensure auto-populated details are loaded.', 'error');
+            return;
+        }
+
         try {
-            const res = await fetch('/api/smt/inspections', {
+            // Confirm Double-Sided Bottom Completion logic via API
+            const isDoubleSided = autoPopulatedDetails.numberOfSides?.toLowerCase() === 'top / bottom' || autoPopulatedDetails.numberOfSides?.includes('/');
+            if (isDoubleSided && autoPopulatedDetails.side.toLowerCase() === 'top') {
+                const checkRes = await apiFetch(`/api/smt/smt-fg/work-orders/${encodeURIComponent(selectedWoId)}/check-bottom`);
+                if (!checkRes.completed) {
+                    addToast('Operational Lock: Top side is locked. Please ensure the Bottom side Post AOI inspections are fully completed first.', 'error');
+                    return;
+                }
+            }
+
+            const session = await apiFetch('/api/smt/smt-fg/sessions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    serial_id: serialId,
-                    process_step: 'SMT FG',
-                    scanned_by: operatorName || 'System',
-                    status: 'PASS'
+                    work_order_id: selectedWoId,
+                    stencil_lifecycle_id: autoPopulatedDetails.stencilLifecycleId,
+                    squeegee_number: autoPopulatedDetails.squeegeeNumber,
+                    solder_paste_barcode: autoPopulatedDetails.solderPasteBarcode,
+                    side: autoPopulatedDetails.side
                 })
             });
-            if (res.ok) {
-                const newInsp = await res.json();
-                setTableSerials(prev => {
-                    const exists = prev.find(s => s.id === serialId);
-                    if (exists) {
-                        return prev.map(s =>
-                            s.id === serialId ? { ...s, last_status: 'PASS', last_step: 'SMT FG', scanned_by: newInsp.scanned_by, scanned_at: newInsp.scanned_at, rework_reason: null } : s
-                        );
-                    } else {
-                        const sInfo = allWoSerials.find(s => s.id === serialId) || {};
-                        return [{
-                            id: serialId,
-                            serial_number: sInfo.serial_number,
-                            barcode: sInfo.serial_number,
-                            last_status: 'PASS',
-                            last_step: 'SMT FG',
-                            scanned_by: newInsp.scanned_by,
-                            scanned_at: newInsp.scanned_at,
-                            barcode_source: sInfo.barcode_source,
-                            rework_reason: null
-                        }, ...prev];
-                    }
-                });
-                addToast('Item marked as PASS.', 'success');
-                return true;
-            } else {
-                const errData = await res.json().catch(() => ({}));
-                addToast(errData.error || 'Failed to save SMT FG PASS status.', 'error');
-                return false;
-            }
-        } catch {
-            addToast('Network error.', 'error');
-            return false;
-        } finally {
-            scanInputRef.current?.focus();
+
+            addToast(`SMT FG Session started successfully for Work Order ${selectedWoId} (${autoPopulatedDetails.side} side).`, 'success');
+            setActiveSession(session);
+            setSelectedWoId('');
+            setAutoPopulatedDetails(null);
+            fetchSessionStats(session.id);
+            fetchSessionsLists();
+        } catch (err: any) {
+            console.error(err);
+            addToast(err.message || 'Failed to start SMT FG Session.', 'error');
         }
     };
 
-
-
-    const processScan = async (barcodeInput: string) => {
-        const cleanInput = (barcodeInput || '').trim().replace(/-/g, '').toUpperCase();
-        if (!cleanInput) return;
-
-        const match = allWoSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-            )
-        );
-
-        if (!match) {
-            addToast(`Barcode ${barcodeInput} not found in this Work Order.`, 'error');
-            alert(`Barcode "${barcodeInput}" not found in this Work Order.`);
-            setScanBarcode('');
-            scanInputRef.current?.focus();
-            return;
-        }
-
-        // Validate Post AOI status (must be PASS)
-        if (match.step_status !== 'PASS') {
-            addToast(`Previous stage not passed: Barcode has not passed Post AOI stage.`, 'error');
-            alert(`Previous stage not passed: Barcode "${barcodeInput}" has not passed the Post AOI stage (current status: ${match.step_status || 'PENDING'}). Cannot continue to SMT Finished Goods release.`);
-            setScanBarcode('');
-            scanInputRef.current?.focus();
-            return;
-        }
-
-        // Check duplicate or re-scans in SMT FG
-        const alreadyInTable = tableSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-            )
-        );
-
-        if (alreadyInTable) {
-            if (alreadyInTable.last_status === 'PASS') {
-                addToast(`Barcode ${barcodeInput} has already passed SMT FG.`, 'info');
-                alert(`Barcode "${barcodeInput}" has already passed SMT Finished Goods release.`);
-                setScanBarcode('');
-                scanInputRef.current?.focus();
-                return;
-            }
-            // Auto-PASS on scan if it failed earlier
-            await handlePass(alreadyInTable.id);
-            setScanBarcode('');
-            scanInputRef.current?.focus();
-            return;
-        }
-
-        // Auto-PASS on scan
-        await handlePass(match.id);
-        setScanBarcode('');
-        scanInputRef.current?.focus();
-    };
-
-    // Auto-scan effect
-    useEffect(() => {
-        const cleanInput = (scanBarcode || '').trim().replace(/-/g, '').toUpperCase();
-        if (cleanInput.length < 5) return;
-
-        const match = allWoSerials.find((s: any) =>
-            [s.serial_number, s.barcode].some(v =>
-                (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-            )
-        );
-
-        if (match) {
-            const alreadyInTable = tableSerials.find((s: any) =>
-                [s.serial_number, s.barcode].some(v =>
-                    (v || '').toString().replace(/-/g, '').toUpperCase() === cleanInput
-                )
-            );
-            if (!alreadyInTable || alreadyInTable.last_status !== 'PASS') {
-                processScan(scanBarcode);
-            }
-        }
-    }, [scanBarcode, allWoSerials, tableSerials]);
-
-    const handleScan = async (e: React.FormEvent) => {
-        e.preventDefault();
-        await processScan(scanBarcode);
-    };
-
-    const sortedTableSerials = [...tableSerials].sort((a, b) => {
-        const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : Date.now();
-        const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : Date.now();
-        return timeB - timeA;
-    });
-
-    return (
-        <>
-            <style>{`
-                @keyframes rowHighlight {
-                    0% { box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.4); }
-                    100% { box-shadow: none; }
-                }
-            `}</style>
-            <Toaster toasts={toasts} onRemove={removeToast} />
-            <div className={styles.detailPage}>
-                <div className={styles.detailHeaderCard} style={{ background: 'linear-gradient(to right, #e0f2fe, #f0f9ff)', border: '1px solid #bae6fd' }}>
-                    <div className={styles.detailHeaderRow}>
-                        <div>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#0369a1', marginBottom: '0.5rem' }}>📦 SMT FG Detail: {woId}</h3>
-                            <div className={styles.detailStats} style={{ gap: '2rem' }}>
-                                <span>Post AOI Passed:{' '}
-                                    <strong 
-                                        className="smt-clickable-count smt-previous-passed"
-                                        onClick={() => onCountClick && onCountClick('Post AOI', 'passed', 'Post AOI Passed')}
-                                    >
-                                        {allWoSerials.filter(s => s.step_status === 'PASS').length}
-                                    </strong>
-                                </span>
-                                <span>Total Scanned:{' '}
-                                    <strong 
-                                        className="smt-clickable-count smt-scanned"
-                                        onClick={() => onCountClick && onCountClick('SMT FG', 'scanned', 'Total Scanned')}
-                                    >
-                                        {tableSerials.filter(s => s.last_status === 'PASS').length}
-                                    </strong>{' '}
-                                    / {allWoSerials.filter(s => s.step_status === 'PASS').length}
-                                </span>
-                                <span>Passed:{' '}
-                                    <strong 
-                                        className="smt-clickable-count smt-passed"
-                                        onClick={() => onCountClick && onCountClick('SMT FG', 'passed', 'Passed')}
-                                    >
-                                        {tableSerials.filter(s => s.last_status === 'PASS').length}
-                                    </strong>
-                                </span>
-                                <span>Failed:{' '}
-                                    <strong 
-                                        className="smt-clickable-count smt-failed"
-                                        onClick={() => onCountClick && onCountClick('SMT FG', 'failed', 'Failed')}
-                                    >
-                                        {tableSerials.filter(s => s.last_status === 'FAIL').length}
-                                    </strong>
-                                </span>
-                                <span>Pending:{' '}
-                                    <strong 
-                                        className="smt-clickable-count smt-pending"
-                                        onClick={() => onCountClick && onCountClick('SMT FG', 'pending', 'Pending')}
-                                    >
-                                        {allWoSerials.filter(s => s.step_status === 'PASS').length - tableSerials.filter(s => s.last_status === 'PASS').length}
-                                    </strong>
-                                </span>
-                            </div>
-                        </div>
-                        <button className={styles.secondaryButton} onClick={onBack}>Back</button>
-                    </div>
-                </div>
-
-                <div className={styles.card} style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                        <div className={styles.inputGroup} style={{ maxWidth: '300px' }}>
-                            <label>Released By *</label>
-                            <input type="text" className={styles.input} value={operatorName} readOnly style={{ backgroundColor: '#f9fafb', height: '42px' }} />
-                        </div>
-                        <div className={styles.inputGroup}>
-                            <label style={{ marginBottom: '0.25rem' }}>Scan Item Barcode (must have passed Post AOI)...</label>
-                            <div style={{ display: 'flex', gap: '0.75rem' }}>
-                                <form onSubmit={handleScan} style={{ flex: 1 }}>
-                                    <input
-                                        ref={scanInputRef}
-                                        type="text"
-                                        className={styles.input}
-                                        placeholder="Scan barcode for final release..."
-                                        value={scanBarcode}
-                                        onChange={(e) => setScanBarcode(e.target.value)}
-                                        style={{ width: '100%', borderColor: '#0284c7', borderWidth: '2px' }}
-                                    />
-                                </form>
-                                <button className={styles.button} style={{ width: '140px', background: '#0284c7' }} onClick={() => processScan(scanBarcode)}>RELEASE</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className={styles.card}>
-                    <div className={styles.tableHeader}>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Finished Goods ({tableSerials.length})</h3>
-                    </div>
-                    <div className={styles.tableContainer}>
-                        <table className={styles.table}>
-                            <thead>
-                                <tr>
-                                    <th style={{ textAlign: 'center' }}>BARCODE PREVIEW</th>
-                                    <th>BARCODE NUMBER</th>
-                                    <th>STATUS</th>
-                                    <th>RELEASED BY</th>
-                                    <th>RELEASED AT</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {loading ? (
-                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
-                                ) : tableSerials.length === 0 ? (
-                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>📦 Scan a barcode above for Final Finished Goods release</td></tr>
-                                ) : sortedTableSerials.map((s, idx) => {
-                                    const isPass = s.last_status === 'PASS';
-                                    const isFail = s.last_status === 'FAIL';
-                                    const showBarcodeImage = s.barcode_source === 'GENERATED' || !s.barcode_source || (s.barcode_source === 'PRE_EXISTING' && s.serial_number);
-                                    const isNew = Date.now() - new Date(s.scanned_at || 0).getTime() < 4000;
-
-                                    return (
-                                        <tr
-                                            key={s.id || idx}
-                                            style={{
-                                                transition: 'all 0.2s',
-                                                animation: isNew ? 'rowHighlight 4s ease-out' : undefined
-                                            }}
-                                        >
-                                            <td style={{ padding: '0.5rem', textAlign: 'center' }}>
-                                                {showBarcodeImage ? (
-                                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                                                        <QRCode value={(s.serial_number || '').toUpperCase()} size={64} />
-                                                    </div>
-                                                ) : (
-                                                    <span style={{ color: '#9ca3af' }}>-</span>
-                                                )}
-                                            </td>
-                                            <td style={{ padding: '1rem', fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>
-                                                {(s.serial_number || '').toUpperCase()}
-                                            </td>
-                                            <td style={{ padding: '1rem' }}>
-                                                <span style={{
-                                                    padding: '6px 14px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 'bold',
-                                                    display: 'inline-flex', alignItems: 'center',
-                                                    backgroundColor: isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7',
-                                                    color: isPass ? '#166534' : isFail ? '#991b1b' : '#92400e'
-                                                }}>
-                                                    {isPass ? '✓ RELEASED' : isFail ? '● FG REJECT' : '🕒 PENDING'}
-                                                </span>
-                                            </td>
-                                            <td style={{ padding: '1rem', fontWeight: 600, color: '#475569' }}>
-                                                {s.scanned_by || 'System'}
-                                            </td>
-                                            <td style={{ padding: '1rem', fontSize: '0.85rem', color: '#64748b' }}>
-                                                {s.scanned_at ? new Date(s.scanned_at).toLocaleString() : '-'}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </>
-    );
-};
-
-// ─── Main Page Component ───────────────────────────────────────────────────────
-const SMTFG: React.FC = () => {
-    const { smtUser, smtLogout } = useSmtAuth();
-    const { user } = useAuth();
-    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
-    const [workOrders, setWorkOrders] = useState<any[]>([]);
-    const [selectedWoId, setSelectedWoId] = useState<string | null>(null);
-    const [selectedCount, setSelectedCount] = useState<{
-        workOrderId: string;
-        stage: string;
-        type: string;
-        label: string;
-    } | null>(null);
-    const [exportingWoId, setExportingWoId] = useState<string | null>(null);
-
-    const handleExportExcel = async (workOrderId: string, processStep: string) => {
-        if (exportingWoId !== null) return;
-        setExportingWoId(workOrderId);
+    // Resume an existing session
+    const handleResumeSession = async (session: FgSession) => {
         try {
-            const blob = await apiFetch(`/api/smt/export/excel?work_order_id=${workOrderId}&process_step=${processStep}`) as Blob;
-            const url = window.URL.createObjectURL(blob);
+            setActiveSession(session);
+            fetchSessionStats(session.id);
+            addToast(`Session resumed successfully.`, 'info');
+            fetchSessionsLists();
+        } catch (err: any) {
+            console.error(err);
+            addToast(err.message || 'Failed to resume session.', 'error');
+        }
+    };
+
+    // High Speed Barcode Scan Submit
+    const handleBarcodeSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!activeSession || !scanBarcodeVal.trim()) return;
+
+        const barcode = scanBarcodeVal.trim().toUpperCase();
+        setScanBarcodeVal('');
+        setIsScanning(true);
+
+        try {
+            const res = await apiFetch(`/api/smt/smt-fg/sessions/${activeSession.id}/scan`, {
+                method: 'POST',
+                body: JSON.stringify({ barcode })
+            });
+
+            addToast(res.message || `Barcode ${barcode} recorded successfully.`, 'success');
+            await fetchSessionStats(activeSession.id);
+        } catch (err: any) {
+            console.error(err);
+            addToast(err.message || 'Failed to register barcode scan.', 'error');
+        } finally {
+            setIsScanning(false);
+            scanInputRef.current?.focus();
+        }
+    };
+
+    // Delete Session
+    const handleDeleteSession = async (sessionId: string) => {
+        if (!isSuperAdmin) {
+            addToast("Only Super Admin is authorized to delete records.\nPlease contact your Super Admin if this record needs to be deleted.", 'error');
+            return;
+        }
+        if (window.confirm('Warning: Deleting a session is permanent. Are you sure you want to proceed?')) {
+            try {
+                await apiFetch(`/api/smt/smt-fg/sessions/${sessionId}`, { method: 'DELETE' });
+                addToast('Session deleted successfully.', 'success');
+                if (activeSession?.id === sessionId) {
+                    setActiveSession(null);
+                }
+                loadEligibleWos();
+                fetchSessionsLists();
+            } catch (err: any) {
+                console.error(err);
+                addToast(err.message || 'Failed to delete session.', 'error');
+            }
+        }
+    };
+
+    // EXPORT & REPORTING UTILITIES
+    const handleExportExcel = async (sessionId?: string) => {
+        const id = sessionId || activeSession?.id;
+        if (!id) return;
+        try {
+            const response = await fetch(`/api/smt/smt-fg/sessions/${id}/export/excel`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.message || 'Failed to download Excel report');
+            }
+            const blob = await response.blob();
             const link = document.createElement('a');
-            link.href = url;
-
-            const now = new Date();
-            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
-            const cleanWo = workOrderId.replace(/[^a-zA-Z0-9_-]/g, '_');
-            const fileName = `SMT_${processStep.replace(/\s+/g, '_')}_Report_${cleanWo}_${timestamp}.xlsx`;
-
-            link.setAttribute('download', fileName);
+            link.href = URL.createObjectURL(blob);
+            link.download = `SMT_FG_Session_Report_${id}.xlsx`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            addToast('Report downloaded successfully!', 'success');
-        } catch (error: any) {
-            console.error('Export error:', error);
-            addToast(error.message || 'Failed to export report', 'error');
-        } finally {
-            setExportingWoId(null);
+            addToast('Excel production report downloaded successfully.', 'success');
+        } catch (err: any) {
+            console.error(err);
+            addToast(err.message || 'Failed to export Excel report.', 'error');
         }
     };
 
-    const [toasts, setToasts] = useState<Toast[]>([]);
-    const toastId = useRef(0);
-
-    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
-        const id = ++toastId.current;
-        setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
-    }, []);
-
-    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
-
-    const [formWoId, setFormWoId] = useState('');
-    const [productName, setProductName] = useState('');
-    const [woQty, setWoQty] = useState('');
-    const [panelQty, setPanelQty] = useState('');
-    const [barcodeSource, setBarcodeSource] = useState('');
-    const [createdBy, setCreatedBy] = useState('');
-    const [savedEntries, setSavedEntries] = useState<any[]>([]);
-    const [inspections, setInspections] = useState<any[]>([]);
-    const [postAoiInspections, setPostAoiInspections] = useState<any[]>([]);
-
-    const fetchData = useCallback(async () => {
+    const handleExportFullPDF = async (sessionId?: string) => {
+        const id = sessionId || activeSession?.id;
+        if (!id) return;
         try {
-            const woRes = await fetch('/api/smt/work-orders/registered');
-            if (woRes.ok) {
-                const data = await woRes.json();
-                setWorkOrders(data);
+            const res = await fetch(`/api/smt/smt-fg/sessions/${id}/export/pdf-data`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.message || 'Failed to fetch PDF report metadata');
             }
-
-            const setupRes = await fetch('/api/smt/process-setups?process_name=SMT_FG');
-            if (setupRes.ok) {
-                const data = await setupRes.json();
-                setSavedEntries(data);
-            }
-
-            const inspRes = await fetch('/api/smt/inspections?process_step=SMT FG');
-            if (inspRes.ok) {
-                const data = await inspRes.json();
-                setInspections(data);
-            }
-
-            const postAoiInspRes = await fetch('/api/smt/inspections?process_step=Post%20AOI');
-            if (postAoiInspRes.ok) {
-                const data = await postAoiInspRes.json();
-                setPostAoiInspections(data);
-            }
-
-            if (smtUser) {
-                setCreatedBy(smtUser.name || smtUser.userId || 'System');
-            }
-        } catch (err) {
-            console.error("Failed to fetch SMT FG metadata:", err);
+            const reportData = await res.json();
+            generatePdfReport(reportData);
+        } catch (err: any) {
+            console.error(err);
+            addToast(err.message || 'Failed to export PDF report.', 'error');
         }
-    }, [smtUser]);
+    };
 
+    const generatePdfReport = (data: any) => {
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const PRIMARY_NAVY = [30, 58, 95];
+        const SECONDARY_BLUE = [37, 99, 235];
+        const BG_LIGHT = [248, 250, 252];
+        const TEXT_DARK = [30, 41, 59];
+        const TEXT_MUTED = [100, 116, 139];
+
+        // Draw header background band
+        doc.setFillColor(PRIMARY_NAVY[0], PRIMARY_NAVY[1], PRIMARY_NAVY[2]);
+        doc.rect(0, 0, 210, 32, 'F');
+
+        // Document Title
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.text('SMT Finished Goods (FG) Release Report', 15, 14);
+
+        // Subtitle
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(203, 213, 225);
+        doc.text(`Stage: Finished Goods Inspection & Release  |  Date: ${new Date().toLocaleString('en-IN')}`, 15, 20);
+        doc.text(`Generated By: ${smtUser?.name || 'SFCS System'}`, 15, 25);
+
+        // Section header function
+        let currentY = 40;
+        const addSectionHeader = (title: string) => {
+            doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+            doc.rect(15, currentY, 180, 8, 'F');
+            doc.setDrawColor(226, 232, 240);
+            doc.line(15, currentY, 195, currentY);
+            doc.line(15, currentY + 8, 195, currentY + 8);
+            doc.setFont('Helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(SECONDARY_BLUE[0], SECONDARY_BLUE[1], SECONDARY_BLUE[2]);
+            doc.text(title, 18, currentY + 5.5);
+            currentY += 12;
+        };
+
+        const addKVRow = (key: string, value: string) => {
+            doc.setFont('Helvetica', 'bold');
+            doc.setFontSize(8.5);
+            doc.setTextColor(TEXT_DARK[0], TEXT_DARK[1], TEXT_DARK[2]);
+            doc.text(key, 20, currentY);
+            doc.setFont('Helvetica', 'normal');
+            doc.setTextColor(TEXT_MUTED[0], TEXT_MUTED[1], TEXT_MUTED[2]);
+            doc.text(value || '—', 75, currentY);
+            currentY += 6;
+        };
+
+        // Section 1: Work Order Details
+        addSectionHeader('1. WORK ORDER DETAILS');
+        addKVRow('Work Order Number:', data.work_order_id);
+        addKVRow('PO Number:', data.po_id);
+        addKVRow('Product Name / Model:', data.product_name);
+        addKVRow('Product Description:', data.product_description);
+        addKVRow('Total Quantity:', data.work_order_quantity?.toString());
+        addKVRow('Sides Config:', data.work_order_sides);
+        addKVRow('SMT Line ID:', data.line_id);
+        addKVRow('Remarks:', data.work_order_remarks);
+
+        currentY += 4;
+
+        // Section 2: Stencil Details
+        addSectionHeader('2. STENCIL PARAMETERS');
+        addKVRow('Stencil / Model Name:', data.stencil_name);
+        addKVRow('Job Number:', data.job_number);
+        addKVRow('Revision:', data.revision);
+        addKVRow('Side:', data.stencil_side);
+        addKVRow('Total Lifespan Count:', data.qty_life_cycle?.toString());
+        addKVRow('Current Life Cycles used:', data.current_used_life_cycle?.toString());
+        addKVRow('Remaining Life Cycles:', data.balance_life_cycle?.toString());
+
+        currentY += 4;
+
+        // Section 3: Session Details
+        addSectionHeader('3. SMT FG SESSION & INSPECTION PARAMETERS');
+        addKVRow('Squeegee Number:', data.squeegee_number);
+        addKVRow('Solder Paste Barcode:', data.solder_paste_barcode);
+        addKVRow('PCB Side:', data.side);
+        addKVRow('SMT FG Released By:', data.created_by_name);
+        addKVRow('SMT FG Started Date & Time:', formatTimestamp(data.created_at));
+        addKVRow('Session Status:', data.status);
+
+        // Page Break for Scan Logs Table
+        doc.addPage();
+        currentY = 20;
+
+        doc.setFillColor(PRIMARY_NAVY[0], PRIMARY_NAVY[1], PRIMARY_NAVY[2]);
+        doc.rect(0, 0, 210, 16, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.text('SMT Finished Goods (FG) Scan History Log', 15, 10.5);
+
+        currentY = 28;
+        doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+        doc.rect(15, currentY, 180, 8, 'F');
+        doc.setDrawColor(203, 213, 225);
+        doc.rect(15, currentY, 180, 8, 'S');
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(TEXT_DARK[0], TEXT_DARK[1], TEXT_DARK[2]);
+        doc.text('Barcode / Serial Number', 18, currentY + 5.5);
+        doc.text('Scanned By', 80, currentY + 5.5);
+        doc.text('Date & Time', 125, currentY + 5.5);
+        doc.text('Status', 175, currentY + 5.5);
+
+        currentY += 8;
+
+        const scans = data.scans || [];
+        scans.forEach((scan: any) => {
+            if (currentY > 275) {
+                doc.addPage();
+                currentY = 20;
+                doc.setFillColor(BG_LIGHT[0], BG_LIGHT[1], BG_LIGHT[2]);
+                doc.rect(15, currentY, 180, 8, 'F');
+                doc.setDrawColor(203, 213, 225);
+                doc.rect(15, currentY, 180, 8, 'S');
+                doc.setFont('Helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(TEXT_DARK[0], TEXT_DARK[1], TEXT_DARK[2]);
+                doc.text('Barcode / Serial Number', 18, currentY + 5.5);
+                doc.text('Scanned By', 80, currentY + 5.5);
+                doc.text('Date & Time', 125, currentY + 5.5);
+                doc.text('Status', 175, currentY + 5.5);
+                currentY += 8;
+            }
+
+            doc.setFont('Helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(TEXT_DARK[0], TEXT_DARK[1], TEXT_DARK[2]);
+            doc.text(scan.barcode, 18, currentY + 4.5);
+            doc.text(scan.scanned_by, 80, currentY + 4.5);
+            doc.text(formatTimestamp(scan.scanned_at), 125, currentY + 4.5);
+            
+            const isPass = scan.result === 'PASS';
+            if (isPass) {
+                doc.setTextColor(22, 163, 74); // green
+            } else {
+                doc.setTextColor(220, 38, 38); // red
+            }
+            doc.setFont('Helvetica', 'bold');
+            doc.text(scan.result, 175, currentY + 4.5);
+
+            // Row underline
+            doc.setDrawColor(241, 245, 249);
+            doc.line(15, currentY + 7, 195, currentY + 7);
+
+            currentY += 7.5;
+        });
+
+        doc.save(`SMT_FG_PDF_Report_${data.id}.pdf`);
+        addToast('PDF production report downloaded successfully.', 'success');
+    };
+
+    const handleExportCSV = () => {
+        if (stats.scans.length === 0) {
+            addToast('No scan log data available to export.', 'info');
+            return;
+        }
+        let csv = 'Barcode,Scanned By,Date & Time,Result\n';
+        stats.scans.forEach(scan => {
+            csv += `"${scan.barcode}","${scan.scanned_by}","${formatTimestamp(scan.scanned_at)}","${scan.result}"\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `SMT_FG_Scan_Log_${activeSession?.id}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        addToast('CSV file downloaded successfully.', 'success');
+    };
+
+    // Download QR Code helpers
     useEffect(() => {
-        fetchData();
-    }, [fetchData, smtUser]);
-
-    const handleSelectWo = (woId: string) => {
-        setFormWoId(woId);
-        const wo = workOrders.find(w => (w.id === woId || w.work_order_id === woId));
-        if (wo) {
-            setProductName(wo.product_name);
-            setWoQty(wo.quantity.toString());
-            setPanelQty(wo.panel_quantity.toString());
-            setBarcodeSource(wo.barcode_source || 'GENERATED');
+        if (selectedQrBarcode) {
+            QRCode.toDataURL(selectedQrBarcode, { width: 300, margin: 2 })
+                .then(url => setSingleQrDataUrl(url))
+                .catch(err => console.error(err));
         } else {
-            setProductName('');
-            setWoQty('');
-            setPanelQty('');
-            setBarcodeSource('');
+            setSingleQrDataUrl(null);
         }
-    };
+    }, [selectedQrBarcode]);
 
-    const getShift = () => {
-        const hour = new Date().getHours();
-        if (hour >= 23 || hour < 7) return 'C (11PM - 07AM)';
-        if (hour >= 15 && hour < 23) return 'B (03PM - 11PM)';
-        if (hour >= 8 && hour < 17) return 'G (08AM - 05PM)';
-        if (hour >= 6 && hour < 15) return 'A (06AM - 03PM)';
-        return 'N/A';
-    };
-
-    const handleStartProcess = async () => {
-        if (!formWoId) {
-            alert('Please select a Work Order.');
+    const handleDownloadAllQRPDF = async () => {
+        if (stats.scans.length === 0) {
+            addToast('No scanned barcodes found in this session.', 'error');
             return;
         }
 
         try {
-            const res = await fetch('/api/smt/process-setups', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    work_order_id: formWoId,
-                    process_name: 'SMT_FG',
-                    product_name: productName,
-                    quantity: parseInt(woQty)
-                })
-            });
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [60, 40] }); // standard PCB label size
+            for (let i = 0; i < stats.scans.length; i++) {
+                const scan = stats.scans[i];
+                if (scan.result !== 'PASS') continue;
 
-            if (res.ok) {
-                const newEntry = await res.json();
-                setSavedEntries([newEntry, ...savedEntries]);
-                setSelectedWoId(formWoId);
-                alert(`Starting SMT Finished Goods release for WO: ${formWoId}`);
-            } else {
-                alert("Failed to save SMT FG setup");
+                if (i > 0) pdf.addPage([60, 40]);
+
+                // Generate QR image
+                const qrUrl = await QRCode.toDataURL(scan.barcode, { margin: 1, width: 150 });
+                pdf.addImage(qrUrl, 'PNG', 17, 3, 26, 26);
+
+                pdf.setFont('Helvetica', 'bold');
+                pdf.setFontSize(7.5);
+                pdf.text(scan.barcode, 30, 32.5, { align: 'center' });
+
+                pdf.setFont('Helvetica', 'normal');
+                pdf.setFontSize(5);
+                pdf.text(`WO: ${activeSession?.work_order_id}`, 30, 36.5, { align: 'center' });
             }
+            pdf.save(`SMT_FG_QR_Labels_${activeSession?.id}.pdf`);
+            addToast('All QR Labels PDF generated successfully.', 'success');
         } catch (err) {
-            console.error("Error saving setup:", err);
-            alert("Connection error while saving setup");
+            console.error(err);
+            addToast('Failed to compile QR label PDF.', 'error');
         }
     };
 
-    const getPassedCount = (woId: string) => {
-        const woInspections = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const latestBySerial: { [key: number]: string } = {};
-        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
-        sorted.forEach(i => {
-            latestBySerial[i.serial_id] = i.status;
-        });
-        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    const handleDownloadAllQRPNG = async () => {
+        if (stats.scans.length === 0) {
+            addToast('No scanned barcodes found in this session.', 'error');
+            return;
+        }
+
+        setIsZipping(true);
+        try {
+            const zip = new JSZip();
+            for (const scan of stats.scans) {
+                if (scan.result !== 'PASS') continue;
+                const qrUrl = await QRCode.toDataURL(scan.barcode, { margin: 1, width: 300 });
+                const base64Data = qrUrl.split(',')[1];
+                zip.file(`${scan.barcode}.png`, base64Data, { base64: true });
+            }
+            const content = await zip.generateAsync({ type: 'blob' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = `SMT_FG_QR_Images_${activeSession?.id}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            addToast('All QR Code images compiled into ZIP successfully.', 'success');
+        } catch (err) {
+            console.error(err);
+            addToast('Failed to bundle QR code images.', 'error');
+        } finally {
+            setIsZipping(false);
+        }
     };
 
-    const getPostAoiPassedCount = (woId: string) => {
-        const woInspections = postAoiInspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const latestBySerial: { [key: number]: string } = {};
-        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
-        sorted.forEach(i => { latestBySerial[i.serial_id] = i.status; });
-        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    const getScanResultBadge = (result: string) => {
+        switch (result) {
+            case 'PASS':
+                return <span className={styles.detailPassedBadge}>PASS</span>;
+            case 'INVALID':
+                return <span className={`${styles.detailPendingBadge} ${styles.statusRed}`}>INVALID</span>;
+            default:
+                return <span className={styles.detailPendingBadge}>{result}</span>;
+        }
     };
 
-    const dropdownWorkOrders = workOrders.filter(wo => {
-        const woId = wo.id || wo.work_order_id;
-        const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const passedCount = getPassedCount(woId);
-        const targetQty = wo.scanned_count || wo.quantity || 0;
-        const isCompleted = passedCount >= targetQty && targetQty > 0;
-        return !hasSetup && !isCompleted;
-    });
-
-    const pendingEntries = savedEntries.filter(entry => {
-        const woId = entry.work_order_id;
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
-        const passedCount = getPassedCount(woId);
-        const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
-        return passedCount < targetQty || targetQty === 0;
-    });
-
-    const completedEntries = savedEntries.filter(entry => {
-        const woId = entry.work_order_id;
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
-        if (!wo) return false;
-        const passedCount = getPassedCount(woId);
-        const targetQty = wo.scanned_count || wo.quantity;
-        return passedCount >= targetQty && targetQty > 0;
-    });
-
-    return (
-        <>
-            <Toaster toasts={toasts} onRemove={removeToast} />
-            <div className={styles.container}>
-                <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                        <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>📦 SMT Finished Goods (FG)</h2>
-                        <p style={{ color: '#64748b' }}>Manage SMT FG Release. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
-                    </div>
-                    <button
-                        onClick={() => {
-                            if (window.confirm("Are you sure you want to logout from SMT?")) {
-                                smtLogout();
-                            }
-                        }}
-                        className={styles.secondaryButton}
-                        style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                    >
-                        <span>🔒</span> Logout SMT
-                    </button>
+    // Unified horizontal panel renderer
+    const renderUnifiedInfoPanel = (details: any) => {
+        if (!details) return null;
+        return (
+            <div className={styles.infoPanel}>
+                <div className={styles.infoPanelTitle}>
+                    <span>📋</span> Unified Production & Stencil Information Panel
                 </div>
-
-                {selectedWoId ? (
-                    <SmtFgDetail
-                        woId={selectedWoId}
-                        onBack={() => {
-                            setSelectedWoId(null);
-                            fetchData();
-                        }}
-                        operatorName={smtUser?.name || 'System'}
-                        onCountClick={(stage, type, label) => setSelectedCount({
-                            workOrderId: selectedWoId,
-                            stage,
-                            type,
-                            label
-                        })}
-                    />
-                ) : (
-                    <>
-                        <div className={styles.card}>
-                            <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>SMT FG Setup Form</h3>
-                            <div className={styles.formGrid}>
-                                <div className={styles.inputGroup}>
-                                    <label>Select Work Order *</label>
-                                    <select className={styles.input} value={formWoId} onChange={(e) => handleSelectWo(e.target.value)}>
-                                        <option value="">-- Select Work Order --</option>
-                                        {dropdownWorkOrders.map((wo) => (
-                                            <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
-                                                {wo.id || wo.work_order_id} - {wo.product_name}
-                                            </option>
-                                        ))}
-                                    </select>
+                <div className={styles.infoPanelGrid}>
+                    {/* Work Order Info */}
+                    <div className={styles.infoSection}>
+                        <h4>Work Order Information</h4>
+                        <div className={styles.infoGrid}>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Work Order ID</span>
+                                <span className={styles.infoValue}>{details.workOrderId}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>PO ID</span>
+                                <span className={styles.infoValue}>{details.poId || '—'}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Product Name</span>
+                                <span className={styles.infoValue}>{details.productName || '—'}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Product Description</span>
+                                <span className={styles.infoValue}>{details.productDescription || '—'}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Number of Sides</span>
+                                <span className={styles.infoValue}>{details.numberOfSides || '—'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>WO Qty</span>
+                                    <span className={styles.infoValue}>{details.workOrderQuantity}</span>
                                 </div>
-
-                                <div className={styles.inputGroup}>
-                                    <label>Product Name (Auto-filled)</label>
-                                    <input type="text" className={styles.input} value={productName} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
-                                </div>
-
-                                <div className={styles.inputGroup}>
-                                    <label>WO Qty (Auto-filled)</label>
-                                    <input type="number" className={styles.input} value={woQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
-                                </div>
-
-                                <div className={styles.inputGroup}>
-                                    <label>Panel Qty (Auto-filled)</label>
-                                    <input type="number" className={styles.input} value={panelQty} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
-                                </div>
-
-                                <div className={styles.inputGroup}>
-                                    <label>Barcode Source (Auto-filled)</label>
-                                    <input type="text" className={styles.input} value={barcodeSource} disabled style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }} />
-                                </div>
-
-                                <div className={styles.inputGroup}>
-                                    <label>Generated By *</label>
-                                    <input type="text" className={styles.input} value={createdBy} readOnly style={{ backgroundColor: '#f3f4f6', color: '#6b7280', fontWeight: 'bold' }} />
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>Panel Qty</span>
+                                    <span className={styles.infoValue}>{details.panelQuantity}</span>
                                 </div>
                             </div>
-                            <div style={{ marginTop: '30px' }}>
-                                <button className={styles.button} onClick={handleStartProcess}>
-                                    Start SMT FG Process
+                        </div>
+                    </div>
+
+                    {/* Stencil Info */}
+                    <div className={styles.infoSection}>
+                        <h4>Stencil Information</h4>
+                        <div className={styles.infoGrid}>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Stencil / Model Name</span>
+                                <span className={styles.infoValue}>{details.stencilName}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>Job Number</span>
+                                    <span className={styles.infoValue}>{details.jobNumber || '—'}</span>
+                                </div>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>Revision</span>
+                                    <span className={styles.infoValue}>{details.revision || '—'}</span>
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>Thickness</span>
+                                    <span className={styles.infoValue}>{details.thickness || '—'}</span>
+                                </div>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>Side</span>
+                                    <span className={styles.infoValue}>{details.side}</span>
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>Mfg Date</span>
+                                    <span className={styles.infoValue} style={{ fontSize: '0.8rem' }}>
+                                        {details.manufacturingDate ? new Date(details.manufacturingDate).toLocaleDateString() : '—'}
+                                    </span>
+                                </div>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>Status</span>
+                                    <span className={`${styles.infoValue} ${details.lifeCycleStatus === 'Active' || details.lifeCycleStatus === 'Available' ? styles.statusActive : styles.statusInactive}`}>
+                                        {details.lifeCycleStatus || '—'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.5rem' }}>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>Used Cycles</span>
+                                    <span className={styles.infoValue}>{details.currentLifeCycleCount}</span>
+                                </div>
+                                <div className={styles.infoItem}>
+                                    <span className={styles.infoLabel}>Remaining</span>
+                                    <span className={styles.infoValue} style={{ color: details.remainingLifeCycleCount < 500 ? '#dc2626' : 'inherit' }}>
+                                        {details.remainingLifeCycleCount}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Printing Info */}
+                    <div className={styles.infoSection}>
+                        <h4>Printing Information</h4>
+                        <div className={styles.infoGrid}>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Squeegee Number</span>
+                                <span className={styles.infoValue}>{details.squeegeeNumber}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Solder Paste Barcode</span>
+                                <span className={styles.infoValue} style={{ wordBreak: 'break-all' }}>{details.solderPasteBarcode}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const isModalOpen = !!selectedQrBarcode;
+
+    return (
+        <div className={styles.container}>
+            <Toaster toasts={toasts} onRemove={removeToast} />
+            
+            <div className={styles.header}>
+                <h2>🏭 SMT Finished Goods (FG) Process</h2>
+                <p>Enforce serial number tracking, stencil life verification, and final Finished Goods inspection & release.</p>
+            </div>
+
+            {!activeSession ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
+                    {/* Work Order Selector Card */}
+                    <div className={styles.card} style={{ margin: 0 }}>
+                        <h3>Select Work Order to Start Session</h3>
+                        <div className={styles.inputGroup} style={{ maxWidth: '450px', marginBottom: '1.5rem' }}>
+                            <label>Work Order</label>
+                            <select
+                                className={styles.select}
+                                value={selectedWoId}
+                                onChange={e => handleWoChange(e.target.value)}
+                                required
+                            >
+                                <option value="">-- Select Eligible Work Order --</option>
+                                {eligibleWos.map(wo => (
+                                    <option key={wo.work_order_id} value={wo.work_order_id}>
+                                        {wo.work_order_id} - {wo.product_name} (Qty: {wo.work_order_quantity})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Unified Information Panel */}
+                    {detailsLoading ? (
+                        <div className={styles.card} style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                            <div style={{ display: 'inline-block', width: '2rem', height: '2rem', border: '3px solid #cbd5e1', borderTopColor: '#4f46e5', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '0.5rem' }}></div>
+                            <p style={{ margin: '0' }}>Loading SMT production, stencil, and printing parameters...</p>
+                        </div>
+                    ) : autoPopulatedDetails ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                            {renderUnifiedInfoPanel(autoPopulatedDetails)}
+                            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                                <button onClick={handleStartSession} className={styles.button} style={{ padding: '0.8rem 3rem', fontSize: '1.05rem' }}>
+                                    Start SMT FG Session
+                                </button>
+                            </div>
+                        </div>
+                    ) : detailsError ? (
+                        <div className={styles.card} style={{ padding: '2rem', textAlign: 'center', color: '#dc2626', borderColor: '#fca5a5', backgroundColor: '#fef2f2' }}>
+                            <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>⚠️</span>
+                            {detailsError}
+                        </div>
+                    ) : selectedWoId ? (
+                        <div className={styles.card} style={{ padding: '2rem', textAlign: 'center', color: '#dc2626', borderColor: '#fca5a5', backgroundColor: '#fef2f2' }}>
+                            <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>⚠️</span>
+                            Failed to load auto-populated details for this Work Order. Make sure SMT Post AOI setup exists and eligible barcodes are available.
+                        </div>
+                    ) : null}
+
+                    {/* Active Sessions Panel */}
+                    <div className={styles.card} style={{ margin: 0 }}>
+                        <h3 style={{ marginBottom: '1rem' }}>Active SMT FG Sessions</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, maxWidth: '400px' }}>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    placeholder="Search by WO, Product, PO ID..."
+                                    value={activeSearch}
+                                    onChange={e => setActiveSearch(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleActiveSearchSubmit(); }}
+                                    style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                                />
+                                <button
+                                    className={styles.button}
+                                    onClick={handleActiveSearchSubmit}
+                                    style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                                >
+                                    Search
+                                </button>
+                                {activeSearch && (
+                                    <button
+                                        className={styles.secondaryButton}
+                                        onClick={handleActiveClear}
+                                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem', color: '#64748b' }}>
+                                <span>Show</span>
+                                <select
+                                    className={styles.select}
+                                    value={activeLimit}
+                                    onChange={e => {
+                                        const newLimit = parseInt(e.target.value);
+                                        setActiveLimit(newLimit);
+                                        setActivePage(1);
+                                        fetchActiveSessions(1, newLimit, activeSearch);
+                                    }}
+                                    style={{ padding: '0.35rem 1.5rem 0.35rem 0.75rem', width: 'auto', fontSize: '0.85rem' }}
+                                >
+                                    <option value={5}>5</option>
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                </select>
+                                <span>entries</span>
+                            </div>
+                        </div>
+
+                        {sessionsLoading ? (
+                            <p style={{ color: '#64748b' }}>Retrieving session registries...</p>
+                        ) : activeSessionsList.length === 0 ? (
+                            <p style={{ color: '#64748b', fontStyle: 'italic', margin: 0 }}>No active SMT FG sessions found. Set up a session to begin.</p>
+                        ) : (
+                            <>
+                                <div className={styles.tableContainer}>
+                                    <table className={styles.table} style={{ marginTop: 0 }}>
+                                        <thead>
+                                            <tr>
+                                                <th>WO Number</th>
+                                                <th>Product Name</th>
+                                                <th>Target Qty</th>
+                                                <th>Stencil Name</th>
+                                                <th>Squeegee No</th>
+                                                <th>Solder Paste</th>
+                                                <th>Side</th>
+                                                <th>Created By</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {activeSessionsList.map(s => (
+                                                <tr key={s.id}>
+                                                    <td style={{ fontWeight: 600, color: '#4f46e5' }}>{s.work_order_id}</td>
+                                                    <td>{s.product_name || '-'}</td>
+                                                    <td>{s.work_order_quantity || '-'}</td>
+                                                    <td>{s.stencil_name || '-'}</td>
+                                                    <td>{s.squeegee_number || '-'}</td>
+                                                    <td style={{ wordBreak: 'break-all', maxWidth: '150px' }}>{s.solder_paste_barcode || '-'}</td>
+                                                    <td>
+                                                        <span className={styles.infoValue} style={{ color: '#4f46e5' }}>{s.side}</span>
+                                                    </td>
+                                                    <td>{s.created_by_name}</td>
+                                                    <td>
+                                                        <span className={styles.statusBlue}>
+                                                            {s.status}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                                            <button className={styles.secondaryButton} style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }} onClick={() => handleResumeSession(s)}>
+                                                                Resume
+                                                            </button>
+                                                            <button className={styles.deleteTextButton} onClick={() => handleDeleteSession(s.id)}>
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                        Showing {Math.min((activePage - 1) * activeLimit + 1, activeTotal)} to {Math.min(activePage * activeLimit, activeTotal)} of {activeTotal} entries
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button
+                                            className={styles.secondaryButton}
+                                            disabled={activePage === 1}
+                                            onClick={() => {
+                                                const p = activePage - 1;
+                                                setActivePage(p);
+                                                fetchActiveSessions(p, activeLimit, activeSearch);
+                                            }}
+                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }}
+                                        >
+                                            Previous
+                                        </button>
+                                        <span style={{ display: 'flex', alignItems: 'center', padding: '0 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                                            Page {activePage} of {Math.ceil(activeTotal / activeLimit) || 1}
+                                        </span>
+                                        <button
+                                            className={styles.secondaryButton}
+                                            disabled={activePage >= Math.ceil(activeTotal / activeLimit)}
+                                            onClick={() => {
+                                                const p = activePage + 1;
+                                                setActivePage(p);
+                                                fetchActiveSessions(p, activeLimit, activeSearch);
+                                            }}
+                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }}
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Completed Sessions Panel */}
+                    <div className={styles.card} style={{ margin: 0 }}>
+                        <h3 style={{ marginBottom: '1rem' }}>Completed SMT FG Sessions History</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, maxWidth: '400px' }}>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    placeholder="Search by WO, Product, PO ID..."
+                                    value={completedSearch}
+                                    onChange={e => setCompletedSearch(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleCompletedSearchSubmit(); }}
+                                    style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                                />
+                                <button
+                                    className={styles.button}
+                                    onClick={handleCompletedSearchSubmit}
+                                    style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                                >
+                                    Search
+                                </button>
+                                {completedSearch && (
+                                    <button
+                                        className={styles.secondaryButton}
+                                        onClick={handleCompletedClear}
+                                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem', color: '#64748b' }}>
+                                <span>Show</span>
+                                <select
+                                    className={styles.select}
+                                    value={completedLimit}
+                                    onChange={e => {
+                                        const newLimit = parseInt(e.target.value);
+                                        setCompletedLimit(newLimit);
+                                        setCompletedPage(1);
+                                        fetchCompletedSessions(1, newLimit, completedSearch);
+                                    }}
+                                    style={{ padding: '0.35rem 1.5rem 0.35rem 0.75rem', width: 'auto', fontSize: '0.85rem' }}
+                                >
+                                    <option value={5}>5</option>
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                </select>
+                                <span>entries</span>
+                            </div>
+                        </div>
+
+                        {sessionsLoading ? (
+                            <p style={{ color: '#64748b' }}>Retrieving logs...</p>
+                        ) : completedSessionsList.length === 0 ? (
+                            <p style={{ color: '#64748b', fontStyle: 'italic', margin: 0 }}>No finished sessions recorded.</p>
+                        ) : (
+                            <>
+                                <div className={styles.tableContainer}>
+                                    <table className={styles.table} style={{ marginTop: 0 }}>
+                                        <thead>
+                                            <tr>
+                                                <th>WO Number</th>
+                                                <th>Product Name</th>
+                                                <th>Target Qty</th>
+                                                <th>Stencil Name</th>
+                                                <th>Side</th>
+                                                <th>Created By</th>
+                                                <th>Status</th>
+                                                <th>Date & Time</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {completedSessionsList.map(s => (
+                                                <tr key={s.id}>
+                                                    <td style={{ fontWeight: 600, color: '#334155' }}>{s.work_order_id}</td>
+                                                    <td>{s.product_name || '-'}</td>
+                                                    <td>{s.work_order_quantity || '-'}</td>
+                                                    <td>{s.stencil_name || '-'}</td>
+                                                    <td>{s.side}</td>
+                                                    <td>{s.created_by_name}</td>
+                                                    <td>
+                                                        <span className={s.status === 'Completed' ? styles.statusGreen : styles.statusRed}>
+                                                            {s.status}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                        {formatTimestamp(s.created_at)}
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                                            <button className={styles.secondaryButton} style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }} onClick={() => handleResumeSession(s)}>
+                                                                View Log
+                                                            </button>
+                                                            <button
+                                                                className={styles.secondaryButton}
+                                                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', color: '#1e3a5f', borderColor: '#2563eb' }}
+                                                                onClick={() => handleExportExcel(s.id)}
+                                                            >
+                                                                Excel
+                                                            </button>
+                                                            <button
+                                                                className={styles.secondaryButton}
+                                                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', color: '#7c3aed', borderColor: '#4338ca' }}
+                                                                onClick={() => handleExportFullPDF(s.id)}
+                                                            >
+                                                                PDF
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                        Showing {Math.min((completedPage - 1) * completedLimit + 1, completedTotal)} to {Math.min(completedPage * completedLimit, completedTotal)} of {completedTotal} entries
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button
+                                            className={styles.secondaryButton}
+                                            disabled={completedPage === 1}
+                                            onClick={() => {
+                                                const p = completedPage - 1;
+                                                setCompletedPage(p);
+                                                fetchCompletedSessions(p, completedLimit, completedSearch);
+                                            }}
+                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }}
+                                        >
+                                            Previous
+                                        </button>
+                                        <span style={{ display: 'flex', alignItems: 'center', padding: '0 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                                            Page {completedPage} of {Math.ceil(completedTotal / completedLimit) || 1}
+                                        </span>
+                                        <button
+                                            className={styles.secondaryButton}
+                                            disabled={completedPage >= Math.ceil(completedTotal / completedLimit)}
+                                            onClick={() => {
+                                                const p = completedPage + 1;
+                                                setCompletedPage(p);
+                                                fetchCompletedSessions(p, completedLimit, completedSearch);
+                                            }}
+                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }}
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
+                        <button className={styles.detailBackButton} onClick={() => { setActiveSession(null); loadEligibleWos(); fetchSessionsLists(); }}>
+                            ← Back to Session Setup
+                        </button>
+                    </div>
+
+                    {/* Unified Information Panel */}
+                    {autoPopulatedDetails ? (
+                        renderUnifiedInfoPanel(autoPopulatedDetails)
+                    ) : (
+                        <div className={styles.card} style={{ padding: '1.5rem', textAlign: 'center', color: '#64748b' }}>
+                            Loading session parameters...
+                        </div>
+                    )}
+
+                    {/* Stats Dashboard */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem' }}>
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #6366f1', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>WO Quantity</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e1b4b' }}>{stats.workOrderQuantity}</h2>
+                        </div>
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #3b82f6', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Processed</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1d4ed8' }}>{stats.processedQuantity}</h2>
+                        </div>
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #10b981', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#047857' }}>{stats.passed}</h2>
+                        </div>
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #f59e0b', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Pending</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b45309' }}>{stats.pending}</h2>
+                        </div>
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #d97706', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Invalid</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b45309' }}>{stats.invalid}</h2>
+                        </div>
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #ea580c', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Duplicate</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#c2410c' }}>{stats.duplicate}</h2>
+                        </div>
+                    </div>
+
+                    {/* Barcode Scanner Input */}
+                    {activeSession.status !== 'Completed' ? (
+                        <div className={styles.detailScanCard}>
+                            <form onSubmit={handleBarcodeSubmit} className={styles.detailScanForm}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1.05rem', fontWeight: 700 }}>
+                                        High-Speed Production Scanner Input
+                                    </h4>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#16a34a', fontWeight: 600 }}>
+                                        <span className={styles.blinkingDot} style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', display: 'inline-block' }}></span>
+                                        Scanner Focus Locked
+                                    </div>
+                                </div>
+                                <div className={styles.detailScanRow}>
+                                    <input
+                                        ref={scanInputRef}
+                                        type="text"
+                                        className={styles.detailScanInput}
+                                        placeholder="Scan PCB Barcode / Serial Number..."
+                                        value={scanBarcodeVal}
+                                        onChange={e => setScanBarcodeVal(e.target.value)}
+                                        disabled={isScanning || isModalOpen}
+                                        autoFocus={!isModalOpen}
+                                    />
+                                    <button type="submit" className={styles.detailScanButton} disabled={isScanning || isModalOpen}>
+                                        {isScanning ? 'Validating...' : 'Submit'}
+                                    </button>
+                                </div>
+                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
+                                    💡 Place your cursor in the input box or scan directly. Valid barcodes will automatically record a <strong>PASS</strong> status. Duplicate scans will trigger alerts without interrupting high-speed scanner flow.
+                                </p>
+                            </form>
+                        </div>
+                    ) : (
+                        <div className={styles.detailScanCard} style={{ background: '#f0fdf4', border: '1px dashed #16a34a', textAlign: 'center', padding: '1.5rem' }}>
+                            <span style={{ fontSize: '1.5rem', marginRight: '6px' }}>✅</span>
+                            <strong>This session has been completed and is read-only.</strong> Scanning is disabled.
+                        </div>
+                    )}
+
+                    {/* Scanned Serial List Table */}
+                    <div className={styles.detailItemsSection}>
+                        <div className={styles.detailItemsHeader}>
+                            <h3>Scanned PCB FG Inspection Logs ({stats.scans.length} rows)</h3>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginRight: 2 }}>Reports:</span>
+                                <button
+                                    className={styles.secondaryButton}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', background: 'linear-gradient(135deg,#1e3a5f,#2563eb)', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                                    onClick={() => handleExportExcel()}
+                                    title="Download Excel Finished Goods report"
+                                >
+                                    📊 Excel Report
+                                </button>
+                                <button
+                                    className={styles.secondaryButton}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', background: 'linear-gradient(135deg,#7c3aed,#4338ca)', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                                    onClick={() => handleExportFullPDF()}
+                                    title="Download PDF Finished Goods report"
+                                >
+                                    📄 PDF Report
+                                </button>
+                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginLeft: 6, marginRight: 2 }}>Raw:</span>
+                                <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleExportCSV} title="Download CSV scan log">
+                                    CSV 📄
+                                </button>
+                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginLeft: 6, marginRight: 2 }}>QR:</span>
+                                <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleDownloadAllQRPDF} title="Download all QR labels as PDF">
+                                    All QR Labels (PDF) 🏷️
+                                </button>
+                                <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleDownloadAllQRPNG} disabled={isZipping} title="Download all QR images as ZIP">
+                                    {isZipping ? 'Compiling ZIP...' : 'All QR Images (ZIP) 📦'}
                                 </button>
                             </div>
                         </div>
 
-                        {/* Pending Sessions */}
-                        <div className={styles.card}>
-                            <h3>Pending SMT FG Sessions</h3>
-                            <div className={styles.tableContainer}>
-                                <table className={styles.table}>
-                                    <thead>
-                                        <tr>
-                                            <th>WORK ORDER</th>
-                                            <th>LINE ID</th>
-                                            <th>PRODUCT NAME</th>
-                                            <th>BARCODE SOURCE</th>
-                                            <th>TOTAL QTY</th>
-                                            <th>POST AOI PASSED</th>
-                                            <th>SCANNED QTY</th>
-                                            <th>PENDING QTY</th>
-                                            <th>STATUS</th>
-                                            <th>ACTION</th>
+                        <div className={styles.detailTableContainer}>
+                            <table className={styles.table} style={{ marginTop: 0 }}>
+                                <thead>
+                                    <tr>
+                                        <th>Barcode</th>
+                                        <th>Scanned By</th>
+                                        <th>Date & Time</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {stats.scans.map(scan => (
+                                        <tr key={scan.scan_id}>
+                                            <td style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.5px' }}>
+                                                {scan.barcode}
+                                            </td>
+                                            <td>{scan.scanned_by}</td>
+                                            <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                {formatTimestamp(scan.scanned_at)}
+                                            </td>
+                                            <td>{getScanResultBadge(scan.result)}</td>
+                                            <td>
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    title="View QR code"
+                                                    style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
+                                                    onClick={() => setSelectedQrBarcode(scan.barcode)}
+                                                >
+                                                    🔳
+                                                </button>
+                                            </td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {pendingEntries.map((entry) => {
-                                            const wo = workOrders.find(w => (w.id || w.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase());
-                                            const barcodeSrc = wo?.barcode_source || 'GENERATED';
-                                            const totalQty = entry.quantity || entry.wo_qty || (wo ? (wo.scanned_count || wo.quantity) : 0);
-                                            const scannedQty = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
-                                            const postAoiPassedQty = getPostAoiPassedCount(entry.work_order_id);
-                                            const pendingQty = Math.max(0, postAoiPassedQty - scannedQty);
-                                            return (
-                                                <tr key={entry.id}>
-                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
-                                                    <td>{wo?.line_id || '-'}</td>
-                                                    <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                    <td style={{ fontWeight: 'bold' }}>{barcodeSrc}</td>
-                                                    <td 
-                                                        className="smt-clickable-count smt-total"
-                                                        onClick={() => setSelectedCount({
-                                                            workOrderId: entry.work_order_id,
-                                                            stage: 'SMT FG',
-                                                            type: 'total',
-                                                            label: 'Total Quantity'
-                                                        })}
-                                                    >
-                                                        {totalQty}
-                                                    </td>
-                                                    <td 
-                                                        className="smt-clickable-count smt-previous-passed"
-                                                        onClick={() => setSelectedCount({
-                                                            workOrderId: entry.work_order_id,
-                                                            stage: 'Post AOI',
-                                                            type: 'passed',
-                                                            label: 'Post AOI Passed'
-                                                        })}
-                                                        style={{ fontWeight: 'bold' }}
-                                                    >
-                                                        {postAoiPassedQty}
-                                                    </td>
-                                                    <td 
-                                                        className="smt-clickable-count smt-passed"
-                                                        onClick={() => setSelectedCount({
-                                                            workOrderId: entry.work_order_id,
-                                                            stage: 'SMT FG',
-                                                            type: 'passed',
-                                                            label: 'Scanned Quantity'
-                                                        })}
-                                                        style={{ fontWeight: 'bold' }}
-                                                    >
-                                                        {scannedQty}
-                                                    </td>
-                                                    <td 
-                                                        className="smt-clickable-count smt-pending"
-                                                        onClick={() => setSelectedCount({
-                                                            workOrderId: entry.work_order_id,
-                                                            stage: 'SMT FG',
-                                                            type: 'pending',
-                                                            label: 'Pending Quantity'
-                                                        })}
-                                                        style={{ fontWeight: 'bold' }}
-                                                    >
-                                                        {pendingQty}
-                                                    </td>
-                                                    <td>
-                                                        <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', backgroundColor: '#fef3c7', color: '#d97706' }}>
-                                                            PENDING
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ display: 'flex', gap: '5px' }}>
-                                                        <button
-                                                            className={styles.button}
-                                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', height: 'auto', lineHeight: 'normal', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}
-                                                            onClick={() => setSelectedWoId(entry.work_order_id || entry.wo_id || entry.work_order)}
-                                                        >
-                                                            Resume
-                                                        </button>
-                                                        <button
-                                                            className={styles.secondaryButton}
-                                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                            onClick={async () => {
-                                                                if (!isSuperAdmin) {
-                addToast("Access Denied: Only Super Admin can delete.", "error");
-                return;
-                                                                }
-                                                                if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                                    return;
-                                                                }
-                                                                if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                                    await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                    setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
-                                                                    addToast("Entry deleted successfully.", "success");
-                                                                }
-                                                            }}
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {pendingEntries.length === 0 && (
-                                            <tr>
-                                                <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                    No pending SMT FG sessions found.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* Completed Sessions */}
-                        <div className={styles.card}>
-                            <h3>Completed SMT FG Sessions</h3>
-                            <div className={styles.tableContainer}>
-                                <table className={styles.table}>
-                                    <thead>
+                                    ))}
+                                    {stats.scans.length === 0 && (
                                         <tr>
-                                            <th>WORK ORDER</th>
-                                            <th>LINE ID</th>
-                                            <th>PRODUCT NAME</th>
-                                            <th>BARCODE SOURCE</th>
-                                            <th>TOTAL QTY</th>
-                                            <th>COMPLETED QTY</th>
-                                            <th>STATUS</th>
-                                            <th>DOWNLOAD</th>
-                                            <th>ACTION</th>
+                                            <td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                                No PCBs scanned in this Finished Goods session yet. Scan barcodes above.
+                                            </td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {completedEntries.map((entry) => {
-                                            const wo = workOrders.find(w => (w.id || w.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase());
-                                            const barcodeSrc = wo?.barcode_source || 'GENERATED';
-                                            const totalQty = entry.quantity || entry.wo_qty || (wo ? (wo.scanned_count || wo.quantity) : 0);
-                                            const scannedQty = inspections.filter(i => (i.work_order_id || '').toUpperCase() === (entry.work_order_id || '').toUpperCase()).length;
-                                            return (
-                                                <tr key={entry.id}>
-                                                    <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
-                                                    <td>{wo?.line_id || '-'}</td>
-                                                    <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                    <td style={{ fontWeight: 'bold' }}>{barcodeSrc}</td>
-                                                    <td 
-                                                        className="smt-clickable-count smt-total"
-                                                        onClick={() => setSelectedCount({
-                                                            workOrderId: entry.work_order_id,
-                                                            stage: 'SMT FG',
-                                                            type: 'total',
-                                                            label: 'Total Quantity'
-                                                        })}
-                                                    >
-                                                        {totalQty}
-                                                    </td>
-                                                    <td 
-                                                        className="smt-clickable-count smt-passed"
-                                                        onClick={() => setSelectedCount({
-                                                            workOrderId: entry.work_order_id,
-                                                            stage: 'SMT FG',
-                                                            type: 'passed',
-                                                            label: 'Completed Quantity'
-                                                        })}
-                                                        style={{ fontWeight: 'bold' }}
-                                                    >
-                                                        {scannedQty}
-                                                    </td>
-                                                    <td>
-                                                        <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', backgroundColor: '#dcfce7', color: '#15803d' }}>
-                                                            COMPLETED
-                                                        </span>
-                                                    </td>
-                                                    <td>
-                                                        <button 
-                                                             className={styles.secondaryButton}
-                                                             disabled={exportingWoId === entry.work_order_id}
-                                                             onClick={() => handleExportExcel(entry.work_order_id, 'SMT FG')}
-                                                             style={{
-                                                                 padding: '0.4rem',
-                                                                 minWidth: '40px',
-                                                                 width: '40px',
-                                                                 height: '40px',
-                                                                 display: 'inline-flex',
-                                                                 alignItems: 'center',
-                                                                 justifyContent: 'center',
-                                                                 borderRadius: '50%',
-                                                                 backgroundColor: '#f0fdf4',
-                                                                 border: '1px solid #bbf7d0',
-                                                                 color: '#166534',
-                                                                 cursor: 'pointer',
-                                                                 transition: 'all 0.2s ease',
-                                                                 boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                                                             }}
-                                                             title="Export to Excel"
-                                                             onMouseEnter={(e) => {
-                                                                 e.currentTarget.style.backgroundColor = '#166534';
-                                                                 e.currentTarget.style.color = '#ffffff';
-                                                                 e.currentTarget.style.borderColor = '#166534';
-                                                                 e.currentTarget.style.transform = 'scale(1.08)';
-                                                             }}
-                                                             onMouseLeave={(e) => {
-                                                                 e.currentTarget.style.backgroundColor = '#f0fdf4';
-                                                                 e.currentTarget.style.color = '#166534';
-                                                                 e.currentTarget.style.borderColor = '#bbf7d0';
-                                                                 e.currentTarget.style.transform = 'scale(1)';
-                                                             }}
-                                                         >
-                                                             {exportingWoId === entry.work_order_id ? (
-                                                                 <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>...</span>
-                                                             ) : (
-                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                                                                     <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                                                                     <polyline points="14 2 14 8 20 8"/>
-                                                                     <line x1="8" y1="13" x2="16" y2="13"/>
-                                                                     <line x1="8" y1="17" x2="16" y2="17"/>
-                                                                     <line x1="10" y1="9" x2="9" y2="9"/>
-                                                                 </svg>
-                                                             )}
-                                                         </button>
-                                                    </td>
-                                                    <td style={{ display: 'flex', gap: '5px' }}>
-                                                        <button
-                                                            className={styles.secondaryButton}
-                                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                            onClick={() => setSelectedWoId(entry.work_order_id || entry.wo_id || entry.work_order)}
-                                                        >
-                                                            View
-                                                        </button>
-                                                        <button
-                                                            className={styles.secondaryButton}
-                                                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                            onClick={async () => {
-                                                                if (!isSuperAdmin) {
-                                                                    addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                                    return;
-                                                                }
-                                                                if (window.confirm('Are you sure you want to delete this entry?')) {
-                                                                    await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-                                                                    setSavedEntries(prev => prev.filter(e => e.id !== entry.id));
-                                                                    addToast("Entry deleted successfully.", "success");
-                                                                }
-                                                            }}
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {completedEntries.length === 0 && (
-                                            <tr>
-                                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                    No completed SMT FG sessions found.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
-                    </>
-                )}
-            </div>
-            {selectedCount && (
-                <SMTCountDetailsModal
-                    workOrderId={selectedCount.workOrderId}
-                    stage={selectedCount.stage}
-                    type={selectedCount.type}
-                    label={selectedCount.label}
-                    onClose={() => setSelectedCount(null)}
-                />
+                    </div>
+                </div>
             )}
-        </>
+
+
+
+            {/* ─── MODAL 2: SINGLE QR CODE VIEW ───────────────────────────────── */}
+            {selectedQrBarcode && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className={styles.card} style={{ width: '380px', padding: '2rem', margin: 0, textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)' }}>
+                        <h3 style={{ borderBottom: 'none', padding: 0, marginBottom: '1rem' }}>🔳 QR Code Reference</h3>
+                        <p style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '1.5rem', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                            {selectedQrBarcode}
+                        </p>
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem', background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            {singleQrDataUrl ? (
+                                <img src={singleQrDataUrl} alt="QR Code Label" style={{ width: '200px', height: '200px' }} />
+                            ) : (
+                                <div style={{ width: '200px', height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Generating QR...</div>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            <button className={styles.secondaryButton} onClick={() => setSelectedQrBarcode(null)}>
+                                Close
+                            </button>
+                            {singleQrDataUrl && (
+                                <a
+                                    href={singleQrDataUrl}
+                                    download={`QR_${selectedQrBarcode}.png`}
+                                    className={styles.button}
+                                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                >
+                                    Download Image 📥
+                                </a>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 };
 

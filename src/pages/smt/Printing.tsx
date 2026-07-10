@@ -1,721 +1,1220 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSmtAuth } from '../../context/SmtAuthContext';
-import { useAuth } from '../../hooks/useAuth';
 import styles from './Printing.module.css';
-import QRCode from 'react-qr-code';
 import { apiFetch } from '../../utils/api';
-import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
+import QRCode from 'qrcode';
+import JSZip from 'jszip';
+import { jsPDF } from 'jspdf';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
-interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+interface Toast { 
+    id: number; 
+    message: string; 
+    type: 'success' | 'error' | 'info'; 
+}
 
 const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
     <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column-reverse', gap: '0.5rem' }}>
         {toasts.map(t => (
             <div key={t.id} onClick={() => onRemove(t.id)} style={{
-                padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '280px',
-                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#fffbeb',
-                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#92400e',
-                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#fde68a'}`,
-                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                animation: 'slideIn 0.2s ease'
+                padding: '0.85rem 1.25rem', borderRadius: '0.6rem', cursor: 'pointer', minWidth: '320px',
+                background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#eff6ff',
+                color: t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : '#1e40af',
+                border: `1px solid ${t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : '#bfdbfe'}`,
+                fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                animation: 'slideIn 0.2s ease', display: 'flex', alignItems: 'center', gap: '8px'
             }}>
-                {t.type === 'error' ? '❌ ' : t.type === 'success' ? '✅ ' : 'ℹ️ '}{t.message}
+                <span>{t.type === 'error' ? '❌' : t.type === 'success' ? '✅' : 'ℹ️'}</span>
+                <span>{t.message}</span>
             </div>
         ))}
     </div>
 );
 
-// --- Detail View Component (Internal) ---
-interface PrintingDetailProps {
-    woId: string;
-    onBack: () => void;
-    operatorName: string;
-    workOrderQty: number;
-    onCountClick?: (type: string, label: string) => void;
+// --- TS Typings ---
+interface EligibleWorkOrder {
+    work_order_id: string;
+    work_order_number: string;
+    po_id: string;
+    product_name: string;
+    product_description: string;
+    work_order_quantity: number;
+    panel_quantity: number;
+    sides: string;
+    line_id: string;
+    work_order_remarks: string;
 }
 
-const PrintingDetail: React.FC<PrintingDetailProps> = ({ woId, onBack, operatorName, workOrderQty, onCountClick }) => {
-    const [serials, setSerials] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [scanBarcode, setScanBarcode] = useState('');
-    const [scannedBy, setScannedBy] = useState(operatorName);
+interface StencilDetails {
+    stencil_lifecycle_id: string;
+    stencil_record_id: string;
+    stencil_name: string;
+    stencil_version: string;
+    stencil_status: string;
+    qty_life_cycle: number;
+    remaining_life: number;
+    current_life_count: number;
+    stencil_side: string;
+    stencil_remarks: string;
+    stencil_manufacturing_date: string;
+    last_cleaning_date: string;
+    last_inspection_date: string;
+    job_number?: string;
+    thickness_mills?: string;
+    thickness?: string;
+}
+
+interface PrintingSession {
+    id: string;
+    work_order_id: string;
+    stencil_lifecycle_id: string;
+    squeegee_number: string;
+    solder_paste_barcode: string;
+    side: string;
+    status: string; // Pending, In Progress, Completed, Paused, Cancelled, Aborted
+    created_by: string;
+    created_by_name: string;
+    created_at: string;
+    updated_by?: string;
+    updated_by_name?: string;
+    updated_at?: string;
+    duplicate_scan_count: number;
+    product_name?: string;
+    work_order_quantity?: number;
+    stencil_name?: string;
+    stencil_version?: string;
+    remaining_life?: number;
+}
+
+interface ScanRecord {
+    scan_id: string;
+    barcode: string;
+    result: 'PASS' | 'FAIL' | 'INVALID';
+    remark: string | null;
+    scanned_by: string;
+    scanned_at: string;
+    repair_time?: string | null;
+    repair_remark?: string | null;
+}
+
+export const Printing: React.FC = () => {
+    const { smtUser } = useSmtAuth();
+
+    const formatTimestamp = (dStr: string | null | undefined) => {
+        if (!dStr) return '—';
+        return new Date(dStr).toLocaleString('en-IN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+    };
+
+    // Session Management State
+    const [eligibleWos, setEligibleWos] = useState<EligibleWorkOrder[]>([]);
+    const [selectedWoId, setSelectedWoId] = useState('');
+    const [stencilDetails, setStencilDetails] = useState<StencilDetails | null>(null);
+    const [squeegeeNumber, setSqueegeeNumber] = useState('');
+    const [solderPasteBarcode, setSolderPasteBarcode] = useState('');
+    const [side, setSide] = useState('Top');
+
+    // UI View State
+    const [activeSession, setActiveSession] = useState<PrintingSession | null>(null);
+    const [activeSessionsList, setActiveSessionsList] = useState<PrintingSession[]>([]);
+    const [completedSessionsList, setCompletedSessionsList] = useState<PrintingSession[]>([]);
+    const [sessionsLoading, setSessionsLoading] = useState(false);
+
+    // Pagination & Search States for Active Sessions
+    const [activePage, setActivePage] = useState(1);
+    const [activeLimit, setActiveLimit] = useState(5);
+    const [activeSearch, setActiveSearch] = useState('');
+    const [activeTotal, setActiveTotal] = useState(0);
+
+    // Pagination & Search States for Completed Sessions
+    const [completedPage, setCompletedPage] = useState(1);
+    const [completedLimit, setCompletedLimit] = useState(5);
+    const [completedSearch, setCompletedSearch] = useState('');
+    const [completedTotal, setCompletedTotal] = useState(0);
+
+    // Active Scan Dashboard State
+    const [stats, setStats] = useState<{
+        workOrderQuantity: number;
+        processedQuantity: number;
+        passed: number;
+        failed: number;
+        pending: number;
+        invalid: number;
+        duplicate: number;
+        scans: ScanRecord[];
+    }>({
+        workOrderQuantity: 0,
+        processedQuantity: 0,
+        passed: 0,
+        failed: 0,
+        pending: 0,
+        invalid: 0,
+        duplicate: 0,
+        scans: []
+    });
+    const [scanBarcodeVal, setScanBarcodeVal] = useState('');
+    const [isScanning, setIsScanning] = useState(false);
+
+    // Dialogs / Modals State
+    const [abortRemark, setAbortRemark] = useState('');
+    const [showAbortModal, setShowAbortModal] = useState(false);
+    const [failRemark, setFailRemark] = useState('');
+    const [selectedScanToFail, setSelectedScanToFail] = useState<ScanRecord | null>(null);
+    const [selectedScanToRepair, setSelectedScanToRepair] = useState<{ barcode: string } | null>(null);
+    const [repairRemark, setRepairRemark] = useState('');
+    const [editingScanId, setEditingScanId] = useState<string | null>(null);
+    const [editingBarcodeText, setEditingBarcodeText] = useState('');
+    const [selectedQrBarcode, setSelectedQrBarcode] = useState<string | null>(null);
+    const [singleQrDataUrl, setSingleQrDataUrl] = useState<string | null>(null);
+    const [isZipping, setIsZipping] = useState(false);
+    const [viewingRemarkText, setViewingRemarkText] = useState<string | null>(null);
+    const [viewingRemarkTitle, setViewingRemarkTitle] = useState<string>('');
+
+    // Focus Lock Ref
     const scanInputRef = useRef<HTMLInputElement>(null);
 
-    // Toast state
+    // Toaster
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
-
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastId.current;
         setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500);
     }, []);
-
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
+    // Role helpers
+    const isSuperAdmin = smtUser?.role === 'Super Admin';
+
+    // ─── Initial Load ────────────────────────────────────────────────────────
     useEffect(() => {
-        setScannedBy(operatorName);
-    }, [operatorName]);
-
-    useEffect(() => {
-        if (woId) fetchSerials();
-    }, [woId]);
-
-    const fetchSerials = async () => {
-        setLoading(true);
-        try {
-            // Fetch all serials for this work order
-            const res = await fetch(`/api/smt/serial-numbers?work_order_id=${encodeURIComponent(woId)}&current_step=Printing`);
-            if (res.ok) {
-                const data = await res.json();
-                setSerials(data);
-            }
-        } catch (err) {
-            console.error("Error fetching serials:", err);
-            addToast("Failed to load serials list.", "error");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handlePass = async (serialId: number) => {
-        try {
-            const res = await fetch('/api/smt/inspections', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    serial_id: serialId,
-                    process_step: 'Printing',
-                    scanned_by: scannedBy || 'System',
-                    status: 'PASS'
-                })
-            });
-
-            if (res.ok) {
-                addToast('Item marked as PASS.', 'success');
-                fetchSerials();
-            } else {
-                const errData = await res.json().catch(() => ({}));
-                addToast(errData.error || "Failed to save printing record", 'error');
-            }
-        } catch (err) {
-            console.error("Pass error:", err);
-            addToast("Network error.", "error");
-        } finally {
-            scanInputRef.current?.focus();
-        }
-    };
-
-    const scannedSerials = serials
-        .filter(s => s.step_status !== null && s.step_status !== undefined)
-        .sort((a, b) => new Date(b.step_scanned_at || 0).getTime() - new Date(a.step_scanned_at || 0).getTime());
-
-    const processScan = async (barcodeInput: string) => {
-        const cleanInput = barcodeInput.trim().replace(/-/g, "").toUpperCase();
-        if (!cleanInput) return false;
-
-        const serialObj = serials.find(s =>
-            (s.serial_number && s.serial_number.replace(/-/g, "").toUpperCase() === cleanInput) ||
-            (s.barcode && s.barcode.replace(/-/g, "").toUpperCase() === cleanInput)
-        );
-
-        if (!serialObj) {
-            addToast(`Serial Number "${barcodeInput}" not found or does not belong to this Work Order!`, "error");
-            setScanBarcode('');
-            scanInputRef.current?.focus();
-            return false;
-        }
-
-        // Check if already scanned and PASSed in Printing stage to prevent duplicates
-        const alreadyScanned = scannedSerials.find(s => s.id === serialObj.id);
-        if (alreadyScanned && alreadyScanned.step_status === 'PASS') {
-            addToast(`Barcode "${barcodeInput}" has already been printed successfully (PASS)!`, "info");
-            setScanBarcode('');
-            scanInputRef.current?.focus();
-            return false;
-        }
-
-        // Automatic PASS scan
-        await handlePass(serialObj.id);
-        setScanBarcode('');
-        return true;
-    };
-
-    const handleScan = async (e: React.FormEvent) => {
-        e.preventDefault();
-        await processScan(scanBarcode);
-    };
-
-    useEffect(() => {
-        scanInputRef.current?.focus();
+        fetchEligibleWorkOrders();
+        fetchActiveSessions(1, activeLimit, '');
+        fetchCompletedSessions(1, completedLimit, '');
     }, []);
 
+    // Determine if any modal/dialog is currently active
+    const isModalOpen = showAbortModal || !!selectedScanToFail || !!selectedScanToRepair || !!editingScanId || !!selectedQrBarcode || !!viewingRemarkText;
+
+    // Keep scanner input focused if scanning is active and no dialog is open
     useEffect(() => {
-        const tryAutoScan = async () => {
-            const cleanInput = scanBarcode.trim().replace(/-/g, "").toUpperCase();
-            if (cleanInput.length < 5) return; // Min length for auto-trigger
+        if (activeSession && activeSession.status === 'In Progress' && !isModalOpen) {
+            const focusInput = () => {
+                if (scanInputRef.current && document.activeElement !== scanInputRef.current) {
+                    scanInputRef.current.focus();
+                }
+            };
+            focusInput();
+            const interval = setInterval(focusInput, 1500);
+            return () => clearInterval(interval);
+        }
+    }, [activeSession, isModalOpen]);
 
-            const match = serials.find(s =>
-                (s.serial_number && s.serial_number.replace(/-/g, "").toUpperCase() === cleanInput) ||
-                (s.barcode && s.barcode.replace(/-/g, "").toUpperCase() === cleanInput)
-            );
+    // When a modal closes, restore focus to the scanner input
+    const wasModalOpen = useRef(false);
+    useEffect(() => {
+        if (wasModalOpen.current && !isModalOpen) {
+            setTimeout(() => {
+                scanInputRef.current?.focus();
+            }, 100);
+        }
+        wasModalOpen.current = isModalOpen;
+    }, [isModalOpen]);
 
-            // Only trigger auto scan if it has not been successfully processed yet (meaning it's not already PASS in scannedSerials)
-            if (match) {
-                const alreadyScanned = scannedSerials.find(s => s.id === match.id);
-                if (!alreadyScanned || alreadyScanned.step_status !== 'PASS') {
-                    await processScan(scanBarcode);
+    const renderRemarkCell = (remark: string | null | undefined, type: 'Failure' | 'Repair') => {
+        if (!remark) return '—';
+        const preview = remark.slice(0, 5) + '...';
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                <span title={remark} style={{ fontFamily: 'monospace' }}>{preview}</span>
+                <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    style={{
+                        padding: '2px 8px',
+                        fontSize: '0.75rem',
+                        color: type === 'Failure' ? '#b91c1c' : '#166534',
+                        borderColor: type === 'Failure' ? '#fca5a5' : '#86efac',
+                        backgroundColor: type === 'Failure' ? '#fee2e2' : '#dcfce7',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        borderRadius: '4px',
+                        lineHeight: '1.2'
+                    }}
+                    onClick={() => {
+                        setViewingRemarkText(remark);
+                        setViewingRemarkTitle(type === 'Failure' ? 'Failure Remark' : 'Repair Remark');
+                    }}
+                >
+                    View
+                </button>
+            </div>
+        );
+    };
+
+    // Re-load stats for active session
+    useEffect(() => {
+        if (activeSession) {
+            fetchSessionStats(activeSession.id);
+        }
+    }, [activeSession]);
+
+    // Generate Single QR canvas data url
+    useEffect(() => {
+        if (selectedQrBarcode) {
+            QRCode.toDataURL(selectedQrBarcode.replace(/-/g, "").toUpperCase(), {
+                width: 250,
+                margin: 2,
+                errorCorrectionLevel: 'M'
+            })
+            .then(url => {
+                // Create a canvas composite to draw text below QR
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 250;
+                    canvas.height = 295;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        ctx.font = 'bold 15px monospace';
+                        ctx.fillStyle = '#000000';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(selectedQrBarcode, canvas.width / 2, 275);
+                        setSingleQrDataUrl(canvas.toDataURL('image/png'));
+                    }
+                };
+                img.src = url;
+            })
+            .catch(err => {
+                console.error('QR code generation error:', err);
+                setSingleQrDataUrl(null);
+            });
+        } else {
+            setSingleQrDataUrl(null);
+        }
+    }, [selectedQrBarcode]);
+
+    // Fetch Eligible Work Orders
+    const fetchEligibleWorkOrders = async () => {
+        try {
+            const data = await apiFetch('/api/smt/printing/eligible-wos');
+            setEligibleWos(data || []);
+        } catch (err: any) {
+            console.error('Error fetching eligible work orders:', err);
+            addToast('Failed to load eligible work orders.', 'error');
+        }
+    };
+
+    // Load Stencil Details and set default Side when Work Order changes
+    useEffect(() => {
+        if (selectedWoId) {
+            const wo = eligibleWos.find(w => w.work_order_id === selectedWoId);
+            if (wo) {
+                const woSides = (wo.sides || '').trim().toLowerCase();
+                const isDoubleSided = woSides === 'top / bottom' || woSides.includes('/');
+                if (isDoubleSided) {
+                    apiFetch(`/api/smt/printing/work-orders/${encodeURIComponent(selectedWoId)}/check-bottom`)
+                        .then(res => {
+                            const isBottomDone = res && res.completed;
+                            const determinedSide = isBottomDone ? 'Top' : 'Bottom';
+                            setSide(determinedSide);
+                            fetchStencilDetails(selectedWoId, determinedSide);
+                        })
+                        .catch(err => {
+                            console.error('Error checking bottom side:', err);
+                            setSide('Bottom');
+                            fetchStencilDetails(selectedWoId, 'Bottom');
+                        });
+                } else {
+                    const defaultSide = woSides === 'bottom' ? 'Bottom' : 'Top';
+                    setSide(defaultSide);
+                    fetchStencilDetails(selectedWoId, defaultSide);
                 }
             }
-        };
+        } else {
+            setStencilDetails(null);
+        }
+    }, [selectedWoId, eligibleWos]);
 
-        tryAutoScan();
-    }, [scanBarcode, serials]);
-
-    const passedQty = scannedSerials.filter(s => s.step_status === 'PASS').length;
-    const failedQty = scannedSerials.filter(s => s.step_status === 'FAIL').length;
-    const pendingQty = workOrderQty - passedQty;
-
-    return (
-        <div className={styles.detailPage}>
-            <Toaster toasts={toasts} onRemove={removeToast} />
-            <style>{`
-                @keyframes rowHighlight {
-                    0% { box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.4); }
-                    100% { box-shadow: none; }
-                }
-            `}</style>
-            <div className={styles.detailHeaderCard}>
-                <div className={styles.detailHeaderRow}>
-                    <div>
-                        <h3>🖨️ Printing Batch Detail: {woId}</h3>
-                        <div className={styles.detailStats} style={{ gap: '1.5rem' }}>
-                            <span style={{ color: '#475569' }}>Total Scanned:{' '}
-                                <strong 
-                                    className="smt-clickable-count smt-scanned"
-                                    onClick={() => onCountClick && onCountClick('scanned', 'Total Scanned')}
-                                >
-                                    {passedQty}
-                                </strong>{' '}
-                                / {workOrderQty}
-                            </span>
-                            <span style={{ color: '#059669' }}>Passed:{' '}
-                                <strong 
-                                    className="smt-clickable-count smt-passed"
-                                    onClick={() => onCountClick && onCountClick('passed', 'Passed')}
-                                >
-                                    {passedQty}
-                                </strong>
-                            </span>
-                            <span style={{ color: '#ef4444' }}>Failed:{' '}
-                                <strong 
-                                    className="smt-clickable-count smt-failed"
-                                    onClick={() => onCountClick && onCountClick('failed', 'Failed')}
-                                >
-                                    {failedQty}
-                                </strong>
-                            </span>
-                            <span style={{ color: '#d97706' }}>Pending:{' '}
-                                <strong 
-                                    className="smt-clickable-count smt-pending"
-                                    onClick={() => onCountClick && onCountClick('pending', 'Pending')}
-                                >
-                                    {pendingQty}
-                                </strong>
-                            </span>
-                        </div>
-                    </div>
-                    <button onClick={onBack} className={styles.detailBackButton}>Back</button>
-                </div>
-            </div>
-
-            <div className={styles.detailScanCard}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    <div className={styles.detailOperatorGroup} style={{ maxWidth: '300px' }}>
-                        <label>Scanned By *</label>
-                        <input
-                            type="text"
-                            value={scannedBy}
-                            onChange={e => setScannedBy(e.target.value)}
-                            placeholder="Operator name"
-                            className={styles.detailOperatorInput}
-                            readOnly
-                            style={{ backgroundColor: '#f9fafb', height: '42px' }}
-                        />
-                    </div>
-                    <div className={styles.detailScanRow}>
-                        <form onSubmit={handleScan} style={{ flex: 1 }}>
-                            <input
-                                ref={scanInputRef}
-                                type="text"
-                                value={scanBarcode}
-                                onChange={e => setScanBarcode(e.target.value)}
-                                placeholder="Scan Item Barcode..."
-                                className={styles.detailScanInput}
-                                style={{ width: '100%', borderColor: '#3b82f6', borderWidth: '2px' }}
-                            />
-                        </form>
-                        <button type="button" onClick={() => processScan(scanBarcode)} className={styles.detailScanButton}>SCAN</button>
-                    </div>
-                </div>
-            </div>
-
-            <div className={styles.detailItemsSection}>
-                <div className={styles.detailItemsHeader}>
-                    <h3>Items ({scannedSerials.length})</h3>
-                </div>
-
-                <div className={styles.detailTableContainer}>
-                    <table className={styles.table}>
-                        <thead>
-                            <tr>
-                                <th style={{ textAlign: 'center' }}>BARCODE PREVIEW</th>
-                                <th>BARCODE NUMBER</th>
-                                <th>STATUS</th>
-                                <th>REMARK</th>
-                                <th>SCANNED BY</th>
-                                <th>SCANNED AT</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>Loading...</td></tr>
-                            ) : scannedSerials.map((s, idx) => {
-                                const isDone = s.step_status === 'PASS';
-                                const isFailed = s.step_status === 'FAIL';
-                                const barcodeValue = (s.serial_number || s.barcode || '').toUpperCase();
-                                const isNew = Date.now() - new Date(s.step_scanned_at || 0).getTime() < 4000;
-
-                                let badgeBg = '#f3f4f6';
-                                let badgeColor = '#4b5563';
-                                let badgeText = 'PENDING';
-
-                                if (isDone) {
-                                    badgeBg = '#dcfce7';
-                                    badgeColor = '#15803d';
-                                    badgeText = 'PASS';
-                                } else if (isFailed) {
-                                    badgeBg = '#fee2e2';
-                                    badgeColor = '#b91c1c';
-                                    badgeText = 'FAIL';
-                                } else {
-                                    badgeBg = '#fffbeb';
-                                    badgeColor = '#d97706';
-                                    badgeText = 'PENDING';
-                                }
-
-                                return (
-                                    <tr 
-                                        key={s.id || idx} 
-                                        style={{ 
-                                            backgroundColor: isDone ? '#f0fdf4' : '#fee2e2',
-                                            transition: 'all 0.2s',
-                                            animation: isNew ? 'rowHighlight 4s ease-out' : undefined
-                                        }}
-                                    >
-                                        <td className={styles.detailQrCell}>
-                                            {barcodeValue ? (
-                                                <div className={styles.detailQrItem}>
-                                                    <QRCode value={barcodeValue} size={64} />
-                                                    <p>{barcodeValue}</p>
-                                                </div>
-                                            ) : (
-                                                <span style={{ color: '#9ca3af' }}>-</span>
-                                            )}
-                                        </td>
-                                        <td className={styles.detailSerialCell} style={{ fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>
-                                            {(s.serial_number || '').toUpperCase()}
-                                        </td>
-                                        <td>
-                                            <span style={{
-                                                padding: '6px 14px',
-                                                borderRadius: '999px',
-                                                fontSize: '0.75rem',
-                                                fontWeight: 'bold',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                backgroundColor: badgeBg,
-                                                color: badgeColor
-                                            }}>
-                                                {badgeText === 'PASS' && '✓ '}
-                                                {badgeText === 'FAIL' && '● '}
-                                                {badgeText === 'PENDING' && '🕒 '}
-                                                {badgeText}
-                                            </span>
-                                        </td>
-                                        <td style={{ fontWeight: 500, color: isFailed ? '#b91c1c' : '#64748b' }}>
-                                            {isFailed ? (s.step_remark || '-') : '-'}
-                                        </td>
-                                        <td style={{ fontWeight: 600, color: '#475569' }}>
-                                            {s.step_scanned_by || 'System'}
-                                        </td>
-                                        <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                            {s.step_scanned_at ? new Date(s.step_scanned_at).toLocaleString() : '-'}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            {!loading && scannedSerials.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                                        No items scanned yet.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- Main Page Component ---
-export const Printing: React.FC = () => {
-    const { smtUser, smtLogout } = useSmtAuth();
-    const { user } = useAuth();
-    const isSuperAdmin = (user?.role || '').toLowerCase() === 'admin' || user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
-    const [workOrders, setWorkOrders] = useState<any[]>([]);
-    const [exportingWoId, setExportingWoId] = useState<string | null>(null);
-
-    const handleExportExcel = async (workOrderId: string, processStep: string) => {
-        if (exportingWoId !== null) return;
-        setExportingWoId(workOrderId);
+    const fetchStencilDetails = async (woId: string, currentSide?: string) => {
         try {
-            const blob = await apiFetch(`/api/smt/export/excel?work_order_id=${workOrderId}&process_step=${processStep}`) as Blob;
-            const url = window.URL.createObjectURL(blob);
+            let url = `/api/smt/printing/stencil-details/${encodeURIComponent(woId)}`;
+            if (currentSide) {
+                url += `?side=${encodeURIComponent(currentSide)}`;
+            }
+            const data = await apiFetch(url);
+            setStencilDetails(data);
+        } catch (err: any) {
+            console.error('Error fetching stencil details:', err);
+            setStencilDetails(null);
+            addToast('No active stencil lifecycle record found for selected Work Order and Side.', 'error');
+        }
+    };
+
+    const handleSideChange = (newSide: string) => {
+        setSide(newSide);
+        if (selectedWoId) {
+            fetchStencilDetails(selectedWoId, newSide);
+        }
+    };
+
+    const fetchActiveSessions = async (pageVal = activePage, limitVal = activeLimit, searchVal = activeSearch) => {
+        setSessionsLoading(true);
+        try {
+            const query = `status=InProgress&page=${pageVal}&limit=${limitVal}&search=${encodeURIComponent(searchVal)}`;
+            const res = await apiFetch(`/api/smt/printing/sessions?${query}`);
+            if (res) {
+                setActiveSessionsList(res.data || []);
+                setActiveTotal(res.pagination?.total || 0);
+            }
+        } catch (err: any) {
+            console.error('Error loading active printing sessions:', err);
+        } finally {
+            setSessionsLoading(false);
+        }
+    };
+
+    const fetchCompletedSessions = async (pageVal = completedPage, limitVal = completedLimit, searchVal = completedSearch) => {
+        setSessionsLoading(true);
+        try {
+            const query = `status=Completed&page=${pageVal}&limit=${limitVal}&search=${encodeURIComponent(searchVal)}`;
+            const res = await apiFetch(`/api/smt/printing/sessions?${query}`);
+            if (res) {
+                setCompletedSessionsList(res.data || []);
+                setCompletedTotal(res.pagination?.total || 0);
+            }
+        } catch (err: any) {
+            console.error('Error loading completed printing sessions:', err);
+        } finally {
+            setSessionsLoading(false);
+        }
+    };
+
+    // Fetch lists of printing sessions (unified delegator)
+    const fetchSessionsLists = () => {
+        fetchActiveSessions(activePage, activeLimit, activeSearch);
+        fetchCompletedSessions(completedPage, completedLimit, completedSearch);
+    };
+
+    const handleActiveSearchSubmit = () => {
+        setActivePage(1);
+        fetchActiveSessions(1, activeLimit, activeSearch);
+    };
+
+    const handleActiveClear = () => {
+        setActiveSearch('');
+        setActivePage(1);
+        fetchActiveSessions(1, activeLimit, '');
+    };
+
+    const handleCompletedSearchSubmit = () => {
+        setCompletedPage(1);
+        fetchCompletedSessions(1, completedLimit, completedSearch);
+    };
+
+    const handleCompletedClear = () => {
+        setCompletedSearch('');
+        setCompletedPage(1);
+        fetchCompletedSessions(1, completedLimit, '');
+    };
+
+    // Fetch Session statistics and scan records
+    const fetchSessionStats = async (sessionId: string) => {
+        try {
+            const data = await apiFetch(`/api/smt/printing/sessions/${sessionId}/stats`);
+            if (data) {
+                setStats(data);
+                
+                // If backend flags the session as completed, update status locally to Completed
+                if (data.isCompleted && activeSession?.status !== 'Completed') {
+                    addToast('Printing Session completed successfully.', 'success');
+                    setActiveSession(prev => prev ? { ...prev, status: 'Completed' } : null);
+                    fetchSessionsLists();
+                }
+            }
+        } catch (err: any) {
+            console.error('Error loading session stats:', err);
+        }
+    };
+
+    // ─── Setup Session Submit ────────────────────────────────────────────────
+    const handleStartSession = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedWoId) {
+            addToast('Please select a Work Order first.', 'error');
+            return;
+        }
+        if (!stencilDetails) {
+            addToast('Cannot start session without Stencil Lifecycle Details.', 'error');
+            return;
+        }
+        if (!squeegeeNumber.trim()) {
+            addToast('Squeegee Number is mandatory.', 'error');
+            return;
+        }
+        if (!solderPasteBarcode.trim()) {
+            addToast('Solder Paste Barcode is mandatory.', 'error');
+            return;
+        }
+
+        const wo = eligibleWos.find(w => w.work_order_id === selectedWoId);
+        if (wo) {
+            const woSides = (wo.sides || '').trim().toLowerCase();
+            const isDoubleSided = woSides === 'top / bottom' || woSides.includes('/');
+            if (isDoubleSided && side.toLowerCase() === 'top') {
+                try {
+                    const checkRes = await apiFetch(`/api/smt/printing/work-orders/${encodeURIComponent(selectedWoId)}/check-bottom`);
+                    if (!checkRes || !checkRes.completed) {
+                        addToast('Bottom Printing must be completed before starting Top Printing for this Work Order.', 'error');
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Failed to verify bottom side completion status:', err);
+                    addToast('Failed to verify bottom side completion status.', 'error');
+                    return;
+                }
+            }
+        }
+
+        try {
+            const payload = {
+                work_order_id: selectedWoId,
+                stencil_lifecycle_id: stencilDetails.stencil_lifecycle_id,
+                squeegee_number: squeegeeNumber.trim(),
+                solder_paste_barcode: solderPasteBarcode.trim(),
+                side
+            };
+
+            const session = await apiFetch('/api/smt/printing/sessions', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            if (session) {
+                addToast('Printing Session created successfully.', 'success');
+                setActiveSession(session);
+                resetSetupForm();
+                fetchSessionsLists();
+            }
+        } catch (err: any) {
+            console.error('Session creation failed:', err);
+            addToast(err.message || 'Failed to start printing session.', 'error');
+        }
+    };
+
+    const resetSetupForm = () => {
+        setSelectedWoId('');
+        setStencilDetails(null);
+        setSqueegeeNumber('');
+        setSolderPasteBarcode('');
+        setSide('Top');
+    };
+
+    // ─── Actions inside Scanning View ────────────────────────────────────────
+
+    // Handle Barcode Scanned
+    const handleBarcodeSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const code = scanBarcodeVal.trim();
+        if (!code || !activeSession || isScanning) return;
+
+        setIsScanning(true);
+        setScanBarcodeVal('');
+        try {
+            const res = await apiFetch(`/api/smt/printing/sessions/${activeSession.id}/scan`, {
+                method: 'POST',
+                body: JSON.stringify({ barcode: code })
+            });
+
+            if (res) {
+                if (res.needsRepairRemark) {
+                    setSelectedScanToRepair({ barcode: code });
+                    setRepairRemark('');
+                } else if (res.isValid) {
+                    if (res.isRepair) {
+                        addToast(`Barcode "${code}" successfully repaired: PASS.`, 'success');
+                    } else {
+                        addToast(`Barcode "${code}" registered: PASS.`, 'success');
+                    }
+                    fetchSessionStats(activeSession.id);
+                } else {
+                    addToast(`Invalid Serial Number. This Serial Number does not belong to the selected Work Order.`, 'error');
+                    fetchSessionStats(activeSession.id);
+                }
+            }
+        } catch (err: any) {
+            console.error('Scan error:', err);
+            if (err.status === 409) {
+                addToast(err.message || `This barcode has already been scanned in this Printing Session.`, 'error');
+                fetchSessionStats(activeSession.id);
+            } else {
+                addToast(err.message || 'Scan validation failed.', 'error');
+            }
+        } finally {
+            setIsScanning(false);
+            scanInputRef.current?.focus();
+        }
+    };
+
+    const submitRepairRow = async () => {
+        if (!selectedScanToRepair || !activeSession) return;
+        if (!repairRemark.trim()) {
+            addToast('Repair remark is mandatory.', 'error');
+            return;
+        }
+
+        try {
+            const res = await apiFetch(`/api/smt/printing/sessions/${activeSession.id}/scan`, {
+                method: 'POST',
+                body: JSON.stringify({ barcode: selectedScanToRepair.barcode, repairRemark: repairRemark.trim() })
+            });
+
+            if (res) {
+                addToast(`Record updated: PASS (Repaired).`, 'success');
+                setSelectedScanToRepair(null);
+                fetchSessionStats(activeSession.id);
+            }
+        } catch (err: any) {
+            addToast(err.message || 'Failed to repair record.', 'error');
+        }
+    };
+
+    // Transition Status (Pause / Resume / Cancel / Abort)
+    const handleStatusTransition = async (newStatus: string, remark?: string) => {
+        if (!activeSession) return;
+        try {
+            const res = await apiFetch(`/api/smt/printing/sessions/${activeSession.id}/status`, {
+                method: 'PATCH',
+                body: JSON.stringify({ status: newStatus, remark })
+            });
+            if (res) {
+                addToast(`Session status updated to ${newStatus}.`, 'success');
+                setActiveSession({ ...activeSession, status: newStatus });
+                fetchSessionsLists();
+                if (newStatus === 'Cancelled' || newStatus === 'Aborted') {
+                    // return to lists
+                    setActiveSession(null);
+                }
+            }
+        } catch (err: any) {
+            addToast(err.message || 'Failed to update session status.', 'error');
+        }
+    };
+
+    // Handle Aborting Session Modal Submit
+    const submitAbortSession = () => {
+        if (!abortRemark.trim()) {
+            addToast('Remark is mandatory to abort a session.', 'error');
+            return;
+        }
+        handleStatusTransition('Aborted', abortRemark.trim());
+        setShowAbortModal(false);
+        setAbortRemark('');
+    };
+
+    // Manual FAIL trigger
+    const triggerFailRow = (scan: ScanRecord) => {
+        setSelectedScanToFail(scan);
+        setFailRemark('');
+    };
+
+    const submitFailRow = async () => {
+        if (!selectedScanToFail || !activeSession) return;
+        if (!failRemark.trim()) {
+            addToast('Failure remark is mandatory.', 'error');
+            return;
+        }
+
+        try {
+            const res = await apiFetch(`/api/smt/printing/sessions/${activeSession.id}/scan/${selectedScanToFail.scan_id}/fail`, {
+                method: 'POST',
+                body: JSON.stringify({ remark: failRemark.trim() })
+            });
+
+            if (res) {
+                addToast(`Record updated: FAIL.`, 'success');
+                setSelectedScanToFail(null);
+                fetchSessionStats(activeSession.id);
+            }
+        } catch (err: any) {
+            addToast(err.message || 'Failed to transition record to FAIL.', 'error');
+        }
+    };
+
+    // Inline edit row
+    const startInlineEdit = (scan: ScanRecord) => {
+        setEditingScanId(scan.scan_id);
+        setEditingBarcodeText(scan.barcode);
+    };
+
+    const submitInlineEdit = async (scanId: string) => {
+        if (!activeSession || !editingBarcodeText.trim()) return;
+        try {
+            const res = await apiFetch(`/api/smt/printing/sessions/${activeSession.id}/scan/${scanId}`, {
+                method: 'PUT',
+                body: JSON.stringify({ newBarcode: editingBarcodeText.trim() })
+            });
+            if (res) {
+                addToast('Scanned barcode updated successfully.', 'success');
+                setEditingScanId(null);
+                fetchSessionStats(activeSession.id);
+            }
+        } catch (err: any) {
+            addToast(err.message || 'Failed to edit scanned barcode.', 'error');
+        }
+    };
+
+    // Delete session (Super Admin only)
+    const handleDeleteSession = async (sessionId: string, woId: string) => {
+        if (!isSuperAdmin) {
+            addToast("Only Super Admin is authorized to delete records.\nPlease contact your Super Admin if this record needs to be deleted.", 'error');
+            return;
+        }
+        if (!window.confirm(`Are you sure you want to delete the Printing Session for Work Order ${woId}? This action will soft-delete the session.`)) {
+            return;
+        }
+        try {
+            const res = await apiFetch(`/api/smt/printing/sessions/${sessionId}`, {
+                method: 'DELETE'
+            });
+            if (res) {
+                addToast('Printing Session deleted successfully.', 'success');
+                fetchSessionsLists();
+                if (activeSession?.id === sessionId) {
+                    setActiveSession(null);
+                }
+            }
+        } catch (err: any) {
+            addToast(err.message || 'Failed to delete session.', 'error');
+        }
+    };
+
+    // ─── Export & QR Code Download ───────────────────────────────────────────
+
+    // Client-side CSV download (kept as-is)
+    const handleExportCSV = () => {
+        if (!activeSession) return;
+        try {
+            const headers = ['Barcode Number', 'Result', 'Failure Remarks', 'Scanned By', 'Scanned At'];
+            const rows = stats.scans.map(scan => [
+                scan.barcode,
+                scan.result,
+                scan.remark || '',
+                scan.scanned_by,
+                new Date(scan.scanned_at).toLocaleString()
+            ]);
+
+            const csvContent = [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.href = url;
-
-            const now = new Date();
-            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
-            const cleanWo = workOrderId.replace(/[^a-zA-Z0-9_-]/g, '_');
-            const fileName = `SMT_${processStep.replace(/\s+/g, '_')}_Report_${cleanWo}_${timestamp}.xlsx`;
-
-            link.setAttribute('download', fileName);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `Printing_Scan_Logs_${activeSession.work_order_id}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            addToast('Report downloaded successfully!', 'success');
-        } catch (error: any) {
-            console.error('Export error:', error);
-            addToast(error.message || 'Failed to export report', 'error');
-        } finally {
-            setExportingWoId(null);
-        }
-    };
-
-    // Toast state
-    const [toasts, setToasts] = useState<Toast[]>([]);
-    const toastId = useRef(0);
-
-    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
-        const id = ++toastId.current;
-        setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
-    }, []);
-
-    const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
-    const [viewingWoId, setViewingWoId] = useState<string | null>(null);
-    const [selectedCount, setSelectedCount] = useState<{
-        workOrderId: string;
-        stage: string;
-        type: string;
-        label: string;
-    } | null>(null);
-
-    // Form state
-    const [formWoId, setFormWoId] = useState('');
-    const [productName, setProductName] = useState('');
-    const [woQty, setWoQty] = useState('');
-    const [panelQty, setPanelQty] = useState('');
-    const [stencilName, setStencilName] = useState('');
-    const [squeezeNumber, setSqueezeNumber] = useState('');
-    const [solderPaste, setSolderPaste] = useState('');
-    const [side, setSide] = useState('TOP');
-    const [isSolderPasteEnforced, setIsSolderPasteEnforced] = useState(false);
-    const [savedEntries, setSavedEntries] = useState<any[]>([]);
-    const [inspections, setInspections] = useState<any[]>([]);
-
-    const fetchData = useCallback(async () => {
-        try {
-            const woRes = await fetch('/api/smt/work-orders/registered');
-            if (woRes.ok) {
-                const data = await woRes.json();
-                setWorkOrders(data);
-            }
-
-            const setupRes = await fetch('/api/smt/process-setups?process_name=PRINTING');
-            if (setupRes.ok) {
-                const data = await setupRes.json();
-                setSavedEntries(data);
-            }
-
-            const inspRes = await fetch('/api/smt/inspections?process_step=Printing');
-            if (inspRes.ok) {
-                const data = await inspRes.json();
-                setInspections(data);
-            }
+            addToast('CSV exported successfully.', 'success');
         } catch (err) {
-            console.error("Failed to fetch data:", err);
+            addToast('CSV export failed.', 'error');
         }
-    }, []);
+    };
 
-    useEffect(() => {
-        fetchData();
-    }, [fetchData, smtUser]);
+    // Excel Report — calls backend full-report endpoint with auth
+    const handleExportExcel = async (customSessionId?: string, customWorkOrderId?: string) => {
+        const sessionId = customSessionId || activeSession?.id;
+        const workOrderId = customWorkOrderId || activeSession?.work_order_id;
+        if (!sessionId) return;
+        try {
+            addToast('Preparing Excel report…', 'info');
+            const token = localStorage.getItem('auth_token') || localStorage.getItem('smt_token') || sessionStorage.getItem('smt_token') || '';
+            const response = await fetch(`/api/smt/printing/sessions/${sessionId}/export/excel`, {
+                headers: { Authorization: `Bearer ${token}`, 'X-User-Name': smtUser?.name || '' }
+            });
+            if (!response.ok) throw new Error('Export failed');
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Printing_Report_${workOrderId}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            addToast('Excel report downloaded successfully.', 'success');
+        } catch (err) {
+            console.error('Excel export error:', err);
+            addToast('Excel export failed.', 'error');
+        }
+    };
 
-    const handleSelectWo = async (woId: string) => {
-        setFormWoId(woId);
-        const wo = workOrders.find(w => (w.id === woId || w.work_order_id === woId));
-        if (wo) {
-            setProductName(wo.product_name);
-            setWoQty(wo.quantity.toString());
-            setPanelQty(wo.panel_quantity.toString());
-            
-            // Check solder paste status
-            try {
-                const spRes = await fetch(`/api/smt/solder-paste/status/${encodeURIComponent(woId)}`);
-                if (spRes.ok) {
-                    const spData = await spRes.json();
-                    if (spData.stage3?.status === 'Completed') {
-                        setSolderPaste(spData.solder_paste_barcode || '');
-                        setIsSolderPasteEnforced(true);
-                    } else {
-                        // Reset work order selection and show error toast/alert
-                        alert(`Solder Paste Management is not completed for this Work Order! Solder paste must be mixed and completed first.`);
-                        setFormWoId('');
-                        setProductName('');
-                        setWoQty('');
-                        setPanelQty('');
-                        setSolderPaste('');
-                        setIsSolderPasteEnforced(false);
-                    }
-                } else {
-                    alert('Work Order has no Solder Paste history recorded. Please perform Solder Paste Management first!');
-                    setFormWoId('');
-                    setProductName('');
-                    setWoQty('');
-                    setPanelQty('');
-                    setSolderPaste('');
-                    setIsSolderPasteEnforced(false);
+    // Full-featured PDF Report generated client-side via backend data
+    const handleExportFullPDF = async (customSessionId?: string, customWorkOrderId?: string) => {
+        const sessionId = customSessionId || activeSession?.id;
+        const workOrderId = customWorkOrderId || activeSession?.work_order_id;
+        if (!sessionId) return;
+        try {
+            addToast('Generating PDF report…', 'info');
+            const token = localStorage.getItem('auth_token') || localStorage.getItem('smt_token') || sessionStorage.getItem('smt_token') || '';
+            const res = await fetch(`/api/smt/printing/sessions/${sessionId}/export/pdf-data`, {
+                headers: { Authorization: `Bearer ${token}`, 'X-User-Name': smtUser?.name || '' }
+            });
+            if (!res.ok) throw new Error('Failed to fetch PDF data');
+            const data = await res.json();
+
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const PW = 210; // A4 width mm
+            const ML = 14;  // left margin
+            const MR = 14;  // right margin
+            const CW = PW - ML - MR; // content width
+            let y = 0;
+
+            const fmt = (d: string | null | undefined) =>
+                d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true }) : '—';
+            const fmtDate = (d: string | null | undefined) =>
+                d ? new Date(d).toLocaleDateString('en-IN') : '—';
+            const val = (v: any) => (v !== null && v !== undefined && v !== '') ? String(v) : '—';
+
+            const addPageNum = () => {
+                const total = (doc as any).internal.getNumberOfPages();
+                for (let i = 1; i <= total; i++) {
+                    doc.setPage(i);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(8);
+                    doc.setTextColor(148, 163, 184);
+                    doc.text(`Page ${i} of ${total}   |   SMT Printing Report   |   ${smtUser?.name || 'Operator'}`, ML, 292);
                 }
-            } catch (err) {
-                console.error("Error verifying solder paste status:", err);
-                alert("Failed to verify Solder Paste status due to connection error.");
-                setFormWoId('');
-                setProductName('');
-                setWoQty('');
-                setPanelQty('');
-                setSolderPaste('');
-                setIsSolderPasteEnforced(false);
+            };
+
+            const checkPageBreak = (needed: number) => {
+                if (y + needed > 280) {
+                    doc.addPage();
+                    y = 15;
+                }
+            };
+
+            // ── TITLE BANNER ──────────────────────────────────────────────────
+            doc.setFillColor(30, 58, 95);  // navy
+            doc.rect(0, 0, PW, 28, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(18);
+            doc.setTextColor(255, 255, 255);
+            doc.text('SMT PRINTING SESSION REPORT', PW / 2, 13, { align: 'center' });
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(203, 213, 225);
+            doc.text(`Stage: SMT Printing  |  Generated: ${fmt(data.generatedAt)}  |  By: ${data.generatedBy}`, PW / 2, 22, { align: 'center' });
+            y = 36;
+
+            // ── Helper: section header ─────────────────────────────────────────
+            const sectionHeader = (title: string, r: number, g: number, b: number) => {
+                checkPageBreak(14);
+                doc.setFillColor(r, g, b);
+                doc.rect(ML, y, CW, 8, 'F');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10);
+                doc.setTextColor(255, 255, 255);
+                doc.text(title, ML + 3, y + 5.5);
+                y += 10;
+            };
+
+            // ── Helper: KV pair row ────────────────────────────────────────────
+            const kvRow = (label: string, value: string, shade: boolean) => {
+                checkPageBreak(8);
+                const labelW = 65;
+                if (shade) {
+                    doc.setFillColor(241, 245, 249);
+                    doc.rect(ML, y, CW, 7, 'F');
+                }
+                doc.setDrawColor(209, 213, 219);
+                doc.rect(ML, y, CW, 7);
+                doc.rect(ML, y, labelW, 7);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9);
+                doc.setTextColor(30, 41, 59);
+                doc.text(label, ML + 2, y + 5);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(51, 65, 85);
+                doc.text(value, ML + labelW + 2, y + 5);
+                y += 7;
+            };
+
+            // ── SECTION 1: Work Order Details ─────────────────────────────────
+            sectionHeader('  1.  WORK ORDER DETAILS', 37, 99, 235); // blue
+            const wo = data.workOrder;
+            [
+                ['Work Order Number', val(wo.number)],
+                ['PO Number', val(wo.poNumber)],
+                ['Product Name', val(wo.productName)],
+                ['Product Description', val(wo.productDescription)],
+                ['Work Order Quantity', val(wo.quantity)],
+                ['Panel Quantity', val(wo.panelQuantity)],
+                ['Number of Sides', val(wo.sides)],
+                ['Line ID', val(wo.lineId)],
+                ['Remarks', val(wo.remarks)]
+            ].forEach(([l, v], i) => kvRow(l, v, i % 2 === 0));
+
+            y += 5;
+
+            // ── SECTION 2: Stencil Details ────────────────────────────────────
+            sectionHeader('  2.  STENCIL DETAILS', 15, 118, 110); // teal
+            const st = data.stencil;
+            [
+                ['Stencil / Model Name', val(st.name)],
+                ['Job Number', val(st.jobNumber)],
+                ['Revision', val(st.revision)],
+                ['Thickness (mils)', val(st.thickness)],
+                ['Manufacturing Date', fmtDate(st.manufacturingDate)],
+                ['Side', val(st.side)],
+                ['Current Life Cycle Count', val(st.currentLifeCycleCount)],
+                ['Remaining Life Count', val(st.remainingLifeCount)]
+            ].forEach(([l, v], i) => kvRow(l, v, i % 2 === 0));
+
+            y += 5;
+
+            // ── SECTION 3: Printing Session Details ───────────────────────────
+            sectionHeader('  3.  PRINTING SESSION DETAILS', 67, 56, 202); // indigo
+            const sess = data.session;
+            [
+                ['Squeegee Number', val(sess.squeegeeNumber)],
+                ['Solder Paste Barcode', val(sess.solderPasteBarcode)],
+                ['PCB Side', val(sess.pcbSide)],
+                ['Printing Started By', val(sess.startedBy)],
+                ['Printing Started Date & Time', fmt(sess.startedAt)],
+                ['Printing Status', val(sess.status)]
+            ].forEach(([l, v], i) => kvRow(l, v, i % 2 === 0));
+
+            y += 5;
+
+            // ── SECTION 4: Production Summary ─────────────────────────────────
+            sectionHeader('  4.  PRODUCTION SUMMARY', 124, 58, 237); // plum
+            const prod = data.production;
+            [
+                ['Work Order Quantity', val(prod.quantity)],
+                ['Passed Quantity', val(prod.passed)],
+                ['Failed Quantity', val(prod.failed)],
+                ['Pending Quantity', val(prod.pending)],
+                ['Invalid Scan Quantity', val(prod.invalid)],
+                ['Duplicate Scan Quantity', val(prod.duplicate)]
+            ].forEach(([l, v], i) => kvRow(l, v, i % 2 === 0));
+
+            y += 5;
+
+            // ── SECTION 5: Scan History Table ─────────────────────────────────
+            sectionHeader('  5.  SCAN HISTORY', 21, 128, 61); // green
+
+            // Table header row
+            checkPageBreak(12);
+            const cols = [
+                { label: 'Barcode', x: ML, w: 32 },
+                { label: 'Scanned By', x: ML + 32, w: 20 },
+                { label: 'Date & Time', x: ML + 52, w: 30 },
+                { label: 'Status', x: ML + 82, w: 15 },
+                { label: 'Failure Remark', x: ML + 97, w: 28 },
+                { label: 'Repair Time', x: ML + 125, w: 29 },
+                { label: 'Repair Remark', x: ML + 154, w: 28 }
+            ];
+            doc.setFillColor(31, 78, 121);
+            doc.rect(ML, y, CW, 8, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(255, 255, 255);
+            cols.forEach(c => doc.text(c.label, c.x + 1, y + 5.5));
+            y += 8;
+
+            if (data.scans.length === 0) {
+                checkPageBreak(10);
+                doc.setFont('helvetica', 'italic');
+                doc.setFontSize(9);
+                doc.setTextColor(148, 163, 184);
+                doc.text('No scan records found for this session.', PW / 2, y + 6, { align: 'center' });
+                y += 10;
+            } else {
+                data.scans.forEach((scan: any, idx: number) => {
+                    checkPageBreak(8);
+                    if (idx % 2 === 0) {
+                        doc.setFillColor(255, 255, 255);
+                    } else {
+                        doc.setFillColor(248, 250, 252);
+                    }
+                    doc.rect(ML, y, CW, 7, 'F');
+                    doc.setDrawColor(209, 213, 219);
+                    doc.rect(ML, y, CW, 7);
+                    cols.forEach(c => {
+                        doc.line(c.x, y, c.x, y + 7);
+                    });
+
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(7);
+                    doc.setTextColor(30, 41, 59);
+                    
+                    doc.text(val(scan.barcode), cols[0].x + 1, y + 5);
+                    doc.text(val(scan.scanned_by), cols[1].x + 1, y + 5);
+                    doc.text(fmt(scan.scanned_at), cols[2].x + 1, y + 5);
+
+                    // Status with color
+                    if (scan.result === 'PASS') doc.setTextColor(22, 101, 52);
+                    else if (scan.result === 'FAIL') doc.setTextColor(153, 27, 27);
+                    else doc.setTextColor(146, 64, 14);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(val(scan.result), cols[3].x + 1, y + 5);
+
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(30, 41, 59);
+                    
+                    const remark = val(scan.remark);
+                    const truncRemark = remark.length > 20 ? remark.slice(0, 18) + '…' : remark;
+                    doc.text(truncRemark, cols[4].x + 1, y + 5);
+
+                    doc.text(fmt(scan.repair_time), cols[5].x + 1, y + 5);
+
+                    const repRem = val(scan.repair_remark);
+                    const truncRep = repRem.length > 20 ? repRem.slice(0, 18) + '…' : repRem;
+                    doc.text(truncRep, cols[6].x + 1, y + 5);
+
+                    y += 7;
+                });
             }
-        } else {
-            setProductName('');
-            setWoQty('');
-            setPanelQty('');
-            setSolderPaste('');
-            setIsSolderPasteEnforced(false);
+
+            addPageNum();
+            doc.save(`Printing_Report_${data.workOrder.number || workOrderId || 'report'}.pdf`);
+            addToast('PDF report downloaded successfully.', 'success');
+        } catch (err) {
+            console.error('PDF generation error:', err);
+            addToast('PDF report generation failed.', 'error');
         }
     };
 
-    const getShift = () => {
-        const hour = new Date().getHours();
-        if (hour >= 23 || hour < 7) return 'C (11PM - 07AM)';
-        if (hour >= 15 && hour < 23) return 'B (03PM - 11PM)';
-        if (hour >= 8 && hour < 17) return 'G (08AM - 05PM)';
-        if (hour >= 6 && hour < 15) return 'A (06AM - 03PM)';
-        return 'N/A';
+
+    // Helper: generate Canvas helper for QR ZIP compilation
+    const generateQRCanvasDataUrl = (barcode: string): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            QRCode.toDataURL(barcode.replace(/-/g, "").toUpperCase(), {
+                width: 250,
+                margin: 2,
+                errorCorrectionLevel: 'M'
+            })
+            .then(url => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 250;
+                    canvas.height = 295;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        ctx.font = 'bold 15px monospace';
+                        ctx.fillStyle = '#000000';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(barcode, canvas.width / 2, 275);
+                        resolve(canvas.toDataURL('image/png'));
+                    } else {
+                        reject(new Error('Canvas context failed'));
+                    }
+                };
+                img.onerror = reject;
+                img.src = url;
+            })
+            .catch(reject);
+        });
     };
 
-    const handleStartProcess = async () => {
-        if (!formWoId) {
-            alert('Please select a Work Order.');
+    // Bulk QR Code Images ZIP download
+    const handleDownloadAllQRPNG = async () => {
+        const validScans = stats.scans.filter(s => s.result === 'PASS' || s.result === 'FAIL');
+        if (validScans.length === 0) {
+            addToast('No valid barcodes scanned in this session yet.', 'info');
             return;
         }
-        if (!stencilName.trim()) {
-            alert('Please enter a Stencil Name.');
-            return;
-        }
-        if (!squeezeNumber.trim()) {
-            alert('Please enter a Squeegee Number.');
-            return;
-        }
-        if (!solderPaste.trim()) {
-            alert('Please enter Solder Paste details.');
-            return;
-        }
+
+        setIsZipping(true);
+        addToast('Compiling ZIP of QR codes. Please wait...', 'info');
 
         try {
-            const res = await fetch('/api/smt/process-setups', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    work_order_id: formWoId,
-                    process_name: 'PRINTING',
-                    product_name: productName || 'N/A',
-                    quantity: parseInt(woQty) || 0,
-                    stencil_name: stencilName.trim(),
-                    squeegee_number: squeezeNumber.trim(),
-                    solder_paste: solderPaste.trim(),
-                    side: side || 'TOP'
-                })
+            const zip = new JSZip();
+            const folder = zip.folder("qr_codes");
+
+            for (const scan of validScans) {
+                const dataUrl = await generateQRCanvasDataUrl(scan.barcode);
+                const base64Data = dataUrl.replace(/^data:image\/(png|jpg);base64,/, "");
+                folder?.file(`${scan.barcode}.png`, base64Data, { base64: true });
+            }
+
+            const content = await zip.generateAsync({ type: "blob" });
+            const url = URL.createObjectURL(content);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `QR_Codes_Session_${activeSession?.work_order_id}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            addToast('QR Code images ZIP downloaded successfully.', 'success');
+        } catch (err) {
+            console.error('ZIP packaging failed:', err);
+            addToast('Failed to compile ZIP archive.', 'error');
+        } finally {
+            setIsZipping(false);
+        }
+    };
+
+    // Bulk QR Code Labels PDF download
+    const handleDownloadAllQRPDF = async () => {
+        const validScans = stats.scans.filter(s => s.result === 'PASS' || s.result === 'FAIL');
+        if (validScans.length === 0) {
+            addToast('No valid barcodes scanned in this session yet.', 'info');
+            return;
+        }
+
+        addToast('Compiling QR Labels PDF. Please wait...', 'info');
+
+        try {
+            // Label size format: 80mm width by 95mm height
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: [80, 95]
             });
 
-            if (res.ok) {
-                const newEntry = await res.json();
-                setSavedEntries([newEntry, ...savedEntries]);
-                setViewingWoId(formWoId);
-                alert(`Starting Printing Process for WO: ${formWoId}`);
-            } else {
-                const errorData = await res.json();
-                alert(`Failed to save Printing setup: ${errorData.error || 'Unknown error'}`);
+            for (let i = 0; i < validScans.length; i++) {
+                if (i > 0) {
+                    doc.addPage();
+                }
+                const scan = validScans[i];
+                const qrUrl = await generateQRCanvasDataUrl(scan.barcode);
+                doc.addImage(qrUrl, 'PNG', 5, 5, 70, 82.6);
             }
+
+            doc.save(`QR_Labels_Session_${activeSession?.work_order_id}.pdf`);
+            addToast('QR Labels PDF downloaded successfully.', 'success');
         } catch (err) {
-            console.error("Error saving setup:", err);
-            alert("Connection error while saving setup");
+            console.error('PDF compilation failed:', err);
+            addToast('Failed to compile QR Labels PDF.', 'error');
         }
     };
 
-    const getPassedCount = (woId: string) => {
-        const woInspections = inspections.filter(i => (i.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const latestBySerial: { [key: number]: string } = {};
-        const sorted = [...woInspections].sort((a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime());
-        sorted.forEach(i => {
-            latestBySerial[i.serial_id] = i.status;
-        });
-        return Object.values(latestBySerial).filter(status => status === 'PASS').length;
+    // Single QR Code downloads
+    const downloadSinglePNG = () => {
+        if (singleQrDataUrl && selectedQrBarcode) {
+            const a = document.createElement('a');
+            a.href = singleQrDataUrl;
+            a.download = `${selectedQrBarcode}.png`;
+            a.click();
+        }
     };
 
-    const dropdownWorkOrders = workOrders.filter(wo => {
-        const woId = wo.id || wo.work_order_id;
-        const hasSetup = savedEntries.some(entry => (entry.work_order_id || '').toUpperCase() === woId.toUpperCase());
-        const passedCount = getPassedCount(woId);
-        const targetQty = wo.scanned_count || wo.quantity || 0;
-        const isCompleted = passedCount >= targetQty && targetQty > 0;
-        return !hasSetup && !isCompleted;
-    });
+    const downloadSinglePDF = () => {
+        if (singleQrDataUrl && selectedQrBarcode) {
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: [80, 95]
+            });
+            doc.addImage(singleQrDataUrl, 'PNG', 5, 5, 70, 82.6);
+            doc.save(`${selectedQrBarcode}.pdf`);
+        }
+    };
 
-    const pendingEntries = savedEntries.filter(entry => {
-        const woId = entry.work_order_id;
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
-        const passedCount = getPassedCount(woId);
-        const targetQty = wo ? (wo.scanned_count || wo.quantity) : 0;
-        return passedCount < targetQty || targetQty === 0;
-    });
+    // ─── Render Helper Badges ────────────────────────────────────────────────
+    const getStatusBadge = (status: string) => {
+        const lower = status.toLowerCase();
+        let bg = '#f3f4f6';
+        let color = '#374151';
 
-    const completedEntries = savedEntries.filter(entry => {
-        const woId = entry.work_order_id;
-        const wo = workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (woId || '').toUpperCase());
-        if (!wo) return false;
-        const passedCount = getPassedCount(woId);
-        const targetQty = wo.scanned_count || wo.quantity;
-        return passedCount >= targetQty && targetQty > 0;
-    });
+        if (lower === 'in progress') {
+            bg = '#dbeafe'; color = '#1e40af';
+        } else if (lower === 'paused') {
+            bg = '#fef3c7'; color = '#92400e';
+        } else if (lower === 'completed') {
+            bg = '#dcfce7'; color = '#166534';
+        } else if (lower === 'cancelled') {
+            bg = '#f3f4f6'; color = '#4b5563';
+        } else if (lower === 'aborted') {
+            bg = '#fee2e2'; color = '#991b1b';
+        }
+
+        return (
+            <span style={{
+                padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.8rem',
+                fontWeight: 700, backgroundColor: bg, color
+            }}>
+                {status}
+            </span>
+        );
+    };
+
+    const getScanResultBadge = (result: string) => {
+        const lower = result.toLowerCase();
+        let bg = '#e2e8f0';
+        let color = '#475569';
+
+        if (lower === 'pass') {
+            bg = '#dcfce7'; color = '#15803d';
+        } else if (lower === 'fail') {
+            bg = '#fee2e2'; color = '#b91c1c';
+        } else if (lower === 'invalid') {
+            bg = '#fef3c7'; color = '#b45309';
+        }
+
+        return (
+            <span style={{
+                padding: '0.2rem 0.6rem', borderRadius: '0.25rem', fontSize: '0.8rem',
+                fontWeight: 700, backgroundColor: bg, color
+            }}>
+                {result}
+            </span>
+        );
+    };
+
+    const selectedWo = eligibleWos.find(wo => wo.work_order_id === selectedWoId);
 
     return (
-        <>
+        <div className={styles.container}>
             <Toaster toasts={toasts} onRemove={removeToast} />
-            <div className={styles.container}>
-                <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                        <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b' }}>🖨️ SMT Printing</h2>
-                        <p style={{ color: '#64748b' }}>Manage SMT Stencil Printing tasks. Logged in as: <strong>{smtUser?.name}</strong> | Shift: <strong>{getShift()}</strong></p>
-                    </div>
-                    <button
-                        onClick={() => {
-                            if (window.confirm("Are you sure you want to logout from SMT?")) {
-                                smtLogout();
-                            }
-                        }}
-                        className={styles.secondaryButton}
-                        style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                    >
-                        <span>🔒</span> Logout SMT
-                    </button>
-                </div>
+            
+            {/* Top title and Navigation */}
+            <div className={styles.header}>
+                <h2>🖨️ SMT Printing Process</h2>
+                <p>Enforce serial number tracking, stencil life verification, and inspections at the Printing stage.</p>
+            </div>
 
-                {viewingWoId ? (
-                    <PrintingDetail
-                        woId={viewingWoId}
-                        onBack={() => {
-                            setViewingWoId(null);
-                            fetchData();
-                        }}
-                        operatorName={smtUser?.name || 'System'}
-                        workOrderQty={workOrders.find(w => (w.id || w.work_order_id).toUpperCase() === (viewingWoId || '').toUpperCase())?.quantity || 0}
-                        onCountClick={(type, label) => setSelectedCount({
-                            workOrderId: viewingWoId,
-                            stage: 'Printing',
-                            type,
-                            label
-                        })}
-                    />
-                ) : (
-                    <>
+            {!activeSession ? (
+                // ─────────────────────────────────────────────────────────────
+                // VIEW 1: SETUP & SESSION SELECTION
+                // ─────────────────────────────────────────────────────────────
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                        {/* Session Setup Card */}
                         <div className={styles.card}>
-                            <h3 style={{ marginBottom: '1.5rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem' }}>Printing Setup Form</h3>
-                            <div className={styles.formGrid}>
+                            <h3>Setup New Session</h3>
+                            <form onSubmit={handleStartSession} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                                 <div className={styles.inputGroup}>
-                                    <label>Select Work Order *</label>
+                                    <label>Work Order *</label>
                                     <select
-                                        className={styles.input}
-                                        value={formWoId}
-                                        onChange={(e) => handleSelectWo(e.target.value)}
+                                        className={styles.select}
+                                        value={selectedWoId}
+                                        onChange={e => setSelectedWoId(e.target.value)}
+                                        required
                                     >
-                                        <option value="">-- Select Work Order --</option>
-                                        {dropdownWorkOrders.map((wo) => (
-                                            <option key={wo.id || wo.work_order_id} value={wo.id || wo.work_order_id}>
-                                                {wo.id || wo.work_order_id} - {wo.product_name}
+                                        <option value="">-- Select Eligible Work Order --</option>
+                                        {eligibleWos.map(wo => (
+                                            <option key={wo.work_order_id} value={wo.work_order_id}>
+                                                {wo.work_order_id} - {wo.product_name} (Qty: {wo.work_order_quantity})
                                             </option>
                                         ))}
                                     </select>
-                                </div>
-
-                                <div className={styles.inputGroup}>
-                                    <label>Product Name (Auto-filled)</label>
-                                    <input
-                                        type="text"
-                                        className={styles.input}
-                                        value={productName}
-                                        disabled
-                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                    />
-                                </div>
-
-                                <div className={styles.inputGroup}>
-                                    <label>WO Qty (Auto-filled)</label>
-                                    <input
-                                        type="number"
-                                        className={styles.input}
-                                        value={woQty}
-                                        disabled
-                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                    />
-                                </div>
-
-                                <div className={styles.inputGroup}>
-                                    <label>Panel Qty (Auto-filled)</label>
-                                    <input
-                                        type="number"
-                                        className={styles.input}
-                                        value={panelQty}
-                                        disabled
-                                        style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}
-                                    />
-                                </div>
-
-                                <div className={styles.inputGroup}>
-                                    <label>Stencil Name *</label>
-                                    <input
-                                        type="text"
-                                        className={styles.input}
-                                        value={stencilName}
-                                        onChange={(e) => setStencilName(e.target.value.replace(/[^a-zA-Z0-9\s_-]/g, ''))}
-                                        placeholder="Enter Stencil Name"
-                                    />
                                 </div>
 
                                 <div className={styles.inputGroup}>
@@ -723,288 +1222,969 @@ export const Printing: React.FC = () => {
                                     <input
                                         type="text"
                                         className={styles.input}
-                                        value={squeezeNumber}
-                                        onChange={(e) => setSqueezeNumber(e.target.value.replace(/[^a-zA-Z0-9\s_-]/g, ''))}
-                                        placeholder="Enter Squeegee Number"
+                                        placeholder="Enter Squeegee Identification"
+                                        value={squeegeeNumber}
+                                        onChange={e => setSqueegeeNumber(e.target.value)}
+                                        required
                                     />
                                 </div>
 
                                 <div className={styles.inputGroup}>
-                                    <label>Solder Paste *</label>
+                                    <label>Solder Paste Barcode *</label>
                                     <input
                                         type="text"
                                         className={styles.input}
-                                        value={solderPaste}
-                                        onChange={(e) => setSolderPaste(e.target.value.replace(/[^a-zA-Z0-9\s_-]/g, ''))}
-                                        placeholder="Enter Solder Paste"
-                                        disabled={isSolderPasteEnforced}
-                                        style={isSolderPasteEnforced ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed', fontWeight: 'bold' } : undefined}
+                                        placeholder="Scan / Enter Solder Paste Barcode"
+                                        value={solderPasteBarcode}
+                                        onChange={e => setSolderPasteBarcode(e.target.value)}
+                                        required
                                     />
                                 </div>
 
                                 <div className={styles.inputGroup}>
-                                    <label>Side Selection *</label>
+                                    <label>PCB Side *</label>
                                     <select
-                                        className={styles.input}
+                                        className={styles.select}
                                         value={side}
-                                        onChange={(e) => setSide(e.target.value)}
+                                        onChange={e => handleSideChange(e.target.value)}
+                                        disabled={!!(selectedWo && (selectedWo.sides || '').trim().toLowerCase().includes('/'))}
+                                        required
                                     >
-                                        <option value="TOP">TOP</option>
-                                        <option value="BOTTOM">BOTTOM</option>
+                                        {selectedWo && selectedWo.sides && selectedWo.sides.trim().toLowerCase() === 'bottom' ? (
+                                            <option value="Bottom">Bottom</option>
+                                        ) : selectedWo && selectedWo.sides && selectedWo.sides.trim().toLowerCase() === 'top' ? (
+                                            <option value="Top">Top</option>
+                                        ) : selectedWo && selectedWo.sides && selectedWo.sides.trim().toLowerCase().includes('/') ? (
+                                            <>
+                                                <option value="Bottom">Bottom</option>
+                                                <option value="Top">Top</option>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <option value="Top">Top</option>
+                                                <option value="Bottom">Bottom</option>
+                                            </>
+                                        )}
                                     </select>
                                 </div>
+
+                                <button type="submit" className={styles.button} style={{ marginTop: '0.5rem' }}>
+                                    Start Printing Session
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* Stencil Information Card */}
+                        <div className={styles.card} style={{ display: 'flex', flexDirection: 'column' }}>
+                            <h3>Stencil Details</h3>
+                            {stencilDetails ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.95rem' }}>
+                                    <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                        <p style={{ margin: '0 0 0.25rem', color: '#64748b', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase' }}>Stencil / Model Name</p>
+                                        <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>{stencilDetails.stencil_name}</strong>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ margin: '0', color: '#64748b', fontSize: '0.8rem' }}>Job Number</p>
+                                            <strong style={{ color: '#0f172a' }}>{stencilDetails.job_number || '—'}</strong>
+                                        </div>
+                                        <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ margin: '0', color: '#64748b', fontSize: '0.8rem' }}>Revision</p>
+                                            <strong style={{ color: '#0f172a' }}>{stencilDetails.stencil_version || '—'}</strong>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ margin: '0', color: '#64748b', fontSize: '0.8rem' }}>Thickness</p>
+                                            <strong style={{ color: '#0f172a' }}>{stencilDetails.thickness_mills || stencilDetails.thickness || '—'}</strong>
+                                        </div>
+                                        <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ margin: '0', color: '#64748b', fontSize: '0.8rem' }}>Side</p>
+                                            <strong style={{ color: '#0f172a' }}>{stencilDetails.stencil_side || '—'}</strong>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ margin: '0', color: '#64748b', fontSize: '0.8rem' }}>Manufacturing Date</p>
+                                            <strong style={{ color: '#0f172a', fontSize: '0.85rem' }}>
+                                                {stencilDetails.stencil_manufacturing_date ? new Date(stencilDetails.stencil_manufacturing_date).toLocaleDateString() : '—'}
+                                            </strong>
+                                        </div>
+                                        <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ margin: '0', color: '#64748b', fontSize: '0.8rem' }}>Current Life Cycle Status</p>
+                                            <strong style={{ color: stencilDetails.stencil_status === 'Active' || stencilDetails.stencil_status === 'Available' ? '#16a34a' : '#b91c1c' }}>
+                                                {stencilDetails.stencil_status || '—'}
+                                            </strong>
+                                        </div>
+                                    </div>
+                                    <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                        <p style={{ margin: '0 0 0.5rem', color: '#64748b', fontSize: '0.8rem' }}>Lifecycle Count</p>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Used:</span>{' '}
+                                                <strong style={{ color: '#0f172a' }}>{stencilDetails.current_life_count}</strong>
+                                            </div>
+                                            <div>
+                                                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Remaining:</span>{' '}
+                                                <strong style={{ color: stencilDetails.remaining_life < 500 ? '#b91c1c' : '#0f172a' }}>
+                                                    {stencilDetails.remaining_life}
+                                                </strong>
+                                            </div>
+                                            <div>
+                                                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Limit:</span>{' '}
+                                                <strong style={{ color: '#0f172a' }}>{stencilDetails.qty_life_cycle}</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ margin: '0', color: '#64748b', fontSize: '0.8rem' }}>Last Cleaning</p>
+                                            <strong style={{ color: '#334155', fontSize: '0.85rem' }}>
+                                                {stencilDetails.last_cleaning_date ? new Date(stencilDetails.last_cleaning_date).toLocaleDateString() : 'Never'}
+                                            </strong>
+                                        </div>
+                                        <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ margin: '0', color: '#64748b', fontSize: '0.8rem' }}>Last Inspection</p>
+                                            <strong style={{ color: '#334155', fontSize: '0.85rem' }}>
+                                                {stencilDetails.last_inspection_date ? new Date(stencilDetails.last_inspection_date).toLocaleDateString() : 'Never'}
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ margin: 'auto', textAlign: 'center', padding: '2rem 0', color: '#94a3b8' }}>
+                                    <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '0.5rem' }}>🔍</span>
+                                    Select an eligible Work Order to load linked Stencil properties.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Active Sessions Panel */}
+                    <div className={styles.card}>
+                        <h3>Active Printing Sessions</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, maxWidth: '400px' }}>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    placeholder="Search by WO, Product, PO ID..."
+                                    value={activeSearch}
+                                    onChange={e => setActiveSearch(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleActiveSearchSubmit(); }}
+                                    style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                                />
+                                <button
+                                    className={styles.button}
+                                    onClick={handleActiveSearchSubmit}
+                                    style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                                >
+                                    Search
+                                </button>
+                                {activeSearch && (
+                                    <button
+                                        className={styles.secondaryButton}
+                                        onClick={handleActiveClear}
+                                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                                    >
+                                        Clear
+                                    </button>
+                                )}
                             </div>
-                            <div style={{ marginTop: '30px' }}>
-                                <button className={styles.button} onClick={handleStartProcess}>
-                                    Start Printing Process
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem', color: '#64748b' }}>
+                                <span>Show</span>
+                                <select
+                                    className={styles.select}
+                                    value={activeLimit}
+                                    onChange={e => {
+                                        const newLimit = parseInt(e.target.value);
+                                        setActiveLimit(newLimit);
+                                        setActivePage(1);
+                                        fetchActiveSessions(1, newLimit, activeSearch);
+                                    }}
+                                    style={{ padding: '0.35rem 1.5rem 0.35rem 0.75rem', width: 'auto', fontSize: '0.85rem' }}
+                                >
+                                    <option value={5}>5</option>
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                </select>
+                                <span>entries</span>
+                            </div>
+                        </div>
+
+                        {sessionsLoading ? (
+                            <div style={{ textAlign: 'center', padding: '1rem' }}>Loading sessions...</div>
+                        ) : (
+                            <>
+                                <div className={styles.tableContainer}>
+                                    <table className={styles.table}>
+                                        <thead>
+                                            <tr>
+                                                <th>WO Number</th>
+                                                <th>Product Name</th>
+                                                <th>Target Qty</th>
+                                                <th>Stencil Name</th>
+                                                <th>Squeegee No</th>
+                                                <th>Solder Paste</th>
+                                                <th>Side</th>
+                                                <th>Status</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {activeSessionsList.map(session => (
+                                                <tr key={session.id}>
+                                                    <td style={{ fontWeight: 600, color: '#4f46e5' }}>{session.work_order_id}</td>
+                                                    <td>{session.product_name || '-'}</td>
+                                                    <td>{session.work_order_quantity || '-'}</td>
+                                                    <td>{session.stencil_name || '-'}</td>
+                                                    <td>{session.squeegee_number}</td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{session.solder_paste_barcode}</td>
+                                                    <td>{session.side}</td>
+                                                    <td>{getStatusBadge(session.status)}</td>
+                                                    <td style={{ display: 'flex', gap: '8px' }}>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', backgroundColor: '#eef2ff', color: '#4338ca', borderColor: '#c7d2fe' }}
+                                                            onClick={() => setActiveSession(session)}
+                                                        >
+                                                            View Details / Resume
+                                                        </button>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', color: '#b91c1c', borderColor: '#fca5a5' }}
+                                                            onClick={() => handleDeleteSession(session.id, session.work_order_id)}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {activeSessionsList.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                                        No active printing sessions found. Set up a session to begin.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                        Showing {Math.min((activePage - 1) * activeLimit + 1, activeTotal)} to {Math.min(activePage * activeLimit, activeTotal)} of {activeTotal} entries
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button
+                                            className={styles.secondaryButton}
+                                            disabled={activePage === 1}
+                                            onClick={() => {
+                                                const p = activePage - 1;
+                                                setActivePage(p);
+                                                fetchActiveSessions(p, activeLimit, activeSearch);
+                                            }}
+                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }}
+                                        >
+                                            Previous
+                                        </button>
+                                        <span style={{ display: 'flex', alignItems: 'center', padding: '0 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                                            Page {activePage} of {Math.ceil(activeTotal / activeLimit) || 1}
+                                        </span>
+                                        <button
+                                            className={styles.secondaryButton}
+                                            disabled={activePage >= Math.ceil(activeTotal / activeLimit)}
+                                            onClick={() => {
+                                                const p = activePage + 1;
+                                                setActivePage(p);
+                                                fetchActiveSessions(p, activeLimit, activeSearch);
+                                            }}
+                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }}
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Completed Sessions Panel */}
+                    <div className={styles.card}>
+                        <h3>Completed Printing Sessions History</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, maxWidth: '400px' }}>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    placeholder="Search by WO, Product, PO ID..."
+                                    value={completedSearch}
+                                    onChange={e => setCompletedSearch(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleCompletedSearchSubmit(); }}
+                                    style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                                />
+                                <button
+                                    className={styles.button}
+                                    onClick={handleCompletedSearchSubmit}
+                                    style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                                >
+                                    Search
+                                </button>
+                                {completedSearch && (
+                                    <button
+                                        className={styles.secondaryButton}
+                                        onClick={handleCompletedClear}
+                                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem', color: '#64748b' }}>
+                                <span>Show</span>
+                                <select
+                                    className={styles.select}
+                                    value={completedLimit}
+                                    onChange={e => {
+                                        const newLimit = parseInt(e.target.value);
+                                        setCompletedLimit(newLimit);
+                                        setCompletedPage(1);
+                                        fetchCompletedSessions(1, newLimit, completedSearch);
+                                    }}
+                                    style={{ padding: '0.35rem 1.5rem 0.35rem 0.75rem', width: 'auto', fontSize: '0.85rem' }}
+                                >
+                                    <option value={5}>5</option>
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                </select>
+                                <span>entries</span>
+                            </div>
+                        </div>
+
+                        {sessionsLoading ? (
+                            <div style={{ textAlign: 'center', padding: '1rem' }}>Loading sessions...</div>
+                        ) : (
+                            <>
+                                <div className={styles.tableContainer}>
+                                    <table className={styles.table}>
+                                        <thead>
+                                            <tr>
+                                                <th>WO Number</th>
+                                                <th>Product Name</th>
+                                                <th>Target Qty</th>
+                                                <th>Stencil Name</th>
+                                                <th>Squeegee No</th>
+                                                <th>Solder Paste</th>
+                                                <th>Side</th>
+                                                <th>Status</th>
+                                                <th>Closed At</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {completedSessionsList.map(session => (
+                                                <tr key={session.id}>
+                                                    <td style={{ fontWeight: 600, color: '#334155' }}>{session.work_order_id}</td>
+                                                    <td>{session.product_name || '-'}</td>
+                                                    <td>{session.work_order_quantity || '-'}</td>
+                                                    <td>{session.stencil_name || '-'}</td>
+                                                    <td>{session.squeegee_number}</td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{session.solder_paste_barcode}</td>
+                                                    <td>{session.side}</td>
+                                                    <td>{getStatusBadge(session.status)}</td>
+                                                    <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                                        {session.updated_at ? new Date(session.updated_at).toLocaleString() : new Date(session.created_at).toLocaleString()}
+                                                    </td>
+                                                    <td style={{ display: 'flex', gap: '8px' }}>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                                                            onClick={() => setActiveSession(session)}
+                                                        >
+                                                            View Details
+                                                        </button>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                            onClick={() => handleExportExcel(session.id, session.work_order_id)}
+                                                        >
+                                                            Excel 📊
+                                                        </button>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                            onClick={() => handleExportFullPDF(session.id, session.work_order_id)}
+                                                        >
+                                                            PDF 📄
+                                                        </button>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', color: '#b91c1c', borderColor: '#fca5a5' }}
+                                                            onClick={() => handleDeleteSession(session.id, session.work_order_id)}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {completedSessionsList.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                                        No historical printing sessions found.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                        Showing {Math.min((completedPage - 1) * completedLimit + 1, completedTotal)} to {Math.min(completedPage * completedLimit, completedTotal)} of {completedTotal} entries
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button
+                                            className={styles.secondaryButton}
+                                            disabled={completedPage === 1}
+                                            onClick={() => {
+                                                const p = completedPage - 1;
+                                                setCompletedPage(p);
+                                                fetchCompletedSessions(p, completedLimit, completedSearch);
+                                            }}
+                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }}
+                                        >
+                                            Previous
+                                        </button>
+                                        <span style={{ display: 'flex', alignItems: 'center', padding: '0 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                                            Page {completedPage} of {Math.ceil(completedTotal / completedLimit) || 1}
+                                        </span>
+                                        <button
+                                            className={styles.secondaryButton}
+                                            disabled={completedPage >= Math.ceil(completedTotal / completedLimit)}
+                                            onClick={() => {
+                                                const p = completedPage + 1;
+                                                setCompletedPage(p);
+                                                fetchCompletedSessions(p, completedLimit, completedSearch);
+                                            }}
+                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }}
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                </div>
+            ) : (
+                // ─────────────────────────────────────────────────────────────
+                // VIEW 2: ACTIVE SCANNING & DETAILS VIEW
+                // ─────────────────────────────────────────────────────────────
+                <div>
+                    
+                    {/* Header bar and controls */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
+                        <button className={styles.detailBackButton} onClick={() => { setActiveSession(null); fetchSessionsLists(); }}>
+                            ← Back to Session Setup
+                        </button>
+                        
+                        {/* Status controls removed to simplify workflow */}
+                    </div>
+
+                    {/* Session Properties Overview Card */}
+                    <div className={styles.detailHeaderCard}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1.25rem' }}>
+                            <div>
+                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Work Order Number</p>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.work_order_id}</strong>
+                            </div>
+                            <div>
+                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Product Name</p>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.product_name || 'N/A'}</strong>
+                            </div>
+                            <div>
+                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Stencil Name</p>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.stencil_name || 'N/A'}</strong>
+                            </div>
+                            <div>
+                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>PCB Side</p>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.side}</strong>
+                            </div>
+                            <div>
+                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Squeegee Number</p>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.squeegee_number}</strong>
+                            </div>
+                            <div>
+                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Solder Paste Barcode</p>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                                    {activeSession.solder_paste_barcode}
+                                </strong>
+                            </div>
+                            <div>
+                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Session Status</p>
+                                <div style={{ marginTop: '0.2rem' }}>{getStatusBadge(activeSession.status)}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Stats Dashboard Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                        
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #2563eb', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>WO Quantity</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e293b' }}>{stats.workOrderQuantity}</h2>
+                        </div>
+
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #6366f1', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Processed</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e293b' }}>{stats.processedQuantity}</h2>
+                        </div>
+
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #16a34a', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#15803d' }}>{stats.passed}</h2>
+                        </div>
+
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #dc2626', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Failed</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b91c1c' }}>{stats.failed}</h2>
+                        </div>
+
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #64748b', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Pending</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#475569' }}>{stats.pending}</h2>
+                        </div>
+
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #d97706', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Invalid</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b45309' }}>{stats.invalid}</h2>
+                        </div>
+
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #ea580c', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Duplicate</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#c2410c' }}>{stats.duplicate}</h2>
+                        </div>
+
+                    </div>
+
+                    {/* Barcode Scanner Input */}
+                    {activeSession.status !== 'Completed' ? (
+                        <div className={styles.detailScanCard}>
+                            <form onSubmit={handleBarcodeSubmit} className={styles.detailScanForm}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1.05rem', fontWeight: 700 }}>
+                                        High-Speed Production Scanner Input
+                                    </h4>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#16a34a', fontWeight: 600 }}>
+                                        <span className={styles.blinkingDot} style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', display: 'inline-block' }}></span>
+                                        Scanner Focus Locked
+                                    </div>
+                                </div>
+                                <div className={styles.detailScanRow}>
+                                    <input
+                                        ref={scanInputRef}
+                                        type="text"
+                                        className={styles.detailScanInput}
+                                        placeholder="Scan PCB Barcode / Serial Number..."
+                                        value={scanBarcodeVal}
+                                        onChange={e => setScanBarcodeVal(e.target.value)}
+                                        disabled={isScanning || isModalOpen}
+                                        autoFocus={!isModalOpen}
+                                    />
+                                    <button type="submit" className={styles.detailScanButton} disabled={isScanning || isModalOpen}>
+                                        {isScanning ? 'Validating...' : 'Submit'}
+                                    </button>
+                                </div>
+                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
+                                    💡 Place your cursor in the input box or scan directly. Valid barcodes will automatically record a <strong>PASS</strong> status. Duplicate scans will trigger alerts without interrupting high-speed scanner flow.
+                                </p>
+                            </form>
+                        </div>
+                    ) : (
+                        <div className={styles.detailScanCard} style={{ background: '#f0fdf4', border: '1px dashed #16a34a', textAlign: 'center', padding: '1.5rem' }}>
+                            <span style={{ fontSize: '1.5rem', marginRight: '6px' }}>✅</span>
+                            <strong>This session has been completed and is read-only.</strong> Scanning is disabled.
+                        </div>
+                    )}
+
+                    {/* Scanned Serial List Table */}
+                    <div className={styles.detailItemsSection}>
+                        <div className={styles.detailItemsHeader}>
+                            <h3>Scanned PCB Inspection Logs ({stats.scans.length} rows)</h3>
+                            
+                            {/* Exports & Download Bar */}
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginRight: 2 }}>Reports:</span>
+                                <button
+                                    className={styles.secondaryButton}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', background: 'linear-gradient(135deg,#1e3a5f,#2563eb)', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                                    onClick={() => handleExportExcel()}
+                                    title="Download full Excel production report"
+                                >
+                                    📊 Excel Report
+                                </button>
+                                <button
+                                    className={styles.secondaryButton}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', background: 'linear-gradient(135deg,#7c3aed,#4338ca)', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                                    onClick={() => handleExportFullPDF()}
+                                    title="Download full PDF production report"
+                                >
+                                    📄 PDF Report
+                                </button>
+                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginLeft: 6, marginRight: 2 }}>Raw:</span>
+                                <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleExportCSV} title="Download CSV scan log">
+                                    CSV 📄
+                                </button>
+                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginLeft: 6, marginRight: 2 }}>QR:</span>
+                                <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleDownloadAllQRPDF} title="Download all QR labels as PDF">
+                                    All QR Labels (PDF) 🏷️
+                                </button>
+                                <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleDownloadAllQRPNG} disabled={isZipping} title="Download all QR images as ZIP">
+                                    {isZipping ? 'Compiling ZIP...' : 'All QR Images (ZIP) 📦'}
                                 </button>
                             </div>
                         </div>
 
-                        <div className={styles.card}>
-                            <h3>Pending Printing Sessions</h3>
-                            <div className={styles.tableContainer}>
-                                <table className={styles.table}>
-                                    <thead>
-                                        <tr>
-                                            <th>WO NUMBER</th>
-                                            <th>PRODUCT NAME</th>
-                                            <th>WO QTY</th>
-                                            <th>PANEL QTY</th>
-                                            <th>STENCIL NAME</th>
-                                            <th>SQUEEGEE NUMBER</th>
-                                            <th>SOLDER PASTE</th>
-                                            <th>SIDE</th>
-                                            <th>TIME</th>
-                                            <th>ACTION</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {pendingEntries.map((entry) => (
-                                            <tr key={entry.id}>
-                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
-                                                <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                <td 
-                                                    className="smt-clickable-count smt-total"
-                                                    onClick={() => setSelectedCount({
-                                                        workOrderId: entry.work_order_id,
-                                                        stage: 'Printing',
-                                                        type: 'total',
-                                                        label: 'WO Quantity'
-                                                    })}
-                                                >
-                                                    {entry.quantity || entry.wo_qty}
-                                                </td>
-                                                <td 
-                                                    className="smt-clickable-count smt-panel-count"
-                                                    onClick={() => setSelectedCount({
-                                                        workOrderId: entry.work_order_id,
-                                                        stage: 'Printing',
-                                                        type: 'total',
-                                                        label: 'Panel Quantity'
-                                                    })}
-                                                >
-                                                    {entry.panel_qty || 'N/A'}
-                                                </td>
-                                                <td>{entry.stencil_name || '-'}</td>
-                                                <td>{entry.squeegee_number || '-'}</td>
-                                                <td>{entry.solder_paste || '-'}</td>
-                                                <td>{entry.side || '-'}</td>
-                                                <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                                    {new Date(entry.timestamp).toLocaleTimeString()}
-                                                </td>
-                                                <td style={{ display: 'flex', gap: '5px' }}>
-                                                    <button
-                                                        className={styles.button}
-                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', height: 'auto', lineHeight: 'normal', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}
-                                                        onClick={() => setViewingWoId(entry.work_order_id)}
-                                                    >
-                                                        Resume
-                                                    </button>
-                                                    <button
-                                                        className={styles.secondaryButton}
-                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                        onClick={async () => {
-                                                            if (!isSuperAdmin) {
-                                                                addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                                return;
-                                                            }
-                                                            if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                addToast("Entry deleted successfully.", "success");
-                                                            }
-                                                        }}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {pendingEntries.length === 0 && (
-                                            <tr>
-                                                <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                    No pending sessions found.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                        <div className={styles.detailTableContainer}>
+                            <table className={styles.table} style={{ marginTop: 0 }}>
+                                <thead>
+                                    <tr>
+                                        <th>Barcode</th>
+                                        <th>Scanned By</th>
+                                        <th>Date & Time</th>
+                                        <th>Status</th>
+                                        <th>Failure Remark</th>
+                                        <th>Repair Time</th>
+                                        <th>Repair Remark</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {stats.scans.map(scan => (
+                                        <tr key={scan.scan_id} className={scan.result === 'FAIL' ? styles.detailPendingRow : (scan.result === 'INVALID' ? '' : '')}>
+                                            
+                                            {/* Barcode number cell (Inline editable) */}
+                                            <td style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.5px' }}>
+                                                {editingScanId === scan.scan_id ? (
+                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                        <input
+                                                            type="text"
+                                                            className={styles.input}
+                                                            style={{ padding: '0.35rem 0.5rem', width: '220px', fontSize: '0.9rem' }}
+                                                            value={editingBarcodeText}
+                                                            onChange={e => setEditingBarcodeText(e.target.value)}
+                                                            onKeyDown={e => {
+                                                                 if (e.key === 'Enter') submitInlineEdit(scan.scan_id);
+                                                                 if (e.key === 'Escape') setEditingScanId(null);
+                                                            }}
+                                                            autoFocus
+                                                        />
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: '#dcfce7', color: '#15803d', borderColor: '#86efac' }}
+                                                            onClick={() => submitInlineEdit(scan.scan_id)}
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: '#fee2e2', color: '#b91c1c', borderColor: '#fca5a5' }}
+                                                            onClick={() => setEditingScanId(null)}
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span>{scan.barcode}</span>
+                                                )}
+                                            </td>
 
-                        <div className={styles.card}>
-                            <h3>Completed Printing Sessions</h3>
-                            <div className={styles.tableContainer}>
-                                <table className={styles.table}>
-                                    <thead>
-                                        <tr>
-                                            <th>WO NUMBER</th>
-                                            <th>PRODUCT NAME</th>
-                                            <th>WO QTY</th>
-                                            <th>PANEL QTY</th>
-                                            <th>STENCIL NAME</th>
-                                            <th>SQUEEGEE NUMBER</th>
-                                            <th>SOLDER PASTE</th>
-                                            <th>SIDE</th>
-                                            <th>TIME</th>
-                                            <th>DOWNLOAD</th>
-                                            <th>ACTION</th>
+                                            <td>{scan.scanned_by}</td>
+
+                                            <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                {formatTimestamp(scan.scanned_at)}
+                                            </td>
+
+                                            <td>{getScanResultBadge(scan.result)}</td>
+                                            
+                                            <td style={{ color: scan.remark ? '#b91c1c' : '#64748b', fontWeight: scan.remark ? 600 : 'normal' }}>
+                                                {renderRemarkCell(scan.remark, 'Failure')}
+                                            </td>
+
+                                            <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                {formatTimestamp(scan.repair_time)}
+                                            </td>
+
+                                            <td style={{ color: scan.repair_remark ? '#166534' : '#64748b', fontWeight: scan.repair_remark ? 600 : 'normal' }}>
+                                                {renderRemarkCell(scan.repair_remark, 'Repair')}
+                                            </td>
+
+                                            <td style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                                {/* Edit Barcode – icon only */}
+                                                {activeSession.status !== 'Completed' && scan.result !== 'INVALID' && (
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        title="Edit barcode"
+                                                        style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
+                                                        onClick={() => startInlineEdit(scan)}
+                                                    >
+                                                        ✏️
+                                                    </button>
+                                                )}
+
+                                                {/* Transition PASS to FAIL – icon only */}
+                                                {activeSession.status !== 'Completed' && scan.result === 'PASS' && (
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        title="Mark as Failed"
+                                                        style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px', color: '#dc2626', borderColor: '#fca5a5' }}
+                                                        onClick={() => triggerFailRow(scan)}
+                                                    >
+                                                        ❌
+                                                    </button>
+                                                )}
+
+                                                {/* Single QR Preview Modal Trigger – icon only */}
+                                                {scan.result !== 'INVALID' && (
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        title="View QR code"
+                                                        style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
+                                                        onClick={() => setSelectedQrBarcode(scan.barcode)}
+                                                    >
+                                                        🔳
+                                                    </button>
+                                                )}
+                                            </td>
+
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {completedEntries.map((entry) => (
-                                            <tr key={entry.id}>
-                                                <td style={{ color: '#2563eb', fontWeight: 600 }}>{(entry.work_order_id || '').toUpperCase()}</td>
-                                                <td>{(entry.product_name || '').toUpperCase()}</td>
-                                                <td 
-                                                    className="smt-clickable-count smt-total"
-                                                    onClick={() => setSelectedCount({
-                                                        workOrderId: entry.work_order_id,
-                                                        stage: 'Printing',
-                                                        type: 'total',
-                                                        label: 'WO Quantity'
-                                                    })}
-                                                >
-                                                    {entry.quantity || entry.wo_qty}
-                                                </td>
-                                                <td 
-                                                    className="smt-clickable-count smt-panel-count"
-                                                    onClick={() => setSelectedCount({
-                                                        workOrderId: entry.work_order_id,
-                                                        stage: 'Printing',
-                                                        type: 'total',
-                                                        label: 'Panel Quantity'
-                                                    })}
-                                                >
-                                                    {entry.panel_qty || 'N/A'}
-                                                </td>
-                                                <td>{entry.stencil_name || '-'}</td>
-                                                <td>{entry.squeegee_number || '-'}</td>
-                                                <td>{entry.solder_paste || '-'}</td>
-                                                <td>{entry.side || '-'}</td>
-                                                <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                                    {new Date(entry.timestamp).toLocaleTimeString()}
-                                                </td>
-                                                <td>
-                                                    <button 
-                                                        className={styles.secondaryButton}
-                                                        disabled={exportingWoId === entry.work_order_id}
-                                                        onClick={() => handleExportExcel(entry.work_order_id, 'Printing')}
-                                                        style={{
-                                                            padding: '0.4rem',
-                                                            minWidth: '40px',
-                                                            width: '40px',
-                                                            height: '40px',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            borderRadius: '50%',
-                                                            backgroundColor: '#f0fdf4',
-                                                            border: '1px solid #bbf7d0',
-                                                            color: '#166534',
-                                                            cursor: 'pointer',
-                                                            transition: 'all 0.2s ease',
-                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                                                        }}
-                                                        title="Export to Excel"
-                                                        onMouseEnter={(e) => {
-                                                            e.currentTarget.style.backgroundColor = '#166534';
-                                                            e.currentTarget.style.color = '#ffffff';
-                                                            e.currentTarget.style.borderColor = '#166534';
-                                                            e.currentTarget.style.transform = 'scale(1.08)';
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.style.backgroundColor = '#f0fdf4';
-                                                            e.currentTarget.style.color = '#166534';
-                                                            e.currentTarget.style.borderColor = '#bbf7d0';
-                                                            e.currentTarget.style.transform = 'scale(1)';
-                                                        }}
-                                                    >
-                                                        {exportingWoId === entry.work_order_id ? (
-                                                            <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>...</span>
-                                                        ) : (
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                                                                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                                                                <polyline points="14 2 14 8 20 8"/>
-                                                                <line x1="8" y1="13" x2="16" y2="13"/>
-                                                                <line x1="8" y1="17" x2="16" y2="17"/>
-                                                                <line x1="10" y1="9" x2="9" y2="9"/>
-                                                            </svg>
-                                                        )}
-                                                    </button>
-                                                </td>
-                                                <td style={{ display: 'flex', gap: '5px' }}>
-                                                    <button
-                                                        className={styles.secondaryButton}
-                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                                                        onClick={() => setViewingWoId(entry.work_order_id)}
-                                                    >
-                                                        View
-                                                    </button>
-                                                    <button
-                                                        className={styles.secondaryButton}
-                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                                                        onClick={async () => {
-                                                            if (!isSuperAdmin) {
-                                                                addToast("Access Denied: Only Super Admin can delete.", "error");
-                                                                return;
-                                                            }
-                                                            if (window.confirm("Are you sure you want to delete this entry?")) {
-                                                                await apiFetch(`/api/smt/process-setups/${entry.id}`, { method: 'DELETE' });
-setSavedEntries(savedEntries.filter(e => e.id !== entry.id));
-                addToast("Entry deleted successfully.", "success");
-                                                            }
-                                                        }}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {completedEntries.length === 0 && (
-                                            <tr>
-                                                <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                                    No completed sessions found.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
+                                    ))}
+                                    {stats.scans.length === 0 && (
+                                        <tr>
+                                            <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                                No PCBs scanned in this session yet. Scan barcodes above to record inspections.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
-                    </>
-                )}
-            </div>
-            {selectedCount && (
-                <SMTCountDetailsModal
-                    workOrderId={selectedCount.workOrderId}
-                    stage={selectedCount.stage}
-                    type={selectedCount.type}
-                    label={selectedCount.label}
-                    onClose={() => setSelectedCount(null)}
-                />
+                    </div>
+
+                </div>
             )}
-        </>
+
+            {/* ─── MODAL 1: ABORT SESSION REMARK DIALOG ───────────────────────── */}
+            {showAbortModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className={styles.card} style={{ width: '450px', padding: '1.75rem', margin: 0, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)' }}>
+                        <h3 style={{ borderBottom: 'none', padding: 0, marginBottom: '1rem' }}>🚨 Abort Printing Session</h3>
+                        <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '1.25rem' }}>
+                            Aborting a session is a critical operational event. Please specify the mandatory failure remark (e.g. machine breakdown, paste depletion, stencil damage).
+                        </p>
+                        <div className={styles.inputGroup} style={{ marginBottom: '1.5rem' }}>
+                            <label>Abort Reason / Failure Remark *</label>
+                            <textarea
+                                className={styles.input}
+                                style={{ minHeight: '90px', fontFamily: 'inherit', resize: 'vertical' }}
+                                placeholder="Enter failure details..."
+                                value={abortRemark}
+                                onChange={e => setAbortRemark(e.target.value)}
+                                required
+                                autoFocus
+                            />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                            <button
+                                className={styles.secondaryButton}
+                                onClick={() => { setShowAbortModal(false); setAbortRemark(''); }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className={styles.button}
+                                style={{ backgroundColor: '#dc2626', backgroundImage: 'none' }}
+                                onClick={submitAbortSession}
+                            >
+                                Abort Session
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── MODAL 2: FAIL SCAN ROW REMARK DIALOG ───────────────────────── */}
+            {selectedScanToFail && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className={styles.card} style={{ width: '450px', padding: '1.75rem', margin: 0, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)' }}>
+                        <h3 style={{ borderBottom: 'none', padding: 0, marginBottom: '1rem' }}>⚠️ Report Defective PCB (FAIL)</h3>
+                        <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '1.25rem' }}>
+                            You are changing the inspection status of barcode <strong>{selectedScanToFail.barcode}</strong> from <strong>PASS</strong> to <strong>FAIL</strong>. Please input the mandatory failure remark.
+                        </p>
+                        <div className={styles.inputGroup} style={{ marginBottom: '1.5rem' }}>
+                            <label>Failure Reason / Defect Remarks *</label>
+                            <textarea
+                                className={styles.input}
+                                style={{ minHeight: '90px', fontFamily: 'inherit', resize: 'vertical' }}
+                                placeholder="E.g. solder bridging, smudge defect, insufficient coverage..."
+                                value={failRemark}
+                                onChange={e => setFailRemark(e.target.value)}
+                                required
+                                autoFocus
+                            />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                            <button
+                                className={styles.secondaryButton}
+                                onClick={() => setSelectedScanToFail(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className={styles.button}
+                                style={{ backgroundColor: '#dc2626', backgroundImage: 'none' }}
+                                onClick={submitFailRow}
+                            >
+                                Mark as FAIL
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── MODAL 2b: REPAIR SCAN ROW REMARK DIALOG ───────────────────────── */}
+            {selectedScanToRepair && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className={styles.card} style={{ width: '450px', padding: '1.75rem', margin: 0, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)' }}>
+                        <h3 style={{ borderBottom: 'none', padding: 0, marginBottom: '1rem' }}>🔧 Repair Process (FAIL → PASS)</h3>
+                        <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '1.25rem' }}>
+                            Barcode <strong>{selectedScanToRepair.barcode}</strong> has a <strong>FAIL</strong> status. Please enter the mandatory Repair Remark to change its status to <strong>PASS</strong>.
+                        </p>
+                        <div className={styles.inputGroup} style={{ marginBottom: '1.5rem' }}>
+                            <label>Repair Details / Actions Taken *</label>
+                            <textarea
+                                className={styles.input}
+                                style={{ minHeight: '90px', fontFamily: 'inherit', resize: 'vertical' }}
+                                placeholder="E.g. cleaned pads, reflowed joints, solder paste reapplied..."
+                                value={repairRemark}
+                                onChange={e => setRepairRemark(e.target.value)}
+                                required
+                                autoFocus
+                            />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                            <button
+                                className={styles.secondaryButton}
+                                onClick={() => setSelectedScanToRepair(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className={styles.button}
+                                style={{ backgroundColor: '#166534', backgroundImage: 'none' }}
+                                onClick={submitRepairRow}
+                            >
+                                Complete Repair
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── MODAL 3: SINGLE QR CODE PREVIEW MODAL ──────────────────────── */}
+            {selectedQrBarcode && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className={styles.card} style={{ width: '380px', padding: '1.75rem', margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+                        <h3 style={{ borderBottom: 'none', padding: 0, marginBottom: '1.5rem', width: '100%', textAlign: 'center' }}>
+                            PCB Barcode QR Code
+                        </h3>
+                        
+                        {singleQrDataUrl ? (
+                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <img src={singleQrDataUrl} alt="QR Code Label" style={{ width: '200px', height: '236px', display: 'block' }} />
+                            </div>
+                        ) : (
+                            <div style={{ height: '236px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                                Generating QR Canvas...
+                            </div>
+                        )}
+
+                        <p style={{ margin: '1rem 0 1.5rem', fontSize: '0.85rem', color: '#64748b', textAlign: 'center' }}>
+                            Barcode ID: <strong style={{ color: '#0f172a', fontFamily: 'monospace' }}>{selectedQrBarcode}</strong>
+                        </p>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%', marginBottom: '1rem' }}>
+                            <button className={styles.secondaryButton} style={{ fontSize: '0.85rem' }} onClick={downloadSinglePNG}>
+                                PNG Image 📥
+                            </button>
+                            <button className={styles.secondaryButton} style={{ fontSize: '0.85rem' }} onClick={downloadSinglePDF}>
+                                PDF Label 📥
+                            </button>
+                        </div>
+                        
+                        <button
+                            className={styles.button}
+                            style={{ width: '100%', backgroundColor: '#64748b', backgroundImage: 'none' }}
+                            onClick={() => setSelectedQrBarcode(null)}
+                        >
+                            Close Preview
+                        </button>
+                    </div>
+                </div>
+            )}
+            {/* ─── MODAL: VIEW FULL REMARK DIALOG ───────────────────────── */}
+            {viewingRemarkText && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className={styles.card} style={{ width: '450px', padding: '1.75rem', margin: 0, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)' }}>
+                        <h3 style={{ borderBottom: 'none', padding: 0, marginBottom: '1rem', color: viewingRemarkTitle.includes('Failure') ? '#b91c1c' : '#166534' }}>
+                            {viewingRemarkTitle}
+                        </h3>
+                        <div style={{
+                            backgroundColor: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '0.5rem',
+                            padding: '1rem',
+                            maxHeight: '200px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            fontSize: '0.95rem',
+                            color: '#1e293b',
+                            lineHeight: '1.5',
+                            marginBottom: '1.5rem'
+                        }}>
+                            {viewingRemarkText}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button
+                                className={styles.secondaryButton}
+                                style={{ padding: '0.5rem 1.25rem', fontWeight: 600, minWidth: '80px' }}
+                                onClick={() => { setViewingRemarkText(null); setViewingRemarkTitle(''); }}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <style>{`
+                @keyframes slideIn {
+                    from { transform: translateY(1rem); opacity: 0; }
+                    to { transform: translateY(0); opacity: 1; }
+                }
+                .blinkingDot {
+                    animation: blink 1.2s infinite;
+                }
+                @keyframes blink {
+                    0% { opacity: 0.3; }
+                    50% { opacity: 1; }
+                    100% { opacity: 0.3; }
+                }
+            `}</style>
+        </div>
     );
 };

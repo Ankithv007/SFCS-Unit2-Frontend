@@ -65,7 +65,6 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
 const Document: React.FC = () => {
     const { smtUser } = useSmtAuth();
     const navigate = useNavigate();
-    const isAdmin = smtUser?.role?.toLowerCase() === 'admin' || smtUser?.userId === 'ADMIN';
 
     // Toasts
     const [toasts, setToasts] = useState<Toast[]>([]);
@@ -332,6 +331,11 @@ const Document: React.FC = () => {
 
     // Soft Delete
     const handleDeleteQms = async (qmsId: number) => {
+        const isSuperAdmin = smtUser?.role === 'Super Admin';
+        if (!isSuperAdmin) {
+            addToast("Only Super Admin is authorized to delete records.\nPlease contact your Super Admin if this record needs to be deleted.", "error");
+            return;
+        }
         if (!window.confirm('Are you sure you want to soft delete this Document Process record? This action will be logged in the audit trail.')) {
             return;
         }
@@ -985,22 +989,20 @@ const Document: React.FC = () => {
                             </div>
                             
                             {/* Delete record at bottom if Admin */}
-                            {isAdmin && (
-                                <div style={{ marginTop: '2.5rem', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
-                                    <button 
-                                        className={`${styles.button} ${styles.btnDanger}`} 
-                                        onClick={async () => {
-                                            if (selectedQmsRecord) {
-                                                await handleDeleteQms(selectedQmsRecord.id);
-                                                setSelectedQmsRecord(null);
-                                            }
-                                        }}
-                                    >
-                                        <Trash2 size={16} style={{ marginRight: '6px' }} />
-                                        Soft Delete Record
-                                    </button>
-                                </div>
-                            )}
+                            <div style={{ marginTop: '2.5rem', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
+                                <button 
+                                    className={`${styles.button} ${styles.btnDanger}`} 
+                                    onClick={async () => {
+                                        if (selectedQmsRecord) {
+                                            await handleDeleteQms(selectedQmsRecord.id);
+                                            setSelectedQmsRecord(null);
+                                        }
+                                    }}
+                                >
+                                    <Trash2 size={16} style={{ marginRight: '6px' }} />
+                                    Soft Delete Record
+                                </button>
+                            </div>
 
                         </div>
                     </div>

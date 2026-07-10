@@ -68,7 +68,7 @@ export const WorkOrder: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
     const navigate = useNavigate();
-    const isSuperAdmin = user?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
+    const isSuperAdmin = user?.role === 'Super Admin' || smtUser?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
     const [workOrderId, setWorkOrderId] = useState('');
     const [poId, setPoId] = useState('');
     const [remark, setRemark] = useState('');
@@ -468,7 +468,7 @@ export const WorkOrder: React.FC = () => {
 
     const handleDeleteWorkOrder = async (id: string) => {
         if (!isSuperAdmin) {
-            addToast("Access Denied: Only Super Admin can delete.", "error");
+            addToast("Only Super Admin is authorized to delete records.\nPlease contact your Super Admin if this record needs to be deleted.", "error");
             return;
         }
         if (!window.confirm(`Are you sure you want to delete Work Order ${id}? This will also delete all associated serial numbers, inspections, and PO document files.`)) {
@@ -1019,14 +1019,16 @@ export const WorkOrder: React.FC = () => {
                                                         >
                                                             ✏️ Edit
                                                         </button>
-                                                        <button
-                                                            onClick={() => handleDeleteWorkOrder(wo.work_order_id)}
-                                                            className={styles.deleteButton}
-                                                            disabled={deletingId === wo.work_order_id}
-                                                            style={{ opacity: deletingId === wo.work_order_id ? 0.5 : 1, padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
-                                                        >
-                                                            {deletingId === wo.work_order_id ? '...' : '🗑️'}
-                                                        </button>
+
+                                                            <button
+                                                                onClick={() => handleDeleteWorkOrder(wo.work_order_id)}
+                                                                className={styles.deleteButton}
+                                                                disabled={deletingId === wo.work_order_id}
+                                                                style={{ opacity: deletingId === wo.work_order_id ? 0.5 : 1, padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                                                            >
+                                                                {deletingId === wo.work_order_id ? '...' : '🗑️'}
+                                                            </button>
+
                                                     </div>
                                                 </td>
                                             </tr>

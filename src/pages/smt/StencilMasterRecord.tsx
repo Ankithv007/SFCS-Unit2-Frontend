@@ -6,7 +6,6 @@ import { apiFetch } from '../../utils/api';
 
 interface StencilRecord {
     id: string;
-    stencil_id: string;
     stencil_name: string;
     job_number: string;
     revision: string;
@@ -53,8 +52,8 @@ const StencilMasterRecord: React.FC = () => {
     // Filtering, Sorting, and Pagination Controls
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [sortBy, setSortBy] = useState('created_at');
-    const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+    const [sortBy, setSortBy] = useState('stencil_name');
+    const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [loading, setLoading] = useState(false);
@@ -423,9 +422,6 @@ const StencilMasterRecord: React.FC = () => {
                     <table className={styles.table}>
                         <thead>
                             <tr>
-                                <th onClick={() => handleSort('stencil_id')} className={styles.sortable}>
-                                    Stencil ID {sortBy === 'stencil_id' && (sortOrder === 'ASC' ? '▲' : '▼')}
-                                </th>
                                 <th onClick={() => handleSort('stencil_name')} className={styles.sortable}>
                                     Stencil / Model Name {sortBy === 'stencil_name' && (sortOrder === 'ASC' ? '▲' : '▼')}
                                 </th>
@@ -441,31 +437,26 @@ const StencilMasterRecord: React.FC = () => {
                                 </th>
                                 <th style={{ textAlign: 'center' }}>Sides</th>
                                 <th style={{ textAlign: 'center' }}>Status</th>
-                                <th>Created By</th>
-                                <th onClick={() => handleSort('created_at')} className={styles.sortable} style={{ textAlign: 'center' }}>
-                                    Created Date & Time {sortBy === 'created_at' && (sortOrder === 'ASC' ? '▲' : '▼')}
-                                </th>
                                 <th style={{ textAlign: 'center' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading ? (
                                 <tr>
-                                    <td colSpan={11} style={{ textAlign: 'center', padding: '2rem' }}>
+                                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
                                         Loading records...
                                     </td>
                                 </tr>
                             ) : records.length === 0 ? (
                                 <tr>
-                                    <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                                         No stencil records found.
                                     </td>
                                 </tr>
                             ) : (
                                 records.map((rec) => (
                                     <tr key={rec.id}>
-                                        <td style={{ fontWeight: 'bold' }}>{rec.stencil_id}</td>
-                                        <td>{rec.stencil_name}</td>
+                                        <td style={{ fontWeight: 'bold' }}>{rec.stencil_name}</td>
                                         <td>{rec.job_number}</td>
                                         <td>{rec.revision}</td>
                                         <td>{rec.thickness_mills}</td>
@@ -479,8 +470,6 @@ const StencilMasterRecord: React.FC = () => {
                                                 {rec.status}
                                             </span>
                                         </td>
-                                        <td>{rec.created_by_name}</td>
-                                        <td style={{ textAlign: 'center' }}>{rec.created_at ? new Date(rec.created_at).toLocaleString() : '-'}</td>
                                         <td style={{ textAlign: 'center' }}>
                                             <div className={styles.actionCell} style={{ justifyContent: 'center' }}>
                                                 <button
@@ -548,8 +537,8 @@ const StencilMasterRecord: React.FC = () => {
                         <div className={styles.modalBody}>
                             <div className={styles.grid2}>
                                 <div className={styles.inputGroup}>
-                                    <label>Manual Stencil Registration</label>
-                                    <div className={styles.readOnlyValue}>{viewRecord.stencil_id}</div>
+                                    <label>Stencil / Model Name</label>
+                                    <div className={styles.readOnlyValue}>{viewRecord.stencil_name}</div>
                                 </div>
                                 <div className={styles.inputGroup}>
                                     <label>Job Number</label>
@@ -558,50 +547,56 @@ const StencilMasterRecord: React.FC = () => {
                             </div>
                             <div className={styles.grid2}>
                                 <div className={styles.inputGroup}>
-                                    <label>Stencil / Model Name</label>
-                                    <div className={styles.readOnlyValue}>{viewRecord.stencil_name}</div>
-                                </div>
-                                <div className={styles.inputGroup}>
                                     <label>Revision</label>
                                     <div className={styles.readOnlyValue}>{viewRecord.revision}</div>
                                 </div>
-                            </div>
-                            <div className={styles.grid2}>
                                 <div className={styles.inputGroup}>
                                     <label>Thickness</label>
                                     <div className={styles.readOnlyValue}>{viewRecord.thickness_mills}</div>
                                 </div>
+                            </div>
+                            <div className={styles.grid2}>
                                 <div className={styles.inputGroup}>
                                     <label>Manufacturing Date</label>
                                     <div className={styles.readOnlyValue}>
                                         {viewRecord.manufacturing_date ? new Date(viewRecord.manufacturing_date).toISOString().split('T')[0] : ''}
                                     </div>
                                 </div>
-                            </div>
-                            <div className={styles.grid2}>
                                 <div className={styles.inputGroup}>
                                     <label>Sides</label>
                                     <div className={styles.readOnlyValue}>{viewRecord.side}</div>
                                 </div>
+                            </div>
+                            <div className={styles.grid2}>
+                                <div className={styles.inputGroup}>
+                                    <label>Status</label>
+                                    <div className={styles.readOnlyValue}>{viewRecord.status}</div>
+                                </div>
+                            </div>
+                            {/* Remarks */}
+                            {viewRecord.remarks && viewRecord.remarks.trim() && (
+                                <div className={styles.inputGroup} style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+                                    <label>Remarks</label>
+                                    <div className={styles.readOnlyValue}>{viewRecord.remarks}</div>
+                                </div>
+                            )}
+
+                            {/* Audit Information */}
+                            <h4 style={{ marginTop: '1.5rem', marginBottom: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem', color: '#475569', fontSize: '0.95rem', fontWeight: 'bold' }}>
+                                📋 Audit Information
+                            </h4>
+                            <div className={styles.grid2}>
                                 <div className={styles.inputGroup}>
                                     <label>Created By</label>
                                     <div className={styles.readOnlyValue}>{viewRecord.created_by_name}</div>
                                 </div>
-                            </div>
-                            <div className={styles.grid2}>
                                 <div className={styles.inputGroup}>
-                                    <label>Created Date</label>
+                                    <label>Created Date & Time</label>
                                     <div className={styles.readOnlyValue}>
                                         {viewRecord.created_at ? new Date(viewRecord.created_at).toLocaleString() : ''}
                                     </div>
                                 </div>
                             </div>
-                            {viewRecord.remarks && viewRecord.remarks.trim() && (
-                                <div className={styles.inputGroup} style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-                                    <label>Remark</label>
-                                    <div className={styles.readOnlyValue}>{viewRecord.remarks}</div>
-                                </div>
-                            )}
                         </div>
                         <div className={styles.modalFooter}>
                             <button className={styles.secondaryButton} onClick={() => setViewRecord(null)}>
@@ -626,12 +621,21 @@ const StencilMasterRecord: React.FC = () => {
                             <div className={styles.modalBody}>
                                 <div className={styles.grid2}>
                                     <div className={styles.inputGroup}>
-                                        <label>Stencil ID</label>
-                                        <div className={styles.readOnlyValue}>{editRecord.stencil_id}</div>
-                                    </div>
-                                    <div className={styles.inputGroup}>
                                         <label>Stencil / Model Name</label>
                                         <div className={styles.readOnlyValue}>{editRecord.stencil_name}</div>
+                                    </div>
+                                    <div className={styles.inputGroup}>
+                                        <label>Status <span>*</span></label>
+                                        <select
+                                            className={styles.select}
+                                            value={editStatus}
+                                            onChange={(e) => setEditStatus(e.target.value as any)}
+                                            required
+                                        >
+                                            <option value="ACTIVE">ACTIVE</option>
+                                            <option value="INACTIVE">INACTIVE</option>
+                                            <option value="SCRAPPED">SCRAPPED</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div className={styles.grid2}>
@@ -667,21 +671,6 @@ const StencilMasterRecord: React.FC = () => {
                                             required
                                         />
                                     </div>
-                                    <div className={styles.inputGroup}>
-                                        <label>Status <span>*</span></label>
-                                        <select
-                                            className={styles.select}
-                                            value={editStatus}
-                                            onChange={(e) => setEditStatus(e.target.value as any)}
-                                            required
-                                        >
-                                            <option value="ACTIVE">ACTIVE</option>
-                                            <option value="INACTIVE">INACTIVE</option>
-                                            <option value="SCRAPPED">SCRAPPED</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className={styles.grid2}>
                                     <div className={styles.inputGroup}>
                                         <label>Storage Location</label>
                                         <input

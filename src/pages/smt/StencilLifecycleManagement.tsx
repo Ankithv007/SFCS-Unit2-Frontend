@@ -6,7 +6,6 @@ import { apiFetch } from '../../utils/api';
 
 interface Stencil {
     id: string;
-    stencil_id: string;
     stencil_name: string;
     job_number: string;
     revision: string;
@@ -38,7 +37,6 @@ interface WorkOrder {
 interface LifecycleRecord {
     id: string;
     stencil_record_id: string;
-    stencil_id: string;
     stencil_name: string;
     work_order_id: string;
     work_order_number: string;
@@ -262,7 +260,7 @@ const StencilLifecycleManagement: React.FC = () => {
         const q = stencilSearch.trim().toLowerCase();
         if (!q) return stencils;
         return [...stencils]
-            .filter(s => s.stencil_name.toLowerCase().includes(q) || s.stencil_id.toLowerCase().includes(q))
+            .filter(s => s.stencil_name.toLowerCase().includes(q))
             .sort((a, b) => {
                 const aNameMatch = a.stencil_name.toLowerCase().startsWith(q);
                 const bNameMatch = b.stencil_name.toLowerCase().startsWith(q);
@@ -313,6 +311,7 @@ const StencilLifecycleManagement: React.FC = () => {
 
             // Reload data before triggering toast so that the tables and states update first
             fetchActiveStencils();
+            fetchWorkOrders();
             fetchRecords();
 
             const remaining = res.record?.balance_life_cycle;
@@ -348,6 +347,11 @@ const StencilLifecycleManagement: React.FC = () => {
 
     const handleDeleteRecord = async () => {
         if (!confirmDeleteId) return;
+        if (!isSuperAdmin) {
+            showToast("Only Super Admin is authorized to delete records.\nPlease contact your Super Admin if this record needs to be deleted.", "error");
+            setConfirmDeleteId(null);
+            return;
+        }
 
         try {
             await apiFetch(`/api/smt/stencil-lifecycle/records/${confirmDeleteId}`, {
@@ -441,7 +445,7 @@ const StencilLifecycleManagement: React.FC = () => {
                                                     >
                                                         <span className={styles.dropdownOptionMain}>{s.stencil_name}</span>
                                                         <span className={styles.dropdownOptionSub}>
-                                                            ID: {s.stencil_id} | Rev: {s.revision} | Prints: {s.print_count}
+                                                            Rev: {s.revision} | Prints: {s.print_count}
                                                         </span>
                                                     </li>
                                                 ))
@@ -754,14 +758,18 @@ const StencilLifecycleManagement: React.FC = () => {
                                                 >
                                                     View
                                                 </button>
-                                                {isSuperAdmin && (
-                                                    <button
-                                                        onClick={() => setConfirmDeleteId(rec.id)}
-                                                        className={styles.deleteButton}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                )}
+                                                <button
+                                                    onClick={() => {
+                                                        if (!isSuperAdmin) {
+                                                            showToast("Only Super Admin is authorized to delete records.\nPlease contact your Super Admin if this record needs to be deleted.", "error");
+                                                        } else {
+                                                            setConfirmDeleteId(rec.id);
+                                                        }
+                                                    }}
+                                                    className={styles.deleteButton}
+                                                >
+                                                    Delete
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>

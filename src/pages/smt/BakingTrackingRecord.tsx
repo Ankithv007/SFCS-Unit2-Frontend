@@ -319,6 +319,10 @@ const BakingTrackingRecord: React.FC = () => {
 
     // Handle Delete (Super Admin only)
     const handleDelete = async (id: string) => {
+        if (!isSuperAdmin) {
+            showToast("Only Super Admin is authorized to delete records.\nPlease contact your Super Admin if this record needs to be deleted.", "error");
+            return;
+        }
         if (!window.confirm('Are you sure you want to delete this Baking Tracking Record? This is permanent.')) {
             return;
         }
@@ -741,14 +745,12 @@ const BakingTrackingRecord: React.FC = () => {
                                                 >
                                                     View
                                                 </button>
-                                                {isSuperAdmin && (
-                                                    <button
-                                                        onClick={() => handleDelete(rec.id)}
-                                                        className={styles.deleteButton}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                )}
+                                                <button
+                                                    onClick={() => handleDelete(rec.id)}
+                                                    className={styles.deleteButton}
+                                                >
+                                                    Delete
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>

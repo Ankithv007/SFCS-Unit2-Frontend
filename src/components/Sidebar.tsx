@@ -22,8 +22,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     const [isStencilMgmtExpanded, setIsStencilMgmtExpanded] = useState(false);
     const [isSmtLineExpanded, setIsSmtLineExpanded] = useState(false);
 
-    const isSmtAdmin = (smtUser && ['Super Admin', 'Admin', 'Manager'].includes(smtUser.role)) || 
-                       (user && ['Super Admin', 'Admin', 'Manager'].includes(user.role));
+    const smtUserRole = (smtUser?.role || '').trim().toLowerCase();
+    const userRole = (user?.role || '').trim().toLowerCase();
+    const allowed = ['super admin', 'admin', 'manager'];
+    const isSmtAdmin = allowed.includes(smtUserRole) || allowed.includes(userRole);
 
 
     useEffect(() => {
@@ -114,20 +116,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
 
                 {expandedModule === 'smt' && (
                     <div className={styles.submenu}>
-                        <div
-                            className={`${styles.submenuItem} ${isActive('/smt/work-order') ? styles.activeSubmenu : ''}`}
-                            onClick={() => {
-                                if (isSmtAdmin) {
-                                    navigate('/smt/work-order');
-                                } else {
-                                    showToast('Access Denied: Only Admins or Managers can access this page.', 'error');
-                                }
-                            }}
-                        >
-                            <span className={styles.menuIcon}>
-                                <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
-                            </span> Work Order
-                        </div>
+                        {isSmtAdmin && (
+                            <div
+                                className={`${styles.submenuItem} ${isActive('/smt/work-order') ? styles.activeSubmenu : ''}`}
+                                onClick={() => navigate('/smt/work-order')}
+                            >
+                                <span className={styles.menuIcon}>
+                                    <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                </span> Work Order
+                            </div>
+                        )}
                         <div
                             className={`${styles.submenuItem} ${isActive('/smt/qms') ? styles.activeSubmenu : ''}`}
                             onClick={() => navigate('/smt/qms')}

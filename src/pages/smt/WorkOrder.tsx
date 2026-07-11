@@ -164,40 +164,35 @@ export const WorkOrder: React.FC = () => {
             if (search) {
                 queryParams.append('search', search);
             }
-            const res = await fetch(`/api/smt/work-orders?${queryParams.toString()}`);
-            if (res.ok) {
-                const responseData = await res.json();
-                if (responseData.success) {
-                    const safeData = Array.isArray(responseData.data) ? responseData.data : [];
-                    setWorkOrders(safeData.map((wo: any) => ({
-                        work_order_id: wo.id,
-                        product_name: wo.product_name,
-                        product_description: wo.product_description,
-                        quantity: wo.quantity,
-                        panel_quantity: wo.panel_quantity,
-                        sides: wo.sides,
-                        line_id: wo.line_id,
-                        priority: wo.priority,
-                        created_by: wo.created_by,
-                        created_at: wo.created_at,
-                        po_document_name: wo.po_document_name,
-                        po_document_path: wo.po_document_path,
-                        po_document_type: wo.po_document_type,
-                        po_id: wo.po_id,
-                        remark: wo.remark,
-                        solder_paste_status: wo.solder_paste_status
-                    })));
-                    setTotalRecords(responseData.total || 0);
-                    setTotalPages(responseData.totalPages || 0);
-                } else {
-                    addToast(responseData.message || "Failed to load work orders", "error");
-                }
+            const responseData = await apiFetch(`/api/smt/work-orders?${queryParams.toString()}`);
+            if (responseData.success) {
+                const safeData = Array.isArray(responseData.data) ? responseData.data : [];
+                setWorkOrders(safeData.map((wo: any) => ({
+                    work_order_id: wo.id,
+                    product_name: wo.product_name,
+                    product_description: wo.product_description,
+                    quantity: wo.quantity,
+                    panel_quantity: wo.panel_quantity,
+                    sides: wo.sides,
+                    line_id: wo.line_id,
+                    priority: wo.priority,
+                    created_by: wo.created_by,
+                    created_at: wo.created_at,
+                    po_document_name: wo.po_document_name,
+                    po_document_path: wo.po_document_path,
+                    po_document_type: wo.po_document_type,
+                    po_id: wo.po_id,
+                    remark: wo.remark,
+                    solder_paste_status: wo.solder_paste_status
+                })));
+                setTotalRecords(responseData.total || 0);
+                setTotalPages(responseData.totalPages || 0);
             } else {
-                addToast("Failed to connect to work orders API", "error");
+                addToast(responseData.message || "Failed to load work orders", "error");
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Failed to fetch work orders:", err);
-            addToast("Failed to fetch work orders due to network issue", "error");
+            addToast(err.message || "Failed to fetch work orders due to network issue", "error");
         } finally {
             setIsLoading(false);
         }
@@ -436,15 +431,12 @@ export const WorkOrder: React.FC = () => {
                 : '/api/smt/work-orders';
             const method = editingWorkOrderId ? 'PUT' : 'POST';
 
-            const res = await fetch(url, {
+            const data = await apiFetch(url, {
                 method: method,
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
-            const data = await res.json();
-
-            if (res.ok && data.success) {
+            if (data.success) {
                 addToast(editingWorkOrderId ? "Work Order updated successfully." : "Work Order created successfully.", "success");
                 
                 // Clear Form
@@ -458,9 +450,9 @@ export const WorkOrder: React.FC = () => {
             } else {
                 setError(`Failed to ${editingWorkOrderId ? 'update' : 'create'} Work Order: ${data.message || 'Unknown error'}`);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("API error:", err);
-            setError('Error connecting to backend API.');
+            setError(err.message || 'Error connecting to backend API.');
         } finally {
             setIsCreating(false);
         }
@@ -500,22 +492,16 @@ export const WorkOrder: React.FC = () => {
         setIsPreviewLoading(true);
         setPreviewData(null);
         try {
-            const res = await fetch(`/api/smt/work-orders/${id}/preview-po`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.success) {
-                    setPreviewData(data);
-                } else {
-                    addToast(data.message || "Failed to load document preview.", "error");
-                    setPreviewWoId(null);
-                }
+            const data = await apiFetch(`/api/smt/work-orders/${id}/preview-po`);
+            if (data.success) {
+                setPreviewData(data);
             } else {
-                addToast("Preview API request failed.", "error");
+                addToast(data.message || "Failed to load document preview.", "error");
                 setPreviewWoId(null);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Preview error:", err);
-            addToast("Failed to fetch preview details.", "error");
+            addToast(err.message || "Failed to fetch preview details.", "error");
             setPreviewWoId(null);
         } finally {
             setIsPreviewLoading(false);
@@ -530,9 +516,7 @@ export const WorkOrder: React.FC = () => {
     const handleDownloadPo = async (id: string, fileName: string) => {
         try {
             addToast("Starting download...", "info");
-            const response = await fetch(`/api/smt/work-orders/${id}/download-po`);
-            if (!response.ok) throw new Error('Download failed');
-            const blob = await response.blob();
+            const blob = await apiFetch(`/api/smt/work-orders/${id}/download-po`);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none';
@@ -544,7 +528,7 @@ export const WorkOrder: React.FC = () => {
             window.URL.revokeObjectURL(url);
             addToast("File downloaded successfully.", "success");
         } catch (err: any) {
-            addToast("Failed to download file.", "error");
+            addToast(err.message || "Failed to download file.", "error");
         }
     };
 

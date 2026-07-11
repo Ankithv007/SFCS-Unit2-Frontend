@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import styles from './WorkOrderHistory.module.css';
 import SMTCountDetailsModal from '../../components/SMTCountDetailsModal';
+import { apiFetch } from '../../utils/api';
 
 interface WorkOrderHistoryData {
     work_order_id: string;
@@ -39,17 +40,14 @@ export const WorkOrderHistory: React.FC = () => {
 
     const fetchQmsRecords = async () => {
         try {
-            const res = await fetch('/api/smt/qms/records');
-            if (res.ok) {
-                const data = await res.json();
-                const map: Record<string, any> = {};
-                if (Array.isArray(data)) {
-                    data.forEach((item: any) => {
-                        map[item.work_order_number] = item;
-                    });
-                }
-                setQmsMap(map);
+            const data = await apiFetch('/api/smt/qms/records');
+            const map: Record<string, any> = {};
+            if (Array.isArray(data)) {
+                data.forEach((item: any) => {
+                    map[item.work_order_number] = item;
+                });
             }
+            setQmsMap(map);
         } catch (err) {
             console.error("Failed to load QMS records for history view", err);
         }
@@ -78,17 +76,11 @@ export const WorkOrderHistory: React.FC = () => {
                 fromDate: fDate,
                 toDate: tDate
             });
-            const res = await fetch(`/api/smt/workorder-history?${queryParams.toString()}`);
-            if (res.ok) {
-                const data = await res.json();
-                setHistoryData(data);
-            } else {
-                const errData = await res.json();
-                setError(errData.error || 'Failed to fetch history data');
-            }
-        } catch (err) {
+            const data = await apiFetch(`/api/smt/workorder-history?${queryParams.toString()}`);
+            setHistoryData(data);
+        } catch (err: any) {
             console.error("API Error:", err);
-            setError('Connection error. Please try again.');
+            setError(err.message || 'Connection error. Please try again.');
         } finally {
             setLoading(false);
         }

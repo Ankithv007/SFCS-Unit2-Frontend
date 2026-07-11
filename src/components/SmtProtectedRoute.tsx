@@ -49,8 +49,9 @@ export const SmtProtectedRoute: React.FC<SmtProtectedRouteProps> = ({ children }
     // Enforce SMT Work Order / History page restrictions: only Admins and Managers can access them
     const isWorkOrderPath = location.pathname.startsWith('/smt/work-order') || location.pathname.startsWith('/smt/workorder-history');
     if (isWorkOrderPath) {
-        const currentRole = smtUser?.role || user?.role;
-        if (!currentRole || !authorizedRoles.includes(currentRole)) {
+        const currentRole = (smtUser?.role || user?.role || '').trim().toLowerCase();
+        const allowed = ['super admin', 'admin', 'manager'];
+        if (!currentRole || !allowed.includes(currentRole)) {
             // Redirect unauthorized operators/employees to standard station page
             return <Navigate to="/smt/printing" state={{ accessError: 'Access Denied: Only Admins or Managers can access this page.' }} replace />;
         }

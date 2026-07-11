@@ -136,11 +136,13 @@ export const WorkOrder: React.FC = () => {
     useEffect(() => {
         fetchWorkOrders(currentPage, pageSize, activeSearch);
 
-        // Auto-fill Created By from SMT login info
+        // Auto-fill Created By from SMT login info or main user login info
         if (smtUser) {
             setCreatedBy(smtUser.name || smtUser.userId || 'System');
+        } else if (user) {
+            setCreatedBy(user.name || user.email || 'System');
         }
-    }, [currentPage, pageSize, activeSearch]);
+    }, [currentPage, pageSize, activeSearch, smtUser, user]);
 
     // Auto-calculate Panel Quantity
     useEffect(() => {

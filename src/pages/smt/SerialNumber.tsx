@@ -144,11 +144,8 @@ export const SerialNumber: React.FC = () => {
 
     const fetchWorkOrders = async () => {
         try {
-            const woRes = await fetch('/api/smt/workorders/pending');
-            if (woRes.ok) {
-                const data = await woRes.json();
-                setWorkOrders(data);
-            }
+            const data = await apiFetch('/api/smt/workorders/pending');
+            setWorkOrders(data);
         } catch (err) {
             console.error('Error fetching pending work orders:', err);
         }

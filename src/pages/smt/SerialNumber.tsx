@@ -138,6 +138,8 @@ export const SerialNumber: React.FC = () => {
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [qrCodeMap, setQrCodeMap] = useState<{[key: string]: string}>({});
     const [isZipping, setIsZipping] = useState(false);
+    const [panelFileName, setPanelFileName] = useState('');
+    const [modalPanelFileName, setModalPanelFileName] = useState('');
 
     // Large QR Preview modal state
     const [previewQrSerial, setPreviewQrSerial] = useState<string | null>(null);
@@ -214,6 +216,8 @@ export const SerialNumber: React.FC = () => {
             const wo = workOrders.find(w => w.id === selectedWoId);
             if (wo) {
                 setSelectedWo(wo);
+                const stored = localStorage.getItem(`panel_file_name_wo_${selectedWoId}`) || '';
+                setPanelFileName(stored);
             } else {
                 setSelectedWo(null);
                 setSelectedWoId('');
@@ -221,9 +225,11 @@ export const SerialNumber: React.FC = () => {
                 setSavedBarcodes([]);
                 setRemarks('');
                 setAdditionalNotes('');
+                setPanelFileName('');
             }
         } else {
             setSelectedWo(null);
+            setPanelFileName('');
         }
     }, [selectedWoId, workOrders]);
 
@@ -598,6 +604,9 @@ export const SerialNumber: React.FC = () => {
 
                 if (res?.success) {
                     addToast(`Serials registered successfully for Work Order. Generated quantity: ${res.record.generated_quantity}`, 'success');
+                    if (panelFileName.trim()) {
+                        localStorage.setItem(`panel_file_name_${res.record.id}`, panelFileName.trim());
+                    }
                     resetForm();
                     setCurrentPage(1);
                     fetchWorkOrders();
@@ -669,6 +678,7 @@ export const SerialNumber: React.FC = () => {
         setLaserFile(null);
         setLaserValidationData(null);
         setLaserMismatchDetails(null);
+        setPanelFileName('');
     };
 
     // --- Deletion ---
@@ -705,6 +715,11 @@ export const SerialNumber: React.FC = () => {
                 setViewRecord(data.record);
                 setRecordMetadata(data.sourceConfig);
                 setSerialsPage(1);
+
+                const stored = localStorage.getItem(`panel_file_name_${data.record.id}`) || 
+                               localStorage.getItem(`panel_file_name_wo_${data.record.work_order_id}`) || '';
+                setModalPanelFileName(stored);
+
                 fetchRecordSerialsList(data.record.id, 1, serialsSearch);
             }
         } catch (err: any) {
@@ -742,41 +757,77 @@ export const SerialNumber: React.FC = () => {
         const cleanSerial = serialNumber.replace(/-/g, "").toUpperCase();
         return new Promise<string>(async (resolve, reject) => {
             try {
-                const qrDataUrl = await QRCode.toDataURL(cleanSerial, {
+                const qrCanvas = document.createElement('canvas');
+                await QRCode.toCanvas(qrCanvas, cleanSerial, {
                     width: 250,
                     margin: 2,
                     errorCorrectionLevel: 'M'
                 });
                 
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 250;
-                    canvas.height = 295; 
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) {
-                        reject(new Error('Canvas context not available'));
-                        return;
-                    }
+                const canvas = document.createElement('canvas');
+                canvas.width = 250;
+                canvas.height = 295;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    reject(new Error('Canvas context not available'));
+                    return;
+                }
 
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(qrCanvas, 0, 0);
 
-                    ctx.font = 'bold 15px Courier, monospace';
-                    ctx.fillStyle = '#000000';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(serialNumber, canvas.width / 2, 272);
+                ctx.font = 'bold 15px Courier, monospace';
+                ctx.fillStyle = '#000000';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(serialNumber, canvas.width / 2, 272);
 
-                    resolve(canvas.toDataURL('image/png'));
-                };
-                img.onerror = reject;
-                img.src = qrDataUrl;
+                resolve(canvas.toDataURL('image/png'));
             } catch (err) {
                 reject(err);
             }
         });
+    };
+
+    const getCanvasBlob = (canvas: HTMLCanvasElement): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                } else {
+                    reject(new Error('Failed to create canvas blob'));
+                }
+            }, 'image/png');
+        });
+    };
+
+    const generateQRComposite = async (
+        serialNumber: string,
+        qrCanvas: HTMLCanvasElement,
+        mainCanvas: HTMLCanvasElement
+    ) => {
+        const cleanSerial = serialNumber.replace(/-/g, "").toUpperCase();
+        await QRCode.toCanvas(qrCanvas, cleanSerial, {
+            width: 250,
+            margin: 2,
+            errorCorrectionLevel: 'M'
+        });
+        
+        const ctx = mainCanvas.getContext('2d');
+        if (!ctx) {
+            throw new Error('Canvas context not available');
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 250, 295);
+        ctx.drawImage(qrCanvas, 0, 0);
+
+        ctx.font = 'bold 15px Courier, monospace';
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(serialNumber, 125, 272);
     };
 
     // Populate composite QR codes
@@ -862,10 +913,15 @@ export const SerialNumber: React.FC = () => {
             addToast(`Generating ${serials.length} composite QR PNGs. Please wait...`, 'info');
             
             const zip = new JSZip();
+            const qrCanvas = document.createElement('canvas');
+            const mainCanvas = document.createElement('canvas');
+            mainCanvas.width = 250;
+            mainCanvas.height = 295;
+
             for (const s of serials) {
-                const dataUrl = await generateQRWithText(s.serial_number);
-                const base64Data = dataUrl.split(',')[1];
-                zip.file(`${s.serial_number}.png`, base64Data, { base64: true });
+                await generateQRComposite(s.serial_number, qrCanvas, mainCanvas);
+                const blob = await getCanvasBlob(mainCanvas);
+                zip.file(`${s.serial_number}.png`, blob);
             }
 
             addToast('Packaging QR codes into ZIP...', 'info');
@@ -919,18 +975,130 @@ export const SerialNumber: React.FC = () => {
                 format: [80, 95]
             });
 
+            const qrCanvas = document.createElement('canvas');
+            const mainCanvas = document.createElement('canvas');
+            mainCanvas.width = 250;
+            mainCanvas.height = 295;
+
             for (let i = 0; i < serials.length; i++) {
                 if (i > 0) {
                      doc.addPage([80, 95], 'portrait');
                 }
-                const dataUrl = await generateQRWithText(serials[i].serial_number);
-                doc.addImage(dataUrl, 'PNG', 5, 5, 70, 82.6);
+                await generateQRComposite(serials[i].serial_number, qrCanvas, mainCanvas);
+                doc.addImage(mainCanvas, 'PNG', 5, 5, 70, 82.6);
             }
 
             doc.save(`QR_Codes_ALL_WO_${viewRecord.work_order_number}.pdf`);
             addToast('All QR codes combined PDF downloaded successfully!', 'success');
         } catch (err: any) {
             addToast(`Failed to generate combined PDF: ${err.message}`, 'error');
+        } finally {
+            setIsZipping(false);
+        }
+    };
+
+    const handleDownloadAllTXT = async () => {
+        if (!viewRecord) return;
+        
+        const rawName = localStorage.getItem(`panel_file_name_${viewRecord.id}`) || '';
+        const baseFileName = rawName.trim();
+        if (!baseFileName) {
+            addToast('Please enter a Panel/File Name first.', 'error');
+            return;
+        }
+
+        setIsZipping(true);
+        try {
+            addToast('Fetching all serial numbers for TXT compilation...', 'info');
+            const queryParams = new URLSearchParams({
+                page: '1',
+                limit: '999999',
+                search: ''
+            });
+            const data = await apiFetch(`/api/smt/v1/smt/serial-generation-records/${viewRecord.id}/serials?${queryParams.toString()}`);
+            if (!data?.success || !Array.isArray(data.serials)) {
+                throw new Error('Failed to retrieve serial numbers.');
+            }
+
+            const serials = data.serials;
+            if (serials.length === 0) {
+                addToast('No serial numbers found for this record.', 'info');
+                return;
+            }
+
+            const workOrderQty = viewRecord.work_order_quantity || 1;
+            const panelQty = viewRecord.panel_quantity || 1;
+            const pcbPerPanel = Math.max(1, panelQty > 0 ? Math.round(workOrderQty / panelQty) : 1);
+
+            const totalSerials = serials.length;
+            const totalPanels = Math.ceil(totalSerials / pcbPerPanel);
+
+            const zip = new JSZip();
+
+            // Function to increment file name based on trailing digits
+            const incrementFileName = (base: string, index: number): string => {
+                if (index === 0) return base;
+                const match = base.match(/^(.*?)(\d+)$/);
+                if (!match) {
+                    return `${base}_${index + 1}`;
+                }
+                const textPart = match[1];
+                const numPartStr = match[2];
+                try {
+                    const numVal = BigInt(numPartStr);
+                    const newNumVal = numVal + BigInt(index);
+                    const paddedNum = newNumVal.toString().padStart(numPartStr.length, '0');
+                    return `${textPart}${paddedNum}`;
+                } catch (e) {
+                    const numVal = parseInt(numPartStr, 10);
+                    const newNumVal = numVal + index;
+                    const paddedNum = String(newNumVal).padStart(numPartStr.length, '0');
+                    return `${textPart}${paddedNum}`;
+                }
+            };
+
+            // Loop to generate one TXT content per panel
+            for (let p = 0; p < totalPanels; p++) {
+                const currentFileName = incrementFileName(baseFileName, p);
+                
+                let fileContent = '';
+                
+                // Header with trailing comma
+                let header = `"PanelID",`;
+                for (let i = 1; i <= pcbPerPanel; i++) {
+                    header += `"Top_BoardSN${i}",`;
+                }
+                fileContent += header + '\r\n';
+
+                // Data row with trailing comma
+                let row = `"${currentFileName}",`;
+                for (let col = 0; col < pcbPerPanel; col++) {
+                    const idx = p * pcbPerPanel + col;
+                    const sn = idx < totalSerials ? serials[idx].serial_number : '';
+                    row += `"${sn}",`;
+                }
+                fileContent += row + '\r\n';
+
+                // Add to ZIP
+                zip.file(`${currentFileName}.txt`, fileContent);
+            }
+
+            addToast('Packaging TXT files into ZIP...', 'info');
+            const content = await zip.generateAsync({ type: 'blob' });
+            
+            const downloadUrl = window.URL.createObjectURL(content);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = downloadUrl;
+            a.download = `WorkOrder_TXT_WO_${viewRecord.work_order_number}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(downloadUrl);
+
+            addToast(`TXT ZIP file WorkOrder_TXT_WO_${viewRecord.work_order_number}.zip downloaded successfully!`, 'success');
+        } catch (err: any) {
+            addToast(`Failed to generate TXT ZIP: ${err.message}`, 'error');
         } finally {
             setIsZipping(false);
         }
@@ -1141,6 +1309,21 @@ export const SerialNumber: React.FC = () => {
                                 {/* 1. GENERATE CARD CONTENT */}
                                 {barcodeSource === 'GENERATE' && (
                                     <div>
+                                        <div className={styles.formGroup}>
+                                            <label className={styles.formLabel}>Panel/File Name</label>
+                                            <input
+                                                type="text"
+                                                className={styles.input}
+                                                placeholder="Enter panel/file name manually (e.g. P2523704001751)"
+                                                value={panelFileName}
+                                                onChange={(e) => {
+                                                    setPanelFileName(e.target.value);
+                                                    if (selectedWoId) {
+                                                        localStorage.setItem(`panel_file_name_wo_${selectedWoId}`, e.target.value);
+                                                    }
+                                                }}
+                                            />
+                                        </div>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                             <div className={styles.formGroup}>
                                                 <label className={styles.formLabel}>Prefix</label>
@@ -1681,25 +1864,50 @@ export const SerialNumber: React.FC = () => {
                                                 <h4 style={{ margin: 0, color: '#0f172a', fontWeight: 700 }}>
                                                     🔢 Generated Serial Numbers ({viewRecord.generated_quantity})
                                                 </h4>
-                                                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleDownloadAllQRCodesPNG}
-                                                        className={styles.button}
-                                                        disabled={isZipping}
-                                                        style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#10b981' }}
-                                                    >
-                                                        {isZipping ? '🔄 zipping PNGs...' : '📦 Download All PNG'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleDownloadAllQRCodesPDF}
-                                                        className={styles.button}
-                                                        disabled={isZipping}
-                                                        style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#4f46e5' }}
-                                                    >
-                                                        {isZipping ? '🔄 creating PDF...' : '📄 Download All PDF'}
-                                                    </button>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                                                    <div className={styles.formGroup} style={{ margin: 0, minWidth: '220px' }}>
+                                                        <input
+                                                            type="text"
+                                                            className={styles.input}
+                                                            style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
+                                                            placeholder="Panel/File Name"
+                                                            value={modalPanelFileName}
+                                                            onChange={(e) => {
+                                                                setModalPanelFileName(e.target.value);
+                                                                localStorage.setItem(`panel_file_name_${viewRecord.id}`, e.target.value);
+                                                                localStorage.setItem(`panel_file_name_wo_${viewRecord.work_order_id}`, e.target.value);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleDownloadAllQRCodesPNG}
+                                                            className={styles.button}
+                                                            disabled={isZipping}
+                                                            style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#10b981' }}
+                                                        >
+                                                            {isZipping ? '🔄 zipping PNGs...' : '📦 Download All PNG'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleDownloadAllQRCodesPDF}
+                                                            className={styles.button}
+                                                            disabled={isZipping}
+                                                            style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#4f46e5' }}
+                                                        >
+                                                            {isZipping ? '🔄 creating PDF...' : '📄 Download All PDF'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleDownloadAllTXT}
+                                                            className={styles.button}
+                                                            disabled={isZipping}
+                                                            style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#d97706' }}
+                                                        >
+                                                            {isZipping ? '🔄 creating TXT...' : '📝 Download All TXT'}
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className={styles.searchWrapper} style={{ width: '220px' }}>

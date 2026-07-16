@@ -25,18 +25,6 @@ interface WorkOrderRecord {
     created_at: string;
 }
 
-const MODELS = [
-    "2G with IOT",
-    "2G without IOT",
-    "4G - 3W",
-    "4G - SCV",
-    "4G - HCV",
-    "4G - Mini",
-    "2G - E-Rick",
-    "4G - E-Tractor",
-    "BMS - Telematics"
-];
-
 const WorkOrder: React.FC = () => {
     const { user } = useAuth();
     const { showToast } = useToast();
@@ -46,7 +34,7 @@ const WorkOrder: React.FC = () => {
     const [userSequence, setUserSequence] = useState('');
     const [quantity, setQuantity] = useState('');
     const [customerName, setCustomerName] = useState('');
-    const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+    const [selectedModel, setSelectedModel] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Modal States
@@ -121,7 +109,7 @@ const WorkOrder: React.FC = () => {
             setUserSequence('');
             setQuantity('');
             setCustomerName('');
-            setSelectedModel(MODELS[0]);
+            setSelectedModel('');
 
             // 🔥 REFRESH TABLE
             await fetchWorkOrders();
@@ -233,14 +221,14 @@ const WorkOrder: React.FC = () => {
 
                         <div className={styles.inputGroup}>
                             <label><Settings size={14} /> Model *</label>
-                            <select
-                                className={styles.select}
+                            <input
+                                type="text"
+                                className={styles.input}
                                 value={selectedModel}
                                 onChange={(e) => setSelectedModel(e.target.value)}
+                                placeholder="Enter model name..."
                                 required
-                            >
-                                {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
+                            />
                         </div>
                     </div>
                     <button type="submit" className={styles.button} disabled={isSubmitting}>

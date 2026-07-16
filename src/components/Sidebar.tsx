@@ -267,6 +267,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                 >
                                     <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Track Items
                                 </div>
+                                <div
+                                    className={`${styles.subSubmenuItem} ${isActive('/smt/downtime-tracker') ? styles.activeSubSubmenu : ''}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate('/smt/downtime-tracker');
+                                    }}
+                                >
+                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Downtime Tracker
+                                </div>
                             </div>
                         )}
                     </div>

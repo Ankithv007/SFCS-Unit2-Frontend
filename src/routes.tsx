@@ -26,6 +26,7 @@ import Rework from './pages/smt/Rework';
 import PreAoi from './pages/smt/PreAoi';
 import SMTFG from './pages/smt/SMTFG';
 import SmtTrackItems from './pages/smt/SmtTrackItems';
+import SmtDowntimeTracker from './pages/smt/SmtDowntimeTracker';
 import SolderPasteManagement from './pages/smt/SolderPasteManagement';
 import Document from './pages/smt/Document';
 import BomView from './pages/smt/BomView';
@@ -313,6 +314,10 @@ export const router = createBrowserRouter([
                     {
                         path: 'track-items',
                         element: <SmtTrackItems />,
+                    },
+                    {
+                        path: 'downtime-tracker',
+                        element: <SmtDowntimeTracker />,
                     },
                     {
                         path: 'qms',

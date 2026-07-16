@@ -72,7 +72,10 @@ const VI: React.FC = () => {
     const [totalRecords, setTotalRecords] = useState(0);
     const [editingScan, setEditingScan] = useState<ScanRecord | null>(null);
 
-    const isAdmin = user?.role === 'Super Admin' || user?.role === 'Admin' || user?.role === 'User';
+    const isAdmin = 
+        ['Super Admin', 'Admin', 'User'].includes(user?.role || '') ||
+        backendUser?.userId === 'ADMIN' ||
+        ['superadmin', 'admin', 'user', 'operator'].includes((backendUser?.role || '').toLowerCase());
 
     const [activeModal, setActiveModal] = useState<{
         batchId: number;

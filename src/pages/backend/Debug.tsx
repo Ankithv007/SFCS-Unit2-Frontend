@@ -9,8 +9,9 @@ import { useAuth } from '../../hooks/useAuth';
 import { useBackendAuth } from '../../context/BackendAuthContext';
 import SearchInput from '../../components/SearchInput';
 import ScanDecisionModal from '../../components/ScanDecisionModal';
-import { Search, ArrowLeft, CheckCircle, Clock, Monitor, Activity, Trash2 } from 'lucide-react';
+import { Search, ArrowLeft, CheckCircle, Clock, Monitor, Activity, Trash2, Pencil } from 'lucide-react';
 import CountDetailsModal from '../../components/CountDetailsModal';
+import EditScanModal from '../../components/EditScanModal';
 
 interface Batch {
     id: number;
@@ -83,6 +84,13 @@ const Debug: React.FC = () => {
             failedStageId: batch.failedStageId
         });
     };
+
+    const [editingScan, setEditingScan] = useState<ScanRecord | null>(null);
+
+    const isAdmin = 
+        ['Super Admin', 'Admin', 'User'].includes(user?.role || '') ||
+        backendUser?.userId === 'ADMIN' ||
+        ['superadmin', 'admin', 'user', 'operator'].includes((backendUser?.role || '').toLowerCase());
 
     const [barcode, setBarcode] = useState('');
     const scanInputRef = useRef<HTMLInputElement>(null);
@@ -460,25 +468,50 @@ const Debug: React.FC = () => {
                                                 <td style={{ color: '#ef4444' }}>{scan.failure_remark || '-'}</td>
                                                 <td style={{ fontWeight: 600 }}>{scan.repair_remark || scan.remarks || '-'}</td>
                                                 <td>
-                                                    <button
-                                                        className={sharedStyles.deleteBtn}
-                                                        onClick={async () => {
-                                                            if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
-                                                                showToast('You do not have permission to delete this record.', 'error');
-                                                                return;
-                                                            }
-                                                            if (!window.confirm('Are you sure you want to delete this record?')) return;
-                                                            try {
-                                                                await apiFetch(`/api/backend/debug/scan/${scan.id}`, { method: 'DELETE' });
-                                                                showToast('Record deleted successfully.', 'success');
-                                                                fetchScans(activeBatch!.id, activeBatch!.failedStageId);
-                                                            } catch (err: any) {
-                                                                showToast(err?.message || 'Failed to delete record', 'error');
-                                                            }
-                                                        }}
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
+                                                        {isAdmin && (
+                                                            <button
+                                                                className={sharedStyles.secondaryButton}
+                                                                onClick={() => setEditingScan(scan)}
+                                                                style={{
+                                                                    padding: '0.4rem',
+                                                                    minWidth: '28px',
+                                                                    width: '28px',
+                                                                    height: '28px',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    borderRadius: '4px',
+                                                                    border: '1px solid #cbd5e1',
+                                                                    color: '#475569',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s ease'
+                                                                }}
+                                                                title="Edit Scan"
+                                                            >
+                                                                <Pencil size={14} />
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            className={sharedStyles.deleteBtn}
+                                                            onClick={async () => {
+                                                                if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
+                                                                    showToast('You do not have permission to delete this record.', 'error');
+                                                                    return;
+                                                                }
+                                                                if (!window.confirm('Are you sure you want to delete this record?')) return;
+                                                                try {
+                                                                    await apiFetch(`/api/backend/debug/scan/${scan.id}`, { method: 'DELETE' });
+                                                                    showToast('Record deleted successfully.', 'success');
+                                                                    fetchScans(activeBatch!.id, activeBatch!.failedStageId);
+                                                                } catch (err: any) {
+                                                                    showToast(err?.message || 'Failed to delete record', 'error');
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -511,6 +544,18 @@ const Debug: React.FC = () => {
                     columnLabel={activeModal.columnLabel}
                     failedStageId={activeModal.failedStageId}
                     onClose={() => setActiveModal(null)}
+                />
+            )}
+
+            {editingScan && (
+                <EditScanModal
+                    scanId={editingScan.id}
+                    initialBarcode={editingScan.barcode}
+                    initialUnitSerialNo={editingScan.unit_serial_number || ''}
+                    onClose={() => setEditingScan(null)}
+                    onSaveSuccess={() => {
+                        fetchScans(activeBatch!.id, activeBatch!.failedStageId);
+                    }}
                 />
             )}
         </div>

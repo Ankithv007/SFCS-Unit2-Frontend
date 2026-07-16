@@ -4,14 +4,14 @@ import styles from './WorkOrder.module.css';
 import sharedStyles from '../smt/WorkOrder.module.css';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
-import { 
-    Settings, 
-    Calendar, 
-    Package, 
-    Hash, 
-    Building2, 
-    Eye, 
-    Trash2, 
+import {
+    Settings,
+    Calendar,
+    Package,
+    Hash,
+    Building2,
+    Eye,
+    Trash2,
     X
 } from 'lucide-react';
 
@@ -25,28 +25,16 @@ interface WorkOrderRecord {
     created_at: string;
 }
 
-const MODELS = [
-    "2G with IOT",
-    "2G without IOT",
-    "4G - 3W",
-    "4G - SCV",
-    "4G - HCV",
-    "4G - Mini",
-    "2G - E-Rick",
-    "4G - E-Tractor",
-    "BMS - Telematics"
-];
-
 const WorkOrder: React.FC = () => {
     const { user } = useAuth();
     const { showToast } = useToast();
     const [workOrders, setWorkOrders] = useState<WorkOrderRecord[]>([]);
-    
+
     // Form State
     const [userSequence, setUserSequence] = useState('');
     const [quantity, setQuantity] = useState('');
     const [customerName, setCustomerName] = useState('');
-    const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+    const [selectedModel, setSelectedModel] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Modal States
@@ -79,7 +67,7 @@ const WorkOrder: React.FC = () => {
 
     const handleCreateWorkOrder = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (!userSequence || userSequence.length < 2 || userSequence.length > 6) {
             showToast('Sequence must be between 2 and 6 digits', 'error');
             return;
@@ -94,7 +82,7 @@ const WorkOrder: React.FC = () => {
         }
 
         const fullWONumber = `${datePrefix}${userSequence.padStart(6, '0')}`;
-        
+
         if (workOrders.some(wo => wo.wo_number === fullWONumber)) {
             showToast('Work Order number already exists', 'error');
             return;
@@ -116,13 +104,13 @@ const WorkOrder: React.FC = () => {
             });
 
             showToast('Work Order created successfully', 'success');
-            
+
             // Reset form
             setUserSequence('');
             setQuantity('');
             setCustomerName('');
-            setSelectedModel(MODELS[0]);
-            
+            setSelectedModel('');
+
             // 🔥 REFRESH TABLE
             await fetchWorkOrders();
         } catch (error: any) {
@@ -164,7 +152,7 @@ const WorkOrder: React.FC = () => {
 
 
 
-    
+
     return (
         <div className={styles.container}>
             <div className={styles.headerRow}>
@@ -183,9 +171,9 @@ const WorkOrder: React.FC = () => {
                         <div className={styles.inputGroup}>
                             <label><Hash size={14} /> Work Order ID *</label>
                             <div style={{ display: 'flex', alignItems: 'center' }}>
-                                <div style={{ 
-                                    backgroundColor: '#f3f4f6', 
-                                    padding: '0.625rem 1rem', 
+                                <div style={{
+                                    backgroundColor: '#f3f4f6',
+                                    padding: '0.625rem 1rem',
                                     border: '1px solid #d1d5db',
                                     borderRight: 'none',
                                     borderRadius: '8px 0 0 8px',
@@ -233,14 +221,14 @@ const WorkOrder: React.FC = () => {
 
                         <div className={styles.inputGroup}>
                             <label><Settings size={14} /> Model *</label>
-                            <select
-                                className={styles.select}
+                            <input
+                                type="text"
+                                className={styles.input}
                                 value={selectedModel}
                                 onChange={(e) => setSelectedModel(e.target.value)}
+                                placeholder="Enter model name..."
                                 required
-                            >
-                                {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
+                            />
                         </div>
                     </div>
                     <button type="submit" className={styles.button} disabled={isSubmitting}>
@@ -274,10 +262,10 @@ const WorkOrder: React.FC = () => {
                                         <td>{wo.quantity}</td>
                                         <td>{wo.customer_name}</td>
                                         <td>
-                                            <span style={{ 
-                                                padding: '4px 8px', 
-                                                backgroundColor: '#eef2ff', 
-                                                color: '#4338ca', 
+                                            <span style={{
+                                                padding: '4px 8px',
+                                                backgroundColor: '#eef2ff',
+                                                color: '#4338ca',
                                                 borderRadius: '6px',
                                                 fontSize: '0.8rem',
                                                 fontWeight: 'bold'
@@ -289,21 +277,21 @@ const WorkOrder: React.FC = () => {
                                         <td>{new Date(wo.created_at).toLocaleDateString()}</td>
                                         <td>
                                             <div className={styles.actions}>
-                                                <button 
+                                                <button
                                                     type="button"
                                                     className={sharedStyles.secondaryButton} onClick={() => handleView(wo)}
                                                 >
                                                     <Eye size={14} /> View
                                                 </button>
 
-                                                <button 
-                                                        type="button"
-                                                        className={styles.deleteBtn} 
-                                                        onClick={() => handleDeleteClick(wo)}
-                                                    >
-                                                        <Trash2 size={14} /> Delete
-                                                    </button>
-                                                
+                                                <button
+                                                    type="button"
+                                                    className={styles.deleteBtn}
+                                                    onClick={() => handleDeleteClick(wo)}
+                                                >
+                                                    <Trash2 size={14} /> Delete
+                                                </button>
+
                                             </div>
                                         </td>
                                     </tr>

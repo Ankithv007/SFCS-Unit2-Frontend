@@ -97,7 +97,7 @@ export const BackendLogin: React.FC = () => {
 
         try {
             if ((userId || '').toUpperCase() === 'ADMIN' && password === '1234') {
-                backendLogin({ id: 'admin', name: 'System Admin', userId: 'ADMIN' }, from);
+                backendLogin({ id: 'admin', name: 'System Admin', userId: 'ADMIN', role: 'Super Admin' }, from);
                 navigate(from, { replace: true });
                 return;
             }
@@ -117,7 +117,8 @@ export const BackendLogin: React.FC = () => {
                     backendLogin({ 
                         id: validEmp.id.toString(), 
                         name: validEmp.name, 
-                        userId: validEmp.user_id 
+                        userId: validEmp.user_id,
+                        role: validEmp.role
                     }, from);
                     navigate(from, { replace: true });
                 }
@@ -139,7 +140,8 @@ export const BackendLogin: React.FC = () => {
                     backendLogin({
                         id: globalUser.id.toString(),
                         name: globalUser.name,
-                        userId: globalUser.email
+                        userId: globalUser.email,
+                        role: globalUser.role
                     }, from);
                     navigate(from, { replace: true });
                 } else {

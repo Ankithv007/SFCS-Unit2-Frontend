@@ -70,7 +70,7 @@ const Rework: React.FC = () => {
     } | null>(null);
 
     const handleCountClick = (
-        batch: Batch, 
+        batch: Batch,
         columnType: 'previousStagePassed' | 'scanned' | 'pending' | 'passed' | 'rework' | 'debug',
         columnLabel: string
     ) => {
@@ -90,7 +90,7 @@ const Rework: React.FC = () => {
 
     useEffect(() => {
         fetchActiveBatches();
-        
+
         // Add polling for real-time visibility (every 10 seconds)
         const interval = setInterval(() => {
             if (!activeBatch) {
@@ -126,7 +126,7 @@ const Rework: React.FC = () => {
 
     const fetchScans = async (batchId: number, failedStageId?: number, page = 1) => {
         try {
-            const url = failedStageId 
+            const url = failedStageId
                 ? `/api/backend/rework/scan/${batchId}?failedStageId=${failedStageId}&page=${page}&limit=50`
                 : `/api/backend/rework/scan/${batchId}?page=${page}&limit=50`;
             const data = await apiFetch(url);
@@ -213,7 +213,7 @@ const Rework: React.FC = () => {
                 setPendingBarcode(null);
                 fetchScans(activeBatch.id, 1);
                 fetchActiveBatches();
-                
+
                 // Refresh the active batch counters
                 const updatedBatches = await apiFetch(`/api/backend/rework/batch?search=${activeBatch.batch_number}`);
                 const updated = updatedBatches.data?.find((b: Batch) => b.id === activeBatch.id);
@@ -237,10 +237,10 @@ const Rework: React.FC = () => {
         <div className={styles.card}>
             <div className={styles.tableHeader}>
                 <h3 style={{ margin: 0 }}>Pending Rework ({totalRecords})</h3>
-                <SearchInput 
-                    value={searchTerm} 
-                    onChange={setSearchTerm} 
-                    placeholder="Search Work Order..." 
+                <SearchInput
+                    value={searchTerm}
+                    onChange={setSearchTerm}
+                    placeholder="Search Work Order..."
                 />
             </div>
             <div className={styles.tableWrapper}>
@@ -268,27 +268,27 @@ const Rework: React.FC = () => {
                                     <td>{batch.model || "-"}</td>
                                     <td style={{ fontWeight: 600 }}>{batch.workOrderQty}</td>
                                     <td style={{ color: '#6366f1', fontWeight: 700 }}>{batch.sourceStage || "-"}</td>
-                                    <td 
-                                        className={styles.statusBlue} 
+                                    <td
+                                        className={styles.statusBlue}
                                         style={{ cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'scanned', 'Scanned')}
                                     >
                                         {batch.scanned || 0}
                                     </td>
-                                    <td 
+                                    <td
                                         style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'pending', 'Pending')}
                                     >
                                         {batch.pending || 0}
                                     </td>
-                                    <td 
-                                        className={styles.statusGreen} 
+                                    <td
+                                        className={styles.statusGreen}
                                         style={{ cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'passed', 'Passed')}
                                     >
                                         {batch.passed || 0}
                                     </td>
-                                    <td 
+                                    <td
                                         style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'rework', 'Rework')}
                                     >

@@ -18,7 +18,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     const { user } = useAuth();
     const { showToast } = useToast();
     const [expandedModule, setExpandedModule] = useState<string | null>(null);
-    const [isSolderPasteMgmtExpanded, setIsSolderPasteMgmtExpanded] = useState(false);
     const [isStencilMgmtExpanded, setIsStencilMgmtExpanded] = useState(false);
     const [isSmtLineExpanded, setIsSmtLineExpanded] = useState(false);
 
@@ -33,9 +32,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
         else if (location.pathname.startsWith('/smt')) {
             setExpandedModule('smt');
 
-            if (location.pathname.startsWith('/smt/solder-paste')) {
-                setIsSolderPasteMgmtExpanded(true);
-            }
             if (location.pathname.startsWith('/smt/stencil')) {
                 setIsStencilMgmtExpanded(true);
             }
@@ -143,44 +139,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             </span> Material Mgmt
                         </div>
                         <div
-                            className={`${styles.submenuItem} ${isSolderPasteMgmtExpanded ? styles.activeSubmenuParent : ''}`}
-                            onClick={() => setIsSolderPasteMgmtExpanded(!isSolderPasteMgmtExpanded)}
+                            className={`${styles.submenuItem} ${isActive('/smt/solder-paste') ? styles.activeSubmenu : ''}`}
+                            onClick={() => navigate('/smt/solder-paste')}
                         >
                             <span className={styles.menuIcon}>
                                 <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Solder Paste Management" className={styles.imageIcon} />
                             </span> Solder Paste Management
                         </div>
-                        {isSolderPasteMgmtExpanded && (
-                            <div className={styles.subSubmenu}>
-                                <div
-                                    className={`${styles.subSubmenuItem} ${isActive('/smt/solder-paste/removal') ? styles.activeSubSubmenu : ''}`}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigate('/smt/solder-paste/removal');
-                                    }}
-                                >
-                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Removal from Refrigerator
-                                </div>
-                                <div
-                                    className={`${styles.subSubmenuItem} ${isActive('/smt/solder-paste/thawing') ? styles.activeSubSubmenu : ''}`}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigate('/smt/solder-paste/thawing');
-                                    }}
-                                >
-                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Thawing
-                                </div>
-                                <div
-                                    className={`${styles.subSubmenuItem} ${isActive('/smt/solder-paste/mixing') ? styles.activeSubSubmenu : ''}`}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigate('/smt/solder-paste/mixing');
-                                    }}
-                                >
-                                    <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Solder Paste Mixing
-                                </div>
-                            </div>
-                        )}
                         <div
                             className={`${styles.submenuItem} ${isStencilMgmtExpanded ? styles.activeSubmenuParent : ''}`}
                             onClick={() => setIsStencilMgmtExpanded(!isStencilMgmtExpanded)}

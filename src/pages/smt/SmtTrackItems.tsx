@@ -19,6 +19,7 @@ interface ScanEntry {
     scanned_by: string;
     scanned_at: string;
     rework_reason: string | null;
+    side: string | null;
 }
 
 interface SmtTrackResult {
@@ -28,6 +29,7 @@ interface SmtTrackResult {
     product_name: string;
     quantity: number;
     line_id: string;
+    sides: string;
     current_stage: string;
     current_status: string;
     final_status_label: string;
@@ -409,6 +411,15 @@ const SmtTrackItems: React.FC = () => {
                             </div>
                         </div>
                         <div className={styles.summaryCard}>
+                            <div className={styles.summaryIcon} style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
+                                <Zap size={22} />
+                            </div>
+                            <div>
+                                <div className={styles.summaryLabel}>Sides</div>
+                                <div className={styles.summaryValue}>{data.sides || '-'}</div>
+                            </div>
+                        </div>
+                        <div className={styles.summaryCard}>
                             <div className={styles.summaryIcon} style={{ background: statusBg(data.current_status), color: statusColor(data.current_status) }}>
                                 <MapPin size={22} />
                             </div>
@@ -448,53 +459,7 @@ const SmtTrackItems: React.FC = () => {
                         </div>
                     </div>
                     
-                    {/* Solder Paste Prep Details */}
-                    {(data as any).solder_paste && (
-                        <div style={{
-                            marginTop: '1.5rem',
-                            padding: '1.25rem',
-                            background: '#f8fafc',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '8px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '0.75rem',
-                            boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)'
-                        }}>
-                            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                🧴 Solder Paste Preparation Details
-                            </h4>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                                <div>
-                                    <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Status</span>
-                                    <span style={{
-                                        fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase',
-                                        color: (data as any).solder_paste.status === 'Completed' ? '#10b981' : '#f59e0b'
-                                    }}>
-                                        {(data as any).solder_paste.status || 'Pending'}
-                                    </span>
-                                </div>
-                                <div>
-                                    <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Container Barcode</span>
-                                    <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>
-                                        {(data as any).solder_paste.details?.solder_paste_barcode || '—'}
-                                    </strong>
-                                </div>
-                                <div>
-                                    <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Thawing Finished</span>
-                                    <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>
-                                        {fmt((data as any).solder_paste.details?.stage2?.completed_at)}
-                                    </span>
-                                </div>
-                                <div>
-                                    <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Mixing Finished</span>
-                                    <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>
-                                        {fmt((data as any).solder_paste.details?.stage3?.completed_at)}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    {/* Solder Paste Preparation Details removed per Enhancement 2 */}
 
                     {/* ── Main two-column layout ── */}
                     <div className={styles.mainGrid}>
@@ -503,67 +468,126 @@ const SmtTrackItems: React.FC = () => {
                         <div className={styles.pipelinePanel}>
                             <h3 className={styles.panelTitle}><ChevronRight size={18} /> SMT Production Pipeline</h3>
 
-                            <div className={styles.pipeline}>
-                                {SMT_PIPELINE.map((stage, idx) => {
-                                    const visited = visitedStages.has(stage);
-                                    const stStatus = visited ? getStageStatus(stage) : 'pending';
-                                    const isCurrent = isCurrentStage(stage);
+                            {/* TOP/BOTTOM dual pipeline */}
+                            {(() => {
+                                const isDoubleSided = (data.sides || '').toLowerCase().includes('/');
+                                const SIDE_STAGES = ['Printing', 'Pre AOI', 'Post AOI', 'Rework'];
+
+                                const renderNode = (stage: string, side: string | null) => {
+                                    const entries = side
+                                        ? data.scan_history.filter(h => h.process_step === stage && h.side && h.side.toLowerCase() === side.toLowerCase())
+                                        : data.scan_history.filter(h => h.process_step === stage);
+                                    const visited = entries.length > 0;
+                                    const stStatus = visited ? entries[entries.length - 1].status : 'pending';
+                                    const isCurrent = isCurrentStage(stage) && (!side || !data.current_stage);
                                     const color = visited ? statusColor(stStatus) : '#cbd5e1';
-                                    const entries = data.scan_history.filter(h => h.process_step === stage);
-                                    const isLast = idx === SMT_PIPELINE.length - 1;
-
                                     return (
-                                        <React.Fragment key={stage}>
-                                            <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
-                                                <div className={styles.pipelineNodeDot} style={{
-                                                    background: color,
-                                                    boxShadow: isCurrent ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` : `0 0 0 4px ${color}22`,
-                                                }}>
-                                                    <StationIcon station={stage} />
-                                                </div>
-                                                <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
-                                                    {stage}
-                                                    {isCurrent && <span className={styles.liveTag}>LIVE</span>}
-                                                </div>
-                                                {visited ? (
-                                                    (isCurrent && stStatus.toUpperCase() === 'FAIL') ? (
-                                                        <button 
-                                                            onClick={() => navigate(STAGE_ROUTES[stage])}
-                                                            title="Click to fix this failure"
-                                                            style={{
-                                                                background: '#fef2f2',
-                                                                border: '1px solid #fca5a5',
-                                                                color: '#ef4444',
-                                                                fontSize: '10px',
-                                                                fontWeight: 700,
-                                                                padding: '2px 8px',
-                                                                borderRadius: '12px',
-                                                                cursor: 'pointer',
-                                                                transition: 'all 0.2s',
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                gap: '4px',
-                                                                textTransform: 'uppercase'
-                                                            }}
-                                                            onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
-                                                            onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
-                                                        >
-                                                            FAIL • Fix
-                                                        </button>
-                                                    ) : (
-                                                        <StatusBadge status={stStatus} small />
-                                                    )
-                                                ) : <span className={styles.pendingTag}>{stage === 'Rework' ? 'NA' : 'Pending'}</span>}
-                                                {entries.length > 1 && (
-                                                    <span className={styles.rescannedTag}>×{entries.length} scans</span>
-                                                )}
+                                        <div key={`${stage}-${side ?? ''}`} className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
+                                            <div className={styles.pipelineNodeDot} style={{
+                                                background: color,
+                                                boxShadow: isCurrent ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` : `0 0 0 4px ${color}22`,
+                                            }}>
+                                                <StationIcon station={stage} />
                                             </div>
-
-                                            {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
-                                        </React.Fragment>
+                                            <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
+                                                {side ? <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', marginRight: '4px', opacity: 0.7 }}>{side.toUpperCase()}</span> : null}{stage}
+                                            </div>
+                                            {visited ? (
+                                                (isCurrent && stStatus.toUpperCase() === 'FAIL') ? (
+                                                    <button onClick={() => navigate(STAGE_ROUTES[stage])} title="Click to fix this failure" style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#ef4444', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'uppercase' }} onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'} onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>
+                                                        FAIL • Fix
+                                                    </button>
+                                                ) : (
+                                                    <StatusBadge status={stStatus} small />
+                                                )
+                                            ) : <span className={styles.pendingTag}>{stage === 'Rework' ? 'NA' : 'Pending'}</span>}
+                                            {entries.length > 1 && <span className={styles.rescannedTag}>×{entries.length} scans</span>}
+                                        </div>
                                     );
-                                })}
-                            </div>
+                                };
+
+                                if (isDoubleSided) {
+                                    // Serial Number node
+                                    const snEntries = data.scan_history.filter(h => h.process_step === 'Serial Number');
+                                    const snVisited = snEntries.length > 0;
+                                    const snColor = snVisited ? statusColor(snEntries[snEntries.length - 1].status) : '#cbd5e1';
+                                    return (
+                                        <div className={styles.pipeline}>
+                                            {/* Serial Number */}
+                                            <div className={styles.pipelineNode}>
+                                                <div className={styles.pipelineNodeDot} style={{ background: snColor, boxShadow: `0 0 0 4px ${snColor}22` }}><StationIcon station="Serial Number" /></div>
+                                                <div className={styles.pipelineNodeLabel} style={{ color: snVisited ? '#1e293b' : '#94a3b8' }}>Serial Number</div>
+                                                {snVisited ? <StatusBadge status={snEntries[snEntries.length - 1].status} small /> : <span className={styles.pendingTag}>Pending</span>}
+                                            </div>
+                                            <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
+
+                                            {/* BOTTOM side group */}
+                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', marginBottom: '4px', background: '#f8fafc' }}>
+                                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6366f1', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>▼ BOTTOM Side</div>
+                                                {SIDE_STAGES.map((stage, i) => (
+                                                    <React.Fragment key={`bottom-${stage}`}>
+                                                        {renderNode(stage, 'Bottom')}
+                                                        {i < SIDE_STAGES.length - 1 && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
+                                            <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
+
+                                            {/* TOP side group */}
+                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', marginBottom: '4px', background: '#f8fafc' }}>
+                                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#10b981', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>▼ TOP Side</div>
+                                                {SIDE_STAGES.map((stage, i) => (
+                                                    <React.Fragment key={`top-${stage}`}>
+                                                        {renderNode(stage, 'Top')}
+                                                        {i < SIDE_STAGES.length - 1 && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
+                                            <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
+
+                                            {/* SMT FG */}
+                                            {renderNode('SMT FG', null)}
+                                        </div>
+                                    );
+                                }
+
+                                // Single-sided: existing behaviour unchanged
+                                return (
+                                    <div className={styles.pipeline}>
+                                        {SMT_PIPELINE.map((stage, idx) => {
+                                            const visited = visitedStages.has(stage);
+                                            const stStatus = visited ? getStageStatus(stage) : 'pending';
+                                            const isCurrent = isCurrentStage(stage);
+                                            const color = visited ? statusColor(stStatus) : '#cbd5e1';
+                                            const entries = data.scan_history.filter(h => h.process_step === stage);
+                                            const isLast = idx === SMT_PIPELINE.length - 1;
+                                            return (
+                                                <React.Fragment key={stage}>
+                                                    <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
+                                                        <div className={styles.pipelineNodeDot} style={{ background: color, boxShadow: isCurrent ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` : `0 0 0 4px ${color}22` }}>
+                                                            <StationIcon station={stage} />
+                                                        </div>
+                                                        <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
+                                                            {stage}{isCurrent && <span className={styles.liveTag}>LIVE</span>}
+                                                        </div>
+                                                        {visited ? (
+                                                            (isCurrent && stStatus.toUpperCase() === 'FAIL') ? (
+                                                                <button onClick={() => navigate(STAGE_ROUTES[stage])} title="Click to fix this failure" style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#ef4444', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'uppercase' }} onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'} onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>
+                                                                    FAIL • Fix
+                                                                </button>
+                                                            ) : (
+                                                                <StatusBadge status={stStatus} small />
+                                                            )
+                                                        ) : <span className={styles.pendingTag}>{stage === 'Rework' ? 'NA' : 'Pending'}</span>}
+                                                        {entries.length > 1 && <span className={styles.rescannedTag}>×{entries.length} scans</span>}
+                                                    </div>
+                                                    {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* RIGHT: Scan History Table */}
@@ -660,56 +684,16 @@ const SmtTrackItems: React.FC = () => {
                                     <div className={styles.summaryValue}>{woData.line_id}</div>
                                 </div>
                             </div>
-                        </div>
-
-                        {/* Solder Paste Prep Details */}
-                        {woData.solder_paste && (
-                            <div style={{
-                                marginTop: '1.5rem',
-                                padding: '1.25rem',
-                                background: '#f8fafc',
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '8px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '0.75rem',
-                                boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
-                                marginBottom: '1.5rem'
-                            }}>
-                                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    🧴 Solder Paste Preparation Details
-                                </h4>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                                    <div>
-                                        <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Status</span>
-                                        <span style={{
-                                            fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase',
-                                            color: woData.solder_paste.status === 'Completed' ? '#10b981' : '#f59e0b'
-                                        }}>
-                                            {woData.solder_paste.status || 'Pending'}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Container Barcode</span>
-                                        <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>
-                                            {woData.solder_paste.details?.solder_paste_barcode || '—'}
-                                        </strong>
-                                    </div>
-                                    <div>
-                                        <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Thawing Finished</span>
-                                        <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>
-                                            {fmt(woData.solder_paste.details?.stage2?.completed_at)}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span style={{ fontSize: '0.825rem', color: '#64748b', display: 'block' }}>Mixing Finished</span>
-                                        <span style={{ fontSize: '0.85rem', color: '#1e293b' }}>
-                                            {fmt(woData.solder_paste.details?.stage3?.completed_at)}
-                                        </span>
-                                    </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}><Zap size={22} /></div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Sides</div>
+                                    <div className={styles.summaryValue}>{woData.sides || '-'}</div>
                                 </div>
                             </div>
-                        )}
+                        </div>
+
+                        {/* Solder Paste Preparation Details removed per Enhancement 2 */}
 
                         <div className={styles.historyPanel} style={{ marginTop: '20px' }}>
                             <h3 className={styles.panelTitle} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

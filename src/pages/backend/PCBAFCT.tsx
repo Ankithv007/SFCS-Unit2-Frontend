@@ -79,17 +79,17 @@ const UnitSerialModal: React.FC<UnitSerialModalProps> = ({ pcbBarcode, batchId, 
     };
 
     return (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <div style={{ background:'#1e293b', borderRadius:'1rem', padding:'2rem', width:'480px', border:'2px solid #6366f1' }}>
-                <div style={{ marginBottom:'1rem' }}>
-                    <span style={{ fontSize:'0.8rem', color:'#6366f1', fontWeight:700, textTransform:'uppercase' }}>Step 2 of 2 – Mandatory</span>
-                    <h3 style={{ color:'#f8fafc', margin:'0.5rem 0 0' }}>Scan Unit Serial Number</h3>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#1e293b', borderRadius: '1rem', padding: '2rem', width: '480px', border: '2px solid #6366f1' }}>
+                <div style={{ marginBottom: '1rem' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#6366f1', fontWeight: 700, textTransform: 'uppercase' }}>Step 2 of 2 – Mandatory</span>
+                    <h3 style={{ color: '#f8fafc', margin: '0.5rem 0 0' }}>Scan Unit Serial Number</h3>
                 </div>
-                <p style={{ color:'#94a3b8', fontSize:'0.9rem', margin:'0 0 1rem' }}>
-                    PCB <strong style={{ color:'#22c55e' }}>{pcbBarcode}</strong> passed PCBA-FCT.<br/>
-                    Now scan the <strong style={{ color:'#f59e0b' }}>Unit Serial Number sticker</strong> placed on the product.
+                <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: '0 0 1rem' }}>
+                    PCB <strong style={{ color: '#22c55e' }}>{pcbBarcode}</strong> passed PCBA-FCT.<br />
+                    Now scan the <strong style={{ color: '#f59e0b' }}>Unit Serial Number sticker</strong> placed on the product.
                 </p>
-                {error && <p style={{ color:'#ef4444', fontSize:'0.85rem', marginBottom:'0.75rem' }}>{error}</p>}
+                {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{error}</p>}
                 <input
                     ref={inputRef}
                     type="text"
@@ -97,18 +97,18 @@ const UnitSerialModal: React.FC<UnitSerialModalProps> = ({ pcbBarcode, batchId, 
                     onChange={e => setUsn(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleLink(); } }}
                     placeholder="Scan Unit Serial Number..."
-                    style={{ width:'100%', padding:'0.875rem 1rem', fontSize:'1.1rem', fontFamily:'monospace', background:'#0f172a', border:'1px solid #334155', borderRadius:'0.5rem', color:'#f8fafc', boxSizing:'border-box' }}
+                    style={{ width: '100%', padding: '0.875rem 1rem', fontSize: '1.1rem', fontFamily: 'monospace', background: '#0f172a', border: '1px solid #334155', borderRadius: '0.5rem', color: '#f8fafc', boxSizing: 'border-box' }}
                     disabled={submitting}
                     autoFocus
                 />
                 <button
                     onClick={handleLink}
                     disabled={submitting || !usn.trim()}
-                    style={{ width:'100%', marginTop:'1rem', padding:'0.875rem', background:'#6366f1', color:'white', border:'none', borderRadius:'0.5rem', fontSize:'1rem', fontWeight:700, cursor:'pointer' }}
+                    style={{ width: '100%', marginTop: '1rem', padding: '0.875rem', background: '#6366f1', color: 'white', border: 'none', borderRadius: '0.5rem', fontSize: '1rem', fontWeight: 700, cursor: 'pointer' }}
                 >
                     {submitting ? 'Linking...' : 'Link Unit Serial Number'}
                 </button>
-                <p style={{ color:'#64748b', fontSize:'0.75rem', textAlign:'center', marginTop:'0.75rem' }}>This step is mandatory. The board cannot proceed to Assembly without a Unit Serial Number.</p>
+                <p style={{ color: '#64748b', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.75rem' }}>This step is mandatory. The board cannot proceed to Assembly without a Unit Serial Number.</p>
             </div>
         </div>
     );
@@ -270,7 +270,7 @@ const PCBAFCT: React.FC = () => {
     } | null>(null);
 
     const handleCountClick = (
-        batch: Batch, 
+        batch: Batch,
         columnType: 'previousStagePassed' | 'scanned' | 'pending' | 'passed' | 'rework' | 'debug',
         columnLabel: string
     ) => {
@@ -533,11 +533,11 @@ const PCBAFCT: React.FC = () => {
         (item.unit_serial_number || item.usn_from_map)?.toLowerCase().includes(tableSearch.toLowerCase())
     );
 
-    
 
-    const BatchTable = ({ 
-        data, 
-        title, 
+
+    const BatchTable = ({
+        data,
+        title,
         showDelete = false,
         currentPage,
         totalPages,
@@ -545,9 +545,9 @@ const PCBAFCT: React.FC = () => {
         onPageChange,
         searchValue,
         onSearchChange
-    }: { 
-        data: Batch[], 
-        title: string, 
+    }: {
+        data: Batch[],
+        title: string,
         showDelete?: boolean,
         currentPage: number,
         totalPages: number,
@@ -559,10 +559,10 @@ const PCBAFCT: React.FC = () => {
         <div className={styles.card} style={{ marginBottom: '2rem' }}>
             <div className={styles.tableHeader}>
                 <h3 style={{ margin: 0 }}>{title} ({totalRecords})</h3>
-                <SearchInput 
-                    value={searchValue} 
-                    onChange={onSearchChange} 
-                    placeholder="Search Work Order..." 
+                <SearchInput
+                    value={searchValue}
+                    onChange={onSearchChange}
+                    placeholder="Search Work Order..."
                 />
             </div>
             <div className={styles.tableWrapper}>
@@ -592,7 +592,7 @@ const PCBAFCT: React.FC = () => {
                                     <td>{batch.model || "-"}</td>
                                     <td style={{ fontWeight: 600 }}>{batch.workOrderQty}</td>
                                     {title === "Pending Batches" && batch.previousStagePassed !== undefined && (
-                                        <td 
+                                        <td
                                             style={{ fontWeight: 600, color: '#4f46e5', cursor: 'pointer', textDecoration: 'underline' }}
                                             onClick={() => handleCountClick(batch, 'previousStagePassed', 'Previous Stage Passed')}
                                         >
@@ -602,40 +602,40 @@ const PCBAFCT: React.FC = () => {
                                     {title === "Pending Batches" && !batch.previousStagePassed && batch.previousStagePassed !== 0 && data.some(b => b.previousStagePassed !== undefined) && (
                                         <td>-</td>
                                     )}
-                                    <td 
-                                        className={styles.statusBlue} 
+                                    <td
+                                        className={styles.statusBlue}
                                         style={{ cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'scanned', 'Scanned')}
                                     >
                                         {batch.scanned ?? 0}
                                     </td>
-                                    <td 
+                                    <td
                                         style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'pending', 'Pending')}
                                     >
                                         {batch.pending ?? 0}
                                     </td>
-                                    <td 
-                                        className={styles.statusGreen} 
+                                    <td
+                                        className={styles.statusGreen}
                                         style={{ cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'passed', 'Passed')}
                                     >
                                         {batch.passed ?? 0}
                                     </td>
-                                    <td 
+                                    <td
                                         style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'rework', 'Rework')}
                                     >
                                         {batch.rework ?? 0}
                                     </td>
-                                    <td 
+                                    <td
                                         style={{ color: '#dc2626', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'debug', 'Debug')}
                                     >
                                         {batch.debug ?? 0}
                                     </td>
                                     <td>
-                                        <button 
+                                        <button
                                             className={sharedStyles.secondaryButton}
                                             disabled={exportingBatchId === batch.id}
                                             onClick={() => handleExportExcel(batch)}
@@ -673,11 +673,11 @@ const PCBAFCT: React.FC = () => {
                                                 <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>...</span>
                                             ) : (
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                                                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                                                    <polyline points="14 2 14 8 20 8"/>
-                                                    <line x1="8" y1="13" x2="16" y2="13"/>
-                                                    <line x1="8" y1="17" x2="16" y2="17"/>
-                                                    <line x1="10" y1="9" x2="9" y2="9"/>
+                                                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                                                    <polyline points="14 2 14 8 20 8" />
+                                                    <line x1="8" y1="13" x2="16" y2="13" />
+                                                    <line x1="8" y1="17" x2="16" y2="17" />
+                                                    <line x1="10" y1="9" x2="9" y2="9" />
                                                 </svg>
                                             )}
                                         </button>
@@ -709,8 +709,8 @@ const PCBAFCT: React.FC = () => {
                         Showing {(currentPage - 1) * 10 + 1}-{Math.min(currentPage * 10, totalRecords)} of {totalRecords} batches
                     </span>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <button 
-                            className={sharedStyles.secondaryButton} 
+                        <button
+                            className={sharedStyles.secondaryButton}
                             disabled={currentPage === 1}
                             onClick={() => onPageChange(currentPage - 1)}
                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
@@ -718,8 +718,8 @@ const PCBAFCT: React.FC = () => {
                             Previous
                         </button>
                         <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Page {currentPage} of {totalPages}</span>
-                        <button 
-                            className={sharedStyles.secondaryButton} 
+                        <button
+                            className={sharedStyles.secondaryButton}
                             disabled={currentPage === totalPages}
                             onClick={() => onPageChange(currentPage + 1)}
                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
@@ -743,28 +743,28 @@ const PCBAFCT: React.FC = () => {
                         </div>
                     </div>
 
-                    <BatchTable 
-                                data={pendingBatches} 
-                                title="Pending Batches"
-                                searchValue={searchTermPending}
-                                onSearchChange={setSearchTermPending} 
-                                currentPage={pendingPage}
-                                totalPages={pendingTotalPages}
-                                totalRecords={pendingTotalRecords}
-                                onPageChange={fetchPendingBatches}
-                                showDelete={true}
-                            />
-                    <BatchTable 
-                                data={completedBatches} 
-                                title="Completed Batches"
-                                searchValue={searchTermCompleted}
-                                onSearchChange={setSearchTermCompleted} 
-                                currentPage={completedPage}
-                                totalPages={completedTotalPages}
-                                totalRecords={completedTotalRecords}
-                                onPageChange={fetchCompletedBatches}
-                                showDelete={false}
-                            />
+                    <BatchTable
+                        data={pendingBatches}
+                        title="Pending Batches"
+                        searchValue={searchTermPending}
+                        onSearchChange={setSearchTermPending}
+                        currentPage={pendingPage}
+                        totalPages={pendingTotalPages}
+                        totalRecords={pendingTotalRecords}
+                        onPageChange={fetchPendingBatches}
+                        showDelete={true}
+                    />
+                    <BatchTable
+                        data={completedBatches}
+                        title="Completed Batches"
+                        searchValue={searchTermCompleted}
+                        onSearchChange={setSearchTermCompleted}
+                        currentPage={completedPage}
+                        totalPages={completedTotalPages}
+                        totalRecords={completedTotalRecords}
+                        onPageChange={fetchCompletedBatches}
+                        showDelete={false}
+                    />
                 </>
             ) : (
                 <>
@@ -904,23 +904,23 @@ const PCBAFCT: React.FC = () => {
                                                             )}
                                                             <button
                                                                 className={sharedStyles.deleteBtn}
-                                                            onClick={async () => {
-                                                                if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
-                                                                    showToast('You do not have permission to delete this record.', 'error');
-                                                                    return;
-                                                                }
-                                                                if (!window.confirm('Are you sure you want to delete this record?')) return;
-                                                                try {
-                                                                    await apiFetch(`/api/backend/pcba-fct/scan/${scan.id}`, { method: 'DELETE' });
-                                                                    showToast('Record deleted successfully.', 'success');
-                                                                    fetchScans(activeBatch!.id, currentPage);
-                                                                } catch (err: any) {
-                                                                    showToast(err?.message || 'Failed to delete record', 'error');
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Trash2 size={14} />
-                                                        </button>
+                                                                onClick={async () => {
+                                                                    if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
+                                                                        showToast('You do not have permission to delete this record.', 'error');
+                                                                        return;
+                                                                    }
+                                                                    if (!window.confirm('Are you sure you want to delete this record?')) return;
+                                                                    try {
+                                                                        await apiFetch(`/api/backend/pcba-fct/scan/${scan.id}`, { method: 'DELETE' });
+                                                                        showToast('Record deleted successfully.', 'success');
+                                                                        fetchScans(activeBatch!.id, currentPage);
+                                                                    } catch (err: any) {
+                                                                        showToast(err?.message || 'Failed to delete record', 'error');
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -937,8 +937,8 @@ const PCBAFCT: React.FC = () => {
                                         Showing {(currentPage - 1) * 50 + 1}-{Math.min(currentPage * 50, totalRecords)} of {totalRecords} records
                                     </span>
                                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                        <button 
-                                            className={sharedStyles.secondaryButton} 
+                                        <button
+                                            className={sharedStyles.secondaryButton}
                                             disabled={currentPage === 1}
                                             onClick={() => fetchScans(activeBatch!.id, currentPage - 1)}
                                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
@@ -946,8 +946,8 @@ const PCBAFCT: React.FC = () => {
                                             Previous
                                         </button>
                                         <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Page {currentPage} of {totalPages}</span>
-                                        <button 
-                                            className={sharedStyles.secondaryButton} 
+                                        <button
+                                            className={sharedStyles.secondaryButton}
                                             disabled={currentPage === totalPages}
                                             onClick={() => fetchScans(activeBatch!.id, currentPage + 1)}
                                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}

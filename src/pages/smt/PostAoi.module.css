@@ -591,3 +591,31 @@
     color: #dc2626 !important;
 }
 
+.searchHeader {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.searchContainer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.searchReports {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.searchMatchRow {
+    background-color: #fef08a !important;
+    font-weight: bold;
+}
+
+

@@ -572,6 +572,10 @@ const StencilMasterRecord: React.FC = () => {
                                     <label>Status</label>
                                     <div className={styles.readOnlyValue}>{viewRecord.status}</div>
                                 </div>
+                                <div className={styles.inputGroup}>
+                                    <label>Storage Location</label>
+                                    <div className={styles.readOnlyValue}>{viewRecord.storage_location || '-'}</div>
+                                </div>
                             </div>
                             {/* Remarks */}
                             {viewRecord.remarks && viewRecord.remarks.trim() && (

@@ -57,12 +57,14 @@ export const WorkOrderHistory: React.FC = () => {
         const qms = qmsMap[workOrderId];
         if (!qms || !qms.files_metadata) return <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>None</span>;
         const meta = qms.files_metadata;
+        const token = localStorage.getItem('auth_token') || '';
+        const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
         const items = [];
-        if (meta.bom) items.push(<a key="bom" href={`/api/smt/qms/files/download/${qms.id}/bom`} title={`BOM: ${meta.bom.originalName}`} style={{ color: '#4f46e5', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>BOM</a>);
-        if (meta.pfc) items.push(<a key="pfc" href={`/api/smt/qms/files/download/${qms.id}/pfc`} title={`PFC: ${meta.pfc.originalName}`} style={{ color: '#0f766e', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>PFC</a>);
-        if (meta.xy) items.push(<a key="xy" href={`/api/smt/qms/files/download/${qms.id}/xy`} title={`XY: ${meta.xy.originalName}`} style={{ color: '#b45309', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>XY</a>);
-        if (meta.ecn) items.push(<a key="ecn" href={`/api/smt/qms/files/download/${qms.id}/ecn`} title={`ECN: ${meta.ecn.originalName}`} style={{ color: '#be185d', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>ECN</a>);
-        if (meta.drawing) items.push(<a key="drawing" href={`/api/smt/qms/files/download/${qms.id}/drawing`} title={`Drawing: ${meta.drawing.originalName}`} style={{ color: '#4338ca', fontWeight: 'bold', textDecoration: 'underline' }}>DWG</a>);
+        if (meta.bom) items.push(<a key="bom" href={`/api/smt/qms/files/download/${qms.id}/bom${tokenParam}`} title={`BOM: ${meta.bom.originalName}`} style={{ color: '#4f46e5', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>BOM</a>);
+        if (meta.pfc) items.push(<a key="pfc" href={`/api/smt/qms/files/download/${qms.id}/pfc${tokenParam}`} title={`PFC: ${meta.pfc.originalName}`} style={{ color: '#0f766e', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>PFC</a>);
+        if (meta.xy) items.push(<a key="xy" href={`/api/smt/qms/files/download/${qms.id}/xy${tokenParam}`} title={`XY: ${meta.xy.originalName}`} style={{ color: '#b45309', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>XY</a>);
+        if (meta.ecn) items.push(<a key="ecn" href={`/api/smt/qms/files/download/${qms.id}/ecn${tokenParam}`} title={`ECN: ${meta.ecn.originalName}`} style={{ color: '#be185d', fontWeight: 'bold', textDecoration: 'underline', marginRight: '6px' }}>ECN</a>);
+        if (meta.drawing) items.push(<a key="drawing" href={`/api/smt/qms/files/download/${qms.id}/drawing${tokenParam}`} title={`Drawing: ${meta.drawing.originalName}`} style={{ color: '#4338ca', fontWeight: 'bold', textDecoration: 'underline' }}>DWG</a>);
         return items.length > 0 ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', fontSize: '0.75rem' }}>{items}</div> : <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>None</span>;
     };
 

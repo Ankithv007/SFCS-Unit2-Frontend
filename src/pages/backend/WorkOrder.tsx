@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './WorkOrder.module.css';
 import sharedStyles from '../smt/WorkOrder.module.css';
@@ -41,15 +41,6 @@ const WorkOrder: React.FC = () => {
     const [selectedWO, setSelectedWO] = useState<WorkOrderRecord | null>(null);
     const [woToDelete, setWoToDelete] = useState<WorkOrderRecord | null>(null);
 
-    // Auto-generated Date Prefix
-    const datePrefix = useMemo(() => {
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        return `WO${yyyy}${mm}${dd}`;
-    }, []);
-
     useEffect(() => {
         fetchWorkOrders();
     }, []);
@@ -68,10 +59,20 @@ const WorkOrder: React.FC = () => {
     const handleCreateWorkOrder = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!userSequence || userSequence.length < 2 || userSequence.length > 6) {
-            showToast('Sequence must be between 2 and 6 digits', 'error');
+        const finalWONumber = userSequence.trim().toUpperCase();
+        if (!finalWONumber) {
+            showToast('Work Order ID is required.', 'error');
             return;
         }
+        if (finalWONumber.length < 3 || finalWONumber.length > 50) {
+            showToast('Work Order ID must be between 3 and 50 characters.', 'error');
+            return;
+        }
+        if (!/^[A-Z0-9\-_]+$/.test(finalWONumber)) {
+            showToast('Work Order ID can only contain letters, numbers, hyphens (-), and underscores (_).', 'error');
+            return;
+        }
+
         if (!quantity || parseInt(quantity) <= 0) {
             showToast('Please enter a valid quantity', 'error');
             return;
@@ -81,9 +82,7 @@ const WorkOrder: React.FC = () => {
             return;
         }
 
-        const fullWONumber = `${datePrefix}${userSequence.padStart(6, '0')}`;
-
-        if (workOrders.some(wo => wo.wo_number === fullWONumber)) {
+        if (workOrders.some(wo => wo.wo_number.toUpperCase() === finalWONumber)) {
             showToast('Work Order number already exists', 'error');
             return;
         }
@@ -91,7 +90,7 @@ const WorkOrder: React.FC = () => {
         setIsSubmitting(true);
         try {
             const payload = {
-                wo_number: fullWONumber,
+                wo_number: finalWONumber,
                 quantity: parseInt(quantity),
                 customer_name: customerName,
                 model: selectedModel,
@@ -170,28 +169,18 @@ const WorkOrder: React.FC = () => {
                     <div className={styles.formGrid}>
                         <div className={styles.inputGroup}>
                             <label><Hash size={14} /> Work Order ID *</label>
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                <div style={{
-                                    backgroundColor: '#f3f4f6',
-                                    padding: '0.625rem 1rem',
-                                    border: '1px solid #d1d5db',
-                                    borderRight: 'none',
-                                    borderRadius: '8px 0 0 8px',
-                                    color: '#4b5563',
-                                    fontWeight: 'bold'
-                                }}>
-                                    {datePrefix}
-                                </div>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    style={{ borderRadius: '0 8px 8px 0', flex: 1 }}
-                                    value={userSequence}
-                                    onChange={(e) => setUserSequence(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    placeholder="XXXXXX"
-                                    required
-                                />
-                            </div>
+                            <input
+                                type="text"
+                                className={styles.input}
+                                value={userSequence}
+                                onChange={(e) => setUserSequence(e.target.value)}
+                                placeholder="e.g. WO2026060200016"
+                                required
+                                spellCheck={false}
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="none"
+                            />
                         </div>
 
                         <div className={styles.inputGroup}>

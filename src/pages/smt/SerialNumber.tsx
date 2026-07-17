@@ -144,6 +144,11 @@ export const SerialNumber: React.FC = () => {
     // Large QR Preview modal state
     const [previewQrSerial, setPreviewQrSerial] = useState<string | null>(null);
 
+    // Edit customer barcode modal state
+    const [editingSerial, setEditingSerial] = useState<any>(null);
+    const [editBarcodeValue, setEditBarcodeValue] = useState<string>('');
+    const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+
     const fetchWorkOrders = async () => {
         try {
             const data = await apiFetch('/api/smt/workorders/pending');
@@ -751,6 +756,47 @@ export const SerialNumber: React.FC = () => {
             fetchRecordSerialsList(viewRecord.id, serialsPage, serialsSearch);
         }
     }, [serialsPage, serialsSearch]);
+
+    const handleOpenEditModal = (serial: any) => {
+        setEditingSerial(serial);
+        setEditBarcodeValue(serial.serial_number);
+    };
+
+    const handleSaveEditBarcode = async () => {
+        const trimmed = editBarcodeValue.trim();
+        if (!trimmed) {
+            addToast('Barcode cannot be empty.', 'error');
+            return;
+        }
+
+        if (editingSerial.serial_number === trimmed) {
+            addToast('No changes detected.', 'error');
+            return;
+        }
+
+        setIsSavingEdit(true);
+        try {
+            const res = await apiFetch(`/api/smt/v1/smt/serial-generation-records/${editingSerial.id}/customer-barcode`, {
+                method: 'PUT',
+                body: JSON.stringify({ customerBarcode: trimmed })
+            });
+
+            if (res?.success) {
+                addToast(res.message || 'Customer barcode updated successfully.', 'success');
+                setEditingSerial(null);
+                if (viewRecord) {
+                    fetchRecordSerialsList(viewRecord.id, serialsPage, serialsSearch);
+                    fetchRecords();
+                }
+            } else {
+                addToast(res?.error || 'Failed to update barcode.', 'error');
+            }
+        } catch (err: any) {
+            addToast(err.message || 'Failed to update barcode.', 'error');
+        } finally {
+            setIsSavingEdit(false);
+        }
+    };
 
     // Canvas based helper to generate QR Code + Serial Text composite
     const generateQRWithText = (serialNumber: string): Promise<string> => {
@@ -1979,6 +2025,16 @@ export const SerialNumber: React.FC = () => {
                                                                     >
                                                                         PDF
                                                                     </button>
+                                                                    {viewRecord?.barcode_source === 'CUSTOMER' && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleOpenEditModal(s)}
+                                                                            className={`${styles.button} ${styles.buttonSecondary}`}
+                                                                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', color: '#d97706', borderColor: '#fcd34d' }}
+                                                                        >
+                                                                            Edit
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -2249,6 +2305,67 @@ export const SerialNumber: React.FC = () => {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- EDIT CUSTOMER BARCODE MODAL --- */}
+            {editingSerial && (
+                <div className={styles.modalOverlay} onClick={() => setEditingSerial(null)} style={{ zIndex: 1200 }}>
+                    <div className={styles.modalContent} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px', width: '90%', borderRadius: '1rem', border: '1px solid #cbd5e1' }}>
+                        
+                        <div className={styles.modalHeader} style={{ padding: '1rem 1.5rem', backgroundColor: '#f8fafc' }}>
+                            <h4 className={styles.modalTitle} style={{ margin: 0, color: '#0f172a', fontWeight: 800 }}>✏️ Edit Customer Barcode</h4>
+                            <button type="button" className={styles.modalCloseBtn} onClick={() => setEditingSerial(null)}>✕</button>
+                        </div>
+
+                        <div className={styles.modalBody} style={{ padding: '1.5rem', backgroundColor: '#ffffff' }}>
+                            <div style={{ marginBottom: '1.25rem', padding: '0.75rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>Work Order:</span>
+                                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{viewRecord?.work_order_number}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>Product:</span>
+                                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{viewRecord?.product_name}</span>
+                                </div>
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ fontWeight: 700, color: '#374151', fontSize: '0.9rem', display: 'block', marginBottom: '0.5rem' }}>Customer Barcode</label>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    value={editBarcodeValue}
+                                    onChange={(e) => setEditBarcodeValue(e.target.value)}
+                                    placeholder="Enter customer barcode..."
+                                    autoFocus
+                                    disabled={isSavingEdit}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingSerial(null)}
+                                    className={`${styles.button} ${styles.buttonSecondary}`}
+                                    style={{ padding: '0.5rem 1rem' }}
+                                    disabled={isSavingEdit}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveEditBarcode}
+                                    className={styles.button}
+                                    style={{ padding: '0.5rem 1rem', backgroundColor: '#4f46e5' }}
+                                    disabled={isSavingEdit}
+                                >
+                                    {isSavingEdit ? 'Saving...' : 'Save'}
+                                </button>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             )}

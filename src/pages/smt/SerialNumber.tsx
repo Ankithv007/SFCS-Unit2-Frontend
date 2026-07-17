@@ -138,6 +138,8 @@ export const SerialNumber: React.FC = () => {
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [qrCodeMap, setQrCodeMap] = useState<{[key: string]: string}>({});
     const [isZipping, setIsZipping] = useState(false);
+    const [pdfProgress, setPdfProgress] = useState<string | null>(null);
+    const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
     const [panelFileName, setPanelFileName] = useState('');
     const [modalPanelFileName, setModalPanelFileName] = useState('');
 
@@ -977,7 +979,7 @@ export const SerialNumber: React.FC = () => {
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = downloadUrl;
-            a.download = `QR_Codes_PNG_WO_${viewRecord.work_order_number}.zip`;
+            a.download = `${viewRecord.work_order_number}_QR_Images.zip`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -995,6 +997,7 @@ export const SerialNumber: React.FC = () => {
     const handleDownloadAllQRCodesPDF = async () => {
         if (!viewRecord) return;
         setIsZipping(true);
+        setPdfProgress('Initializing...');
         try {
             addToast('Fetching all serial numbers for combined PDF...', 'info');
             const queryParams = new URLSearchParams({
@@ -1031,15 +1034,27 @@ export const SerialNumber: React.FC = () => {
                      doc.addPage([80, 95], 'portrait');
                 }
                 await generateQRComposite(serials[i].serial_number, qrCanvas, mainCanvas);
-                doc.addImage(mainCanvas, 'PNG', 5, 5, 70, 82.6);
+                
+                // Convert to compressed JPEG data URL to fix memory string length limit crash
+                const jpegDataUrl = mainCanvas.toDataURL('image/jpeg', 0.75);
+                doc.addImage(jpegDataUrl, 'JPEG', 5, 5, 70, 82.6, undefined, 'FAST');
+
+                // Yield control to event loop every 50 pages to prevent blocking the thread
+                if ((i + 1) % 50 === 0 || i === serials.length - 1) {
+                    setPdfProgress(`Generating page ${i + 1} of ${serials.length}...`);
+                    await new Promise(r => setTimeout(r, 0));
+                }
             }
 
-            doc.save(`QR_Codes_ALL_WO_${viewRecord.work_order_number}.pdf`);
+            setPdfProgress('Saving PDF file...');
+            await new Promise(r => setTimeout(r, 0));
+            doc.save(`${viewRecord.work_order_number}_Serial_Generation.pdf`);
             addToast('All QR codes combined PDF downloaded successfully!', 'success');
         } catch (err: any) {
             addToast(`Failed to generate combined PDF: ${err.message}`, 'error');
         } finally {
             setIsZipping(false);
+            setPdfProgress(null);
         }
     };
 
@@ -1136,17 +1151,42 @@ export const SerialNumber: React.FC = () => {
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = downloadUrl;
-            a.download = `WorkOrder_TXT_WO_${viewRecord.work_order_number}.zip`;
+            a.download = `${viewRecord.work_order_number}_Serial_Generation.txt`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(downloadUrl);
 
-            addToast(`TXT ZIP file WorkOrder_TXT_WO_${viewRecord.work_order_number}.zip downloaded successfully!`, 'success');
+            addToast(`TXT ZIP file downloaded successfully!`, 'success');
         } catch (err: any) {
             addToast(`Failed to generate TXT ZIP: ${err.message}`, 'error');
         } finally {
             setIsZipping(false);
+        }
+    };
+
+    // Download All Serial Numbers and Metadata in a Styled Excel Spreadsheet
+    const handleDownloadAllExcel = async () => {
+        if (!viewRecord) return;
+        setIsGeneratingExcel(true);
+        try {
+            addToast('Generating Excel report...', 'info');
+            const blob = await apiFetch(`/api/smt/v1/smt/serial-generation-records/${viewRecord.id}/export/excel`);
+            
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = downloadUrl;
+            a.download = `${viewRecord.work_order_number}_Serial_Generation.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(downloadUrl);
+            addToast('Excel report downloaded successfully!', 'success');
+        } catch (err: any) {
+            addToast(`Failed to download Excel report: ${err.message}`, 'error');
+        } finally {
+            setIsGeneratingExcel(false);
         }
     };
 
@@ -1925,33 +1965,42 @@ export const SerialNumber: React.FC = () => {
                                                             }}
                                                         />
                                                     </div>
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                                         <button
                                                             type="button"
                                                             onClick={handleDownloadAllQRCodesPNG}
                                                             className={styles.button}
-                                                            disabled={isZipping}
+                                                            disabled={isZipping || isGeneratingExcel}
                                                             style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#10b981' }}
                                                         >
-                                                            {isZipping ? '🔄 zipping PNGs...' : '📦 Download All PNG'}
+                                                            {isZipping && !pdfProgress ? '🔄 zipping PNGs...' : '📦 Download All PNG'}
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={handleDownloadAllQRCodesPDF}
                                                             className={styles.button}
-                                                            disabled={isZipping}
+                                                            disabled={isZipping || isGeneratingExcel}
                                                             style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#4f46e5' }}
                                                         >
-                                                            {isZipping ? '🔄 creating PDF...' : '📄 Download All PDF'}
+                                                            {pdfProgress ? `🔄 ${pdfProgress}` : (isZipping ? '🔄 creating PDF...' : '📄 Download All PDF')}
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={handleDownloadAllTXT}
                                                             className={styles.button}
-                                                            disabled={isZipping}
+                                                            disabled={isZipping || isGeneratingExcel}
                                                             style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#d97706' }}
                                                         >
-                                                            {isZipping ? '🔄 creating TXT...' : '📝 Download All TXT'}
+                                                            {isZipping && !pdfProgress ? '🔄 creating TXT...' : '📝 Download All TXT'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleDownloadAllExcel}
+                                                            className={styles.button}
+                                                            disabled={isZipping || isGeneratingExcel}
+                                                            style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#2563eb' }}
+                                                        >
+                                                            {isGeneratingExcel ? '🔄 creating Excel...' : '📊 Download All Excel'}
                                                         </button>
                                                     </div>
                                                 </div>

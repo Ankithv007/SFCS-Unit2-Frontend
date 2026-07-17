@@ -199,7 +199,7 @@ const QI: React.FC = () => {
     } | null>(null);
 
     const handleCountClick = (
-        batch: Batch, 
+        batch: Batch,
         columnType: 'previousStagePassed' | 'scanned' | 'pending' | 'passed' | 'rework' | 'debug',
         columnLabel: string
     ) => {
@@ -385,27 +385,27 @@ const QI: React.FC = () => {
             });
 
             const { scan, counters } = response.data || {};
-            
+
             if (scan) {
                 fetchScans(activeBatch.id, 1);
             }
-            
+
             if (counters) {
                 setActiveBatch(prev => prev ? { ...prev, ...counters } : null);
             }
 
             showToast(`Item marked as ${(status || 'UNKNOWN').toUpperCase()}`, 'success');
             setPendingBarcode(null);
-            
+
             // Refresh batches in background
             fetchBatches();
-            
+
             // Check for batch completion using the updated counters
             if (counters) {
-                const isCompleted = counters.passed === activeBatch.workOrderQty && 
-                                  counters.rework === 0 && 
-                                  counters.debug === 0;
-                
+                const isCompleted = counters.passed === activeBatch.workOrderQty &&
+                    counters.rework === 0 &&
+                    counters.debug === 0;
+
                 if (isCompleted) {
                     showToast('Batch completed successfully!', 'success');
                     setActiveBatch(null);
@@ -443,11 +443,11 @@ const QI: React.FC = () => {
         item.unit_serial_number?.toLowerCase().includes(tableSearch.toLowerCase())
     );
 
-    
 
-    const BatchTable = ({ 
-        data, 
-        title, 
+
+    const BatchTable = ({
+        data,
+        title,
         showDelete = false,
         currentPage,
         totalPages,
@@ -455,9 +455,9 @@ const QI: React.FC = () => {
         onPageChange,
         searchValue,
         onSearchChange
-    }: { 
-        data: Batch[], 
-        title: string, 
+    }: {
+        data: Batch[],
+        title: string,
         showDelete?: boolean,
         currentPage: number,
         totalPages: number,
@@ -469,10 +469,10 @@ const QI: React.FC = () => {
         <div className={styles.card} style={{ marginBottom: '2rem' }}>
             <div className={styles.tableHeader}>
                 <h3 style={{ margin: 0 }}>{title} ({totalRecords})</h3>
-                <SearchInput 
-                    value={searchValue} 
-                    onChange={onSearchChange} 
-                    placeholder="Search Work Order..." 
+                <SearchInput
+                    value={searchValue}
+                    onChange={onSearchChange}
+                    placeholder="Search Work Order..."
                 />
             </div>
             <div className={styles.tableWrapper}>
@@ -502,7 +502,7 @@ const QI: React.FC = () => {
                                     <td>{batch.model || "-"}</td>
                                     <td style={{ fontWeight: 600 }}>{batch.workOrderQty}</td>
                                     {title === "Pending Batches" && batch.previousStagePassed !== undefined && (
-                                        <td 
+                                        <td
                                             style={{ fontWeight: 600, color: '#4f46e5', cursor: 'pointer', textDecoration: 'underline' }}
                                             onClick={() => handleCountClick(batch, 'previousStagePassed', 'Previous Stage Passed')}
                                         >
@@ -512,40 +512,40 @@ const QI: React.FC = () => {
                                     {title === "Pending Batches" && !batch.previousStagePassed && batch.previousStagePassed !== 0 && data.some(b => b.previousStagePassed !== undefined) && (
                                         <td>-</td>
                                     )}
-                                    <td 
-                                        className={styles.statusBlue} 
+                                    <td
+                                        className={styles.statusBlue}
                                         style={{ cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'scanned', 'Scanned')}
                                     >
                                         {batch.scanned ?? 0}
                                     </td>
-                                    <td 
+                                    <td
                                         style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'pending', 'Pending')}
                                     >
                                         {batch.pending ?? 0}
                                     </td>
-                                    <td 
-                                        className={styles.statusGreen} 
+                                    <td
+                                        className={styles.statusGreen}
                                         style={{ cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'passed', 'Passed')}
                                     >
                                         {batch.passed ?? 0}
                                     </td>
-                                    <td 
+                                    <td
                                         style={{ color: '#d97706', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'rework', 'Rework')}
                                     >
                                         {batch.rework ?? 0}
                                     </td>
-                                    <td 
+                                    <td
                                         style={{ color: '#dc2626', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
                                         onClick={() => handleCountClick(batch, 'debug', 'Debug')}
                                     >
                                         {batch.debug ?? 0}
                                     </td>
                                     <td>
-                                        <button 
+                                        <button
                                             className={sharedStyles.secondaryButton}
                                             disabled={exportingBatchId === batch.id}
                                             onClick={() => handleExportExcel(batch)}
@@ -583,11 +583,11 @@ const QI: React.FC = () => {
                                                 <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>...</span>
                                             ) : (
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                                                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                                                    <polyline points="14 2 14 8 20 8"/>
-                                                    <line x1="8" y1="13" x2="16" y2="13"/>
-                                                    <line x1="8" y1="17" x2="16" y2="17"/>
-                                                    <line x1="10" y1="9" x2="9" y2="9"/>
+                                                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                                                    <polyline points="14 2 14 8 20 8" />
+                                                    <line x1="8" y1="13" x2="16" y2="13" />
+                                                    <line x1="8" y1="17" x2="16" y2="17" />
+                                                    <line x1="10" y1="9" x2="9" y2="9" />
                                                 </svg>
                                             )}
                                         </button>
@@ -619,8 +619,8 @@ const QI: React.FC = () => {
                         Showing {(currentPage - 1) * 10 + 1}-{Math.min(currentPage * 10, totalRecords)} of {totalRecords} batches
                     </span>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <button 
-                            className={sharedStyles.secondaryButton} 
+                        <button
+                            className={sharedStyles.secondaryButton}
                             disabled={currentPage === 1}
                             onClick={() => onPageChange(currentPage - 1)}
                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
@@ -628,8 +628,8 @@ const QI: React.FC = () => {
                             Previous
                         </button>
                         <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Page {currentPage} of {totalPages}</span>
-                        <button 
-                            className={sharedStyles.secondaryButton} 
+                        <button
+                            className={sharedStyles.secondaryButton}
                             disabled={currentPage === totalPages}
                             onClick={() => onPageChange(currentPage + 1)}
                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
@@ -653,28 +653,28 @@ const QI: React.FC = () => {
                         </div>
                     </div>
 
-                    <BatchTable 
-                                data={pendingBatches} 
-                                title="Pending Batches"
-                                searchValue={searchTermPending}
-                                onSearchChange={setSearchTermPending} 
-                                currentPage={pendingPage}
-                                totalPages={pendingTotalPages}
-                                totalRecords={pendingTotalRecords}
-                                onPageChange={fetchPendingBatches}
-                                showDelete={true}
-                            />
-                    <BatchTable 
-                                data={completedBatches} 
-                                title="Completed Batches"
-                                searchValue={searchTermCompleted}
-                                onSearchChange={setSearchTermCompleted} 
-                                currentPage={completedPage}
-                                totalPages={completedTotalPages}
-                                totalRecords={completedTotalRecords}
-                                onPageChange={fetchCompletedBatches}
-                                showDelete={false}
-                            />
+                    <BatchTable
+                        data={pendingBatches}
+                        title="Pending Batches"
+                        searchValue={searchTermPending}
+                        onSearchChange={setSearchTermPending}
+                        currentPage={pendingPage}
+                        totalPages={pendingTotalPages}
+                        totalRecords={pendingTotalRecords}
+                        onPageChange={fetchPendingBatches}
+                        showDelete={true}
+                    />
+                    <BatchTable
+                        data={completedBatches}
+                        title="Completed Batches"
+                        searchValue={searchTermCompleted}
+                        onSearchChange={setSearchTermCompleted}
+                        currentPage={completedPage}
+                        totalPages={completedTotalPages}
+                        totalRecords={completedTotalRecords}
+                        onPageChange={fetchCompletedBatches}
+                        showDelete={false}
+                    />
                 </>
             ) : (
                 <>
@@ -812,23 +812,23 @@ const QI: React.FC = () => {
                                                             )}
                                                             <button
                                                                 className={sharedStyles.deleteBtn}
-                                                            onClick={async () => {
-                                                                if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
-                                                                    showToast('You do not have permission to delete this record.', 'error');
-                                                                    return;
-                                                                }
-                                                                if (!window.confirm('Are you sure you want to delete this record?')) return;
-                                                                try {
-                                                                    await apiFetch(`/api/backend/qi/scan/${scan.id}`, { method: 'DELETE' });
-                                                                    showToast('Record deleted successfully.', 'success');
-                                                                    fetchScans(activeBatch!.id, currentPage);
-                                                                } catch (err: any) {
-                                                                    showToast(err?.message || 'Failed to delete record', 'error');
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Trash2 size={14} />
-                                                        </button>
+                                                                onClick={async () => {
+                                                                    if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
+                                                                        showToast('You do not have permission to delete this record.', 'error');
+                                                                        return;
+                                                                    }
+                                                                    if (!window.confirm('Are you sure you want to delete this record?')) return;
+                                                                    try {
+                                                                        await apiFetch(`/api/backend/qi/scan/${scan.id}`, { method: 'DELETE' });
+                                                                        showToast('Record deleted successfully.', 'success');
+                                                                        fetchScans(activeBatch!.id, currentPage);
+                                                                    } catch (err: any) {
+                                                                        showToast(err?.message || 'Failed to delete record', 'error');
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -845,8 +845,8 @@ const QI: React.FC = () => {
                                         Showing {(currentPage - 1) * 50 + 1}-{Math.min(currentPage * 50, totalRecords)} of {totalRecords} records
                                     </span>
                                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                        <button 
-                                            className={sharedStyles.secondaryButton} 
+                                        <button
+                                            className={sharedStyles.secondaryButton}
                                             disabled={currentPage === 1}
                                             onClick={() => fetchScans(activeBatch!.id, currentPage - 1)}
                                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
@@ -854,8 +854,8 @@ const QI: React.FC = () => {
                                             Previous
                                         </button>
                                         <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Page {currentPage} of {totalPages}</span>
-                                        <button 
-                                            className={sharedStyles.secondaryButton} 
+                                        <button
+                                            className={sharedStyles.secondaryButton}
                                             disabled={currentPage === totalPages}
                                             onClick={() => fetchScans(activeBatch!.id, currentPage + 1)}
                                             style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}

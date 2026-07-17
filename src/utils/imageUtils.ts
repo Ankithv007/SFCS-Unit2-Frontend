@@ -1,44 +1,19 @@
 /**
- * Processes an avatar image file:
- * 1. Loads the image.
- * 2. Resizes it to a maximum dimension (e.g., 300px).
- * 3. Compresses it to JPEG format.
- * 4. Returns the Base64 string.
+ * Processes an avatar image file: resizes to 200x200 and compresses to JPEG base64.
+ * Used by useAuth.ts for user avatar upload.
  */
-export const processAvatarImage = (file: File, maxWidth = 300, quality = 0.7): Promise<string> => {
+export const processAvatarImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
-        if (!file.type.startsWith('image/')) {
-            reject(new Error('File is not an image'));
-            return;
-        }
-
         const reader = new FileReader();
-        reader.readAsDataURL(file);
 
-        reader.onload = (event) => {
+        reader.onload = (e) => {
             const img = new Image();
-            img.src = event.target?.result as string;
 
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
-
-                // Calculate new dimensions
-                if (width > height) {
-                    if (width > maxWidth) {
-                        height = Math.round((height * maxWidth) / width);
-                        width = maxWidth;
-                    }
-                } else {
-                    if (height > maxWidth) {
-                        width = Math.round((width * maxWidth) / height);
-                        height = maxWidth;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
+                const MAX_SIZE = 200;
+                canvas.width = MAX_SIZE;
+                canvas.height = MAX_SIZE;
 
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
@@ -46,17 +21,22 @@ export const processAvatarImage = (file: File, maxWidth = 300, quality = 0.7): P
                     return;
                 }
 
-                // Draw image to canvas
-                ctx.drawImage(img, 0, 0, width, height);
+                // Draw image centered and cropped to square
+                const size = Math.min(img.width, img.height);
+                const offsetX = (img.width - size) / 2;
+                const offsetY = (img.height - size) / 2;
 
-                // Export as Base64 JPEG
-                const base64 = canvas.toDataURL('image/jpeg', quality);
+                ctx.drawImage(img, offsetX, offsetY, size, size, 0, 0, MAX_SIZE, MAX_SIZE);
+
+                const base64 = canvas.toDataURL('image/jpeg', 0.8);
                 resolve(base64);
             };
 
-            img.onerror = (error) => reject(error);
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = e.target?.result as string;
         };
 
-        reader.onerror = (error) => reject(error);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
     });
 };

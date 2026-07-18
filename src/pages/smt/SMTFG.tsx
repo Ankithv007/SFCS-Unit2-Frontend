@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSmtAuth } from '../../context/SmtAuthContext';
 import styles from './SMTFG.module.css';
 import { WorkOrderSelector } from '../../components/WorkOrderSelector';
+import { BarcodeSearch } from '../../components/BarcodeSearch';
 import { apiFetch } from '../../utils/api';
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
@@ -141,6 +142,28 @@ const SMTFG: React.FC = () => {
     });
     const [scanBarcodeVal, setScanBarcodeVal] = useState('');
     const [isScanning, setIsScanning] = useState(false);
+    const [scansSearchQuery, setScansSearchQuery] = useState('');
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+    const processedScans = React.useMemo(() => {
+        const query = scansSearchQuery.trim().toLowerCase();
+        if (!query) return stats.scans;
+
+        const matches: typeof stats.scans = [];
+        const nonMatches: typeof stats.scans = [];
+
+        stats.scans.forEach(scan => {
+            const barcodeMatch = scan.barcode && scan.barcode.toLowerCase().includes(query);
+            const serialMatch = (scan as any).serial_number && String((scan as any).serial_number).toLowerCase().includes(query);
+            if (barcodeMatch || serialMatch) {
+                matches.push(scan);
+            } else {
+                nonMatches.push(scan);
+            }
+        });
+
+        return [...matches, ...nonMatches];
+    }, [stats.scans, scansSearchQuery]);
 
     // Dialogs / Modals State
     const [selectedQrBarcode, setSelectedQrBarcode] = useState<string | null>(null);
@@ -324,7 +347,7 @@ const SMTFG: React.FC = () => {
 
     // Keep scanner input focus locked
     useEffect(() => {
-        if (activeSession && activeSession.status === 'In Progress') {
+        if (activeSession && activeSession.status === 'In Progress' && !isSearchFocused) {
             const interval = setInterval(() => {
                 if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
                     scanInputRef.current?.focus();
@@ -332,7 +355,7 @@ const SMTFG: React.FC = () => {
             }, 1000);
             return () => clearInterval(interval);
         }
-    }, [activeSession]);
+    }, [activeSession, isSearchFocused]);
 
     // Handle Start SMT FG Session
     const handleStartSession = async () => {
@@ -1323,37 +1346,44 @@ const SMTFG: React.FC = () => {
 
                     {/* Scanned Serial List Table */}
                     <div className={styles.detailItemsSection}>
-                        <div className={styles.detailItemsHeader}>
-                            <h3>Scanned PCB FG Inspection Logs ({stats.scans.length} rows)</h3>
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginRight: 2 }}>Reports:</span>
-                                <button
-                                    className={styles.secondaryButton}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', background: 'linear-gradient(135deg,#1e3a5f,#2563eb)', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}
-                                    onClick={() => handleExportExcel()}
-                                    title="Download Excel Finished Goods report"
-                                >
-                                    📊 Excel Report
-                                </button>
-                                <button
-                                    className={styles.secondaryButton}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', background: 'linear-gradient(135deg,#7c3aed,#4338ca)', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}
-                                    onClick={() => handleExportFullPDF()}
-                                    title="Download PDF Finished Goods report"
-                                >
-                                    📄 PDF Report
-                                </button>
-                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginLeft: 6, marginRight: 2 }}>Raw:</span>
-                                <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleExportCSV} title="Download CSV scan log">
-                                    CSV 📄
-                                </button>
-                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginLeft: 6, marginRight: 2 }}>QR:</span>
-                                <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleDownloadAllQRPDF} title="Download all QR labels as PDF">
-                                    All QR Labels (PDF) 🏷️
-                                </button>
-                                <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleDownloadAllQRPNG} disabled={isZipping} title="Download all QR images as ZIP">
-                                    {isZipping ? 'Compiling ZIP...' : 'All QR Images (ZIP) 📦'}
-                                </button>
+                        <div className={styles.searchHeader}>
+                            <div className={styles.detailItemsHeader}>
+                                <h3>Scanned PCB FG Inspection Logs ({stats.scans.length} rows)</h3>
+                            </div>
+                            <div className={styles.searchContainer}>
+                                <BarcodeSearch value={scansSearchQuery} onChange={setScansSearchQuery} onFocus={() => setIsSearchFocused(true)} onBlur={() => setIsSearchFocused(false)} />
+                                
+                                {/* Exports & Download Bar */}
+                                <div className={styles.searchReports}>
+                                    <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginRight: 2 }}>Reports:</span>
+                                    <button
+                                        className={styles.secondaryButton}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', background: 'linear-gradient(135deg,#1e3a5f,#2563eb)', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                                        onClick={() => handleExportExcel()}
+                                        title="Download Excel Finished Goods report"
+                                    >
+                                        📊 Excel Report
+                                    </button>
+                                    <button
+                                        className={styles.secondaryButton}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', background: 'linear-gradient(135deg,#7c3aed,#4338ca)', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                                        onClick={() => handleExportFullPDF()}
+                                        title="Download PDF Finished Goods report"
+                                    >
+                                        📄 PDF Report
+                                    </button>
+                                    <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginLeft: 6, marginRight: 2 }}>Raw:</span>
+                                    <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleExportCSV} title="Download CSV scan log">
+                                        CSV 📄
+                                    </button>
+                                    <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginLeft: 6, marginRight: 2 }}>QR:</span>
+                                    <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleDownloadAllQRPDF} title="Download all QR labels as PDF">
+                                        All QR Labels (PDF) 🏷️
+                                    </button>
+                                    <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleDownloadAllQRPNG} disabled={isZipping} title="Download all QR images as ZIP">
+                                        {isZipping ? 'Compiling ZIP...' : 'All QR Images (ZIP) 📦'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -1369,28 +1399,46 @@ const SMTFG: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {stats.scans.map(scan => (
-                                        <tr key={scan.scan_id}>
-                                            <td style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.5px' }}>
-                                                {scan.barcode}
-                                            </td>
-                                            <td>{scan.scanned_by}</td>
-                                            <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                                {formatTimestamp(scan.scanned_at)}
-                                            </td>
-                                            <td>{getScanResultBadge(scan.result)}</td>
-                                            <td>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    title="View QR code"
-                                                    style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
-                                                    onClick={() => setSelectedQrBarcode(scan.barcode)}
-                                                >
-                                                    🔳
-                                                </button>
+                                    {scansSearchQuery.trim() && processedScans.filter(scan => {
+                                        const barcodeMatch = scan.barcode && scan.barcode.toLowerCase().includes(scansSearchQuery.trim().toLowerCase());
+                                        const serialMatch = (scan as any).serial_number && String((scan as any).serial_number).toLowerCase().includes(scansSearchQuery.trim().toLowerCase());
+                                        return barcodeMatch || serialMatch;
+                                    }).length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#dc2626', fontWeight: 600 }}>
+                                                No matching Serial Number or Barcode found.
                                             </td>
                                         </tr>
-                                    ))}
+                                    ) : (
+                                        processedScans.map(scan => {
+                                            const isMatch = scansSearchQuery.trim() && (
+                                                (scan.barcode && scan.barcode.toLowerCase().includes(scansSearchQuery.trim().toLowerCase())) ||
+                                                ((scan as any).serial_number && String((scan as any).serial_number).toLowerCase().includes(scansSearchQuery.trim().toLowerCase()))
+                                            );
+                                            return (
+                                                <tr key={scan.scan_id} className={isMatch ? styles.searchMatchRow : ''}>
+                                                    <td style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.5px' }}>
+                                                        {scan.barcode}
+                                                    </td>
+                                                    <td>{scan.scanned_by}</td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                        {formatTimestamp(scan.scanned_at)}
+                                                    </td>
+                                                    <td>{getScanResultBadge(scan.result)}</td>
+                                                    <td>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            title="View QR code"
+                                                            style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
+                                                            onClick={() => setSelectedQrBarcode(scan.barcode)}
+                                                        >
+                                                            🔳
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
                                     {stats.scans.length === 0 && (
                                         <tr>
                                             <td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>

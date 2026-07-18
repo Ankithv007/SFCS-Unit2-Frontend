@@ -138,11 +138,18 @@ export const SerialNumber: React.FC = () => {
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [qrCodeMap, setQrCodeMap] = useState<{[key: string]: string}>({});
     const [isZipping, setIsZipping] = useState(false);
+    const [pdfProgress, setPdfProgress] = useState<string | null>(null);
+    const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
     const [panelFileName, setPanelFileName] = useState('');
     const [modalPanelFileName, setModalPanelFileName] = useState('');
 
     // Large QR Preview modal state
     const [previewQrSerial, setPreviewQrSerial] = useState<string | null>(null);
+
+    // Edit customer barcode modal state
+    const [editingSerial, setEditingSerial] = useState<any>(null);
+    const [editBarcodeValue, setEditBarcodeValue] = useState<string>('');
+    const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
     const fetchWorkOrders = async () => {
         try {
@@ -752,6 +759,47 @@ export const SerialNumber: React.FC = () => {
         }
     }, [serialsPage, serialsSearch]);
 
+    const handleOpenEditModal = (serial: any) => {
+        setEditingSerial(serial);
+        setEditBarcodeValue(serial.serial_number);
+    };
+
+    const handleSaveEditBarcode = async () => {
+        const trimmed = editBarcodeValue.trim();
+        if (!trimmed) {
+            addToast('Barcode cannot be empty.', 'error');
+            return;
+        }
+
+        if (editingSerial.serial_number === trimmed) {
+            addToast('No changes detected.', 'error');
+            return;
+        }
+
+        setIsSavingEdit(true);
+        try {
+            const res = await apiFetch(`/api/smt/v1/smt/serial-generation-records/${editingSerial.id}/customer-barcode`, {
+                method: 'PUT',
+                body: JSON.stringify({ customerBarcode: trimmed })
+            });
+
+            if (res?.success) {
+                addToast(res.message || 'Customer barcode updated successfully.', 'success');
+                setEditingSerial(null);
+                if (viewRecord) {
+                    fetchRecordSerialsList(viewRecord.id, serialsPage, serialsSearch);
+                    fetchRecords();
+                }
+            } else {
+                addToast(res?.error || 'Failed to update barcode.', 'error');
+            }
+        } catch (err: any) {
+            addToast(err.message || 'Failed to update barcode.', 'error');
+        } finally {
+            setIsSavingEdit(false);
+        }
+    };
+
     // Canvas based helper to generate QR Code + Serial Text composite
     const generateQRWithText = (serialNumber: string): Promise<string> => {
         const cleanSerial = serialNumber.replace(/-/g, "").toUpperCase();
@@ -931,7 +979,7 @@ export const SerialNumber: React.FC = () => {
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = downloadUrl;
-            a.download = `QR_Codes_PNG_WO_${viewRecord.work_order_number}.zip`;
+            a.download = `${viewRecord.work_order_number}_QR_Images.zip`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -949,6 +997,7 @@ export const SerialNumber: React.FC = () => {
     const handleDownloadAllQRCodesPDF = async () => {
         if (!viewRecord) return;
         setIsZipping(true);
+        setPdfProgress('Initializing...');
         try {
             addToast('Fetching all serial numbers for combined PDF...', 'info');
             const queryParams = new URLSearchParams({
@@ -985,15 +1034,27 @@ export const SerialNumber: React.FC = () => {
                      doc.addPage([80, 95], 'portrait');
                 }
                 await generateQRComposite(serials[i].serial_number, qrCanvas, mainCanvas);
-                doc.addImage(mainCanvas, 'PNG', 5, 5, 70, 82.6);
+                
+                // Convert to compressed JPEG data URL to fix memory string length limit crash
+                const jpegDataUrl = mainCanvas.toDataURL('image/jpeg', 0.75);
+                doc.addImage(jpegDataUrl, 'JPEG', 5, 5, 70, 82.6, undefined, 'FAST');
+
+                // Yield control to event loop every 50 pages to prevent blocking the thread
+                if ((i + 1) % 50 === 0 || i === serials.length - 1) {
+                    setPdfProgress(`Generating page ${i + 1} of ${serials.length}...`);
+                    await new Promise(r => setTimeout(r, 0));
+                }
             }
 
-            doc.save(`QR_Codes_ALL_WO_${viewRecord.work_order_number}.pdf`);
+            setPdfProgress('Saving PDF file...');
+            await new Promise(r => setTimeout(r, 0));
+            doc.save(`${viewRecord.work_order_number}_Serial_Generation.pdf`);
             addToast('All QR codes combined PDF downloaded successfully!', 'success');
         } catch (err: any) {
             addToast(`Failed to generate combined PDF: ${err.message}`, 'error');
         } finally {
             setIsZipping(false);
+            setPdfProgress(null);
         }
     };
 
@@ -1090,17 +1151,42 @@ export const SerialNumber: React.FC = () => {
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = downloadUrl;
-            a.download = `WorkOrder_TXT_WO_${viewRecord.work_order_number}.zip`;
+            a.download = `${viewRecord.work_order_number}_Serial_Generation.txt`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(downloadUrl);
 
-            addToast(`TXT ZIP file WorkOrder_TXT_WO_${viewRecord.work_order_number}.zip downloaded successfully!`, 'success');
+            addToast(`TXT ZIP file downloaded successfully!`, 'success');
         } catch (err: any) {
             addToast(`Failed to generate TXT ZIP: ${err.message}`, 'error');
         } finally {
             setIsZipping(false);
+        }
+    };
+
+    // Download All Serial Numbers and Metadata in a Styled Excel Spreadsheet
+    const handleDownloadAllExcel = async () => {
+        if (!viewRecord) return;
+        setIsGeneratingExcel(true);
+        try {
+            addToast('Generating Excel report...', 'info');
+            const blob = await apiFetch(`/api/smt/v1/smt/serial-generation-records/${viewRecord.id}/export/excel`);
+            
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = downloadUrl;
+            a.download = `${viewRecord.work_order_number}_Serial_Generation.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(downloadUrl);
+            addToast('Excel report downloaded successfully!', 'success');
+        } catch (err: any) {
+            addToast(`Failed to download Excel report: ${err.message}`, 'error');
+        } finally {
+            setIsGeneratingExcel(false);
         }
     };
 
@@ -1879,33 +1965,42 @@ export const SerialNumber: React.FC = () => {
                                                             }}
                                                         />
                                                     </div>
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                                         <button
                                                             type="button"
                                                             onClick={handleDownloadAllQRCodesPNG}
                                                             className={styles.button}
-                                                            disabled={isZipping}
+                                                            disabled={isZipping || isGeneratingExcel}
                                                             style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#10b981' }}
                                                         >
-                                                            {isZipping ? '🔄 zipping PNGs...' : '📦 Download All PNG'}
+                                                            {isZipping && !pdfProgress ? '🔄 zipping PNGs...' : '📦 Download All PNG'}
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={handleDownloadAllQRCodesPDF}
                                                             className={styles.button}
-                                                            disabled={isZipping}
+                                                            disabled={isZipping || isGeneratingExcel}
                                                             style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#4f46e5' }}
                                                         >
-                                                            {isZipping ? '🔄 creating PDF...' : '📄 Download All PDF'}
+                                                            {pdfProgress ? `🔄 ${pdfProgress}` : (isZipping ? '🔄 creating PDF...' : '📄 Download All PDF')}
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={handleDownloadAllTXT}
                                                             className={styles.button}
-                                                            disabled={isZipping}
+                                                            disabled={isZipping || isGeneratingExcel}
                                                             style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#d97706' }}
                                                         >
-                                                            {isZipping ? '🔄 creating TXT...' : '📝 Download All TXT'}
+                                                            {isZipping && !pdfProgress ? '🔄 creating TXT...' : '📝 Download All TXT'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleDownloadAllExcel}
+                                                            className={styles.button}
+                                                            disabled={isZipping || isGeneratingExcel}
+                                                            style={{ padding: '0.45rem 1rem', fontSize: '0.8rem', backgroundColor: '#2563eb' }}
+                                                        >
+                                                            {isGeneratingExcel ? '🔄 creating Excel...' : '📊 Download All Excel'}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1979,6 +2074,16 @@ export const SerialNumber: React.FC = () => {
                                                                     >
                                                                         PDF
                                                                     </button>
+                                                                    {viewRecord?.barcode_source === 'CUSTOMER' && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleOpenEditModal(s)}
+                                                                            className={`${styles.button} ${styles.buttonSecondary}`}
+                                                                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', color: '#d97706', borderColor: '#fcd34d' }}
+                                                                        >
+                                                                            Edit
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -2249,6 +2354,67 @@ export const SerialNumber: React.FC = () => {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- EDIT CUSTOMER BARCODE MODAL --- */}
+            {editingSerial && (
+                <div className={styles.modalOverlay} onClick={() => setEditingSerial(null)} style={{ zIndex: 1200 }}>
+                    <div className={styles.modalContent} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px', width: '90%', borderRadius: '1rem', border: '1px solid #cbd5e1' }}>
+                        
+                        <div className={styles.modalHeader} style={{ padding: '1rem 1.5rem', backgroundColor: '#f8fafc' }}>
+                            <h4 className={styles.modalTitle} style={{ margin: 0, color: '#0f172a', fontWeight: 800 }}>✏️ Edit Customer Barcode</h4>
+                            <button type="button" className={styles.modalCloseBtn} onClick={() => setEditingSerial(null)}>✕</button>
+                        </div>
+
+                        <div className={styles.modalBody} style={{ padding: '1.5rem', backgroundColor: '#ffffff' }}>
+                            <div style={{ marginBottom: '1.25rem', padding: '0.75rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>Work Order:</span>
+                                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{viewRecord?.work_order_number}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>Product:</span>
+                                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{viewRecord?.product_name}</span>
+                                </div>
+                            </div>
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ fontWeight: 700, color: '#374151', fontSize: '0.9rem', display: 'block', marginBottom: '0.5rem' }}>Customer Barcode</label>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    value={editBarcodeValue}
+                                    onChange={(e) => setEditBarcodeValue(e.target.value)}
+                                    placeholder="Enter customer barcode..."
+                                    autoFocus
+                                    disabled={isSavingEdit}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingSerial(null)}
+                                    className={`${styles.button} ${styles.buttonSecondary}`}
+                                    style={{ padding: '0.5rem 1rem' }}
+                                    disabled={isSavingEdit}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveEditBarcode}
+                                    className={styles.button}
+                                    style={{ padding: '0.5rem 1rem', backgroundColor: '#4f46e5' }}
+                                    disabled={isSavingEdit}
+                                >
+                                    {isSavingEdit ? 'Saving...' : 'Save'}
+                                </button>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             )}

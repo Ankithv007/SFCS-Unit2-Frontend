@@ -18,7 +18,7 @@ interface Department {
     id: string;
     name: string;
     pages: string[];
-    users: { name?: string; email: string }[];
+    users: { id?: string; name?: string; email: string; employeeCode?: string }[];
     createdAt?: string;
 }
 
@@ -98,7 +98,7 @@ export const AdminPanel: React.FC = () => {
     const [editingDept, setEditingDept] = useState<Department | null>(null);
     const [editDeptName, setEditDeptName] = useState('');
     const [editSelectedPages, setEditSelectedPages] = useState<string[]>([]);
-    const [editSelectedUsers, setEditSelectedUsers] = useState<{ name?: string; email: string }[]>([]);
+    const [editSelectedUsers, setEditSelectedUsers] = useState<{ id?: string; name?: string; email: string; employeeCode?: string }[]>([]);
     const [editPageSearch, setEditPageSearch] = useState('');
     const [editUserSearch, setEditUserSearch] = useState('');
 
@@ -114,7 +114,7 @@ export const AdminPanel: React.FC = () => {
     const [deptStep, setDeptStep] = useState(1);
     const [deptName, setDeptName] = useState('');
     const [selectedPages, setSelectedPages] = useState<string[]>([]);
-    const [selectedUsers, setSelectedUsers] = useState<{ name?: string; email: string }[]>([]);
+    const [selectedUsers, setSelectedUsers] = useState<{ id?: string; name?: string; email: string; employeeCode?: string }[]>([]);
     const [pageSearch, setPageSearch] = useState('');
     const [userSearch, setUserSearch] = useState('');
 
@@ -174,11 +174,22 @@ export const AdminPanel: React.FC = () => {
             // Get custom users
             const stored = localStorage.getItem('custom_users');
             const customUsers: any[] = stored ? JSON.parse(stored) : [];
+            let cleaned = false;
+            const cleanedCustomUsers = customUsers.map(cu => {
+                if (cu.email && cu.email.toLowerCase().endsWith('@sfcs.local')) {
+                    cleaned = true;
+                    return { ...cu, email: '' };
+                }
+                return cu;
+            });
+            if (cleaned) {
+                localStorage.setItem('custom_users', JSON.stringify(cleanedCustomUsers));
+            }
 
-            const formattedCustom: UserWithRole[] = customUsers.map(cu => ({
-                id: cu.email,
+            const formattedCustom: UserWithRole[] = cleanedCustomUsers.map(cu => ({
+                id: cu.id || cu.employeeCode || cu.email || Date.now().toString(),
                 name: cu.name,
-                email: cu.email,
+                email: cu.email || '',
                 role: cu.position,
                 status: cu.status,
                 employeeCode: cu.employeeCode,
@@ -186,10 +197,17 @@ export const AdminPanel: React.FC = () => {
                 isCustom: true
             }));
 
-            // Merge backend and custom users (custom overrides backend if same email)
+            // Merge backend and custom users (custom overrides backend if same email or employee code)
             const merged = [...data];
             formattedCustom.forEach(cu => {
-                const idx = merged.findIndex(u => u.email.toLowerCase() === cu.email.toLowerCase());
+                const idx = merged.findIndex(u => {
+                    const cuEmail = cu.email ? cu.email.toLowerCase() : '';
+                    const uEmail = u.email ? u.email.toLowerCase() : '';
+                    if (cuEmail && uEmail) {
+                        return cuEmail === uEmail;
+                    }
+                    return u.employeeCode && cu.employeeCode && u.employeeCode.toLowerCase() === cu.employeeCode.toLowerCase();
+                });
                 if (idx !== -1) {
                     merged[idx] = { ...merged[idx], ...cu };
                 } else {
@@ -231,35 +249,52 @@ export const AdminPanel: React.FC = () => {
     const handleSaveUser = (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!userName.trim() || !userEmail.trim() || !employeeCode.trim()) {
+        if (!userName.trim() || !employeeCode.trim()) {
             showToast('Please fill in all required fields.', 'error');
             return;
         }
+
+        const enteredEmail = userEmail.trim();
 
         const stored = localStorage.getItem('custom_users');
         const customUsers: any[] = stored ? JSON.parse(stored) : [];
 
         if (editingUser) {
             // Edit mode
-            // Check if the edited email already exists under another user
-            const emailLower = userEmail.trim().toLowerCase();
-            const originalEmailLower = editingUser.email.toLowerCase();
-            if (emailLower !== originalEmailLower) {
-                const emailExists = customUsers.some(u => u.email.toLowerCase() === emailLower) || 
-                                    users.some(u => u.email.toLowerCase() === emailLower && u.email.toLowerCase() !== originalEmailLower);
-                if (emailExists) {
-                    showToast('A user with this email already exists.', 'error');
+            // Check if the edited email or employee code already exists under another user
+            if (enteredEmail) {
+                const emailLower = enteredEmail.toLowerCase();
+                const originalEmailLower = editingUser.email ? editingUser.email.toLowerCase() : '';
+                if (emailLower !== originalEmailLower) {
+                    const emailExists = customUsers.some(u => u.email && u.email.toLowerCase() === emailLower) || 
+                                        users.some(u => u.email && u.email.toLowerCase() === emailLower && u.email.toLowerCase() !== originalEmailLower);
+                    if (emailExists) {
+                        showToast('A user with this email already exists.', 'error');
+                        return;
+                    }
+                }
+            }
+
+            const codeLower = employeeCode.trim().toLowerCase();
+            const originalCodeLower = editingUser.employeeCode ? editingUser.employeeCode.toLowerCase() : '';
+            if (codeLower !== originalCodeLower) {
+                const codeExists = customUsers.some(u => u.employeeCode && u.employeeCode.toLowerCase() === codeLower) ||
+                                   users.some(u => u.employeeCode && u.employeeCode.toLowerCase() === codeLower && u.employeeCode.toLowerCase() !== originalCodeLower);
+                if (codeExists) {
+                    showToast('A user with this employee code already exists.', 'error');
                     return;
                 }
             }
 
             if (editingUser.isCustom) {
                 const updated = customUsers.map(u => {
-                    if (u.email.toLowerCase() === originalEmailLower) {
+                    const uId = u.id || u.employeeCode || u.email;
+                    const editingId = editingUser.id || editingUser.employeeCode || editingUser.email;
+                    if (uId && editingId && uId.toLowerCase() === editingId.toLowerCase()) {
                         return {
                             ...u,
                             name: userName.trim(),
-                            email: userEmail.trim(),
+                            email: enteredEmail,
                             employeeCode: employeeCode.trim(),
                             password: password || u.password,
                             position,
@@ -270,14 +305,18 @@ export const AdminPanel: React.FC = () => {
                 });
                 localStorage.setItem('custom_users', JSON.stringify(updated));
             } else {
-                // If it is a backend user, editing them saves their record in custom_users
-                // so they are merged and overridden in fetchUsers() immediately.
-                const updatedUsers = customUsers.filter(u => u.email.toLowerCase() !== originalEmailLower);
+                // Override backend user
+                const updatedUsers = customUsers.filter(u => {
+                    const uId = u.id || u.employeeCode || u.email;
+                    const editingId = editingUser.id || editingUser.employeeCode || editingUser.email;
+                    return !(uId && editingId && uId.toLowerCase() === editingId.toLowerCase());
+                });
                 updatedUsers.push({
+                    id: editingUser.id,
                     name: userName.trim(),
-                    email: userEmail.trim(),
+                    email: enteredEmail,
                     employeeCode: employeeCode.trim(),
-                    password: password || '123456', // default mock password if none provided
+                    password: password || '123456',
                     position,
                     status
                 });
@@ -286,14 +325,24 @@ export const AdminPanel: React.FC = () => {
             showToast('User updated successfully', 'success');
         } else {
             // Create mode
-            const emailLower = userEmail.trim().toLowerCase();
-            if (customUsers.some(u => u.email.toLowerCase() === emailLower) || users.some(u => u.email.toLowerCase() === emailLower)) {
-                showToast('User with this email already exists.', 'error');
+            if (enteredEmail) {
+                const emailLower = enteredEmail.toLowerCase();
+                if (customUsers.some(u => u.email && u.email.toLowerCase() === emailLower) || users.some(u => u.email && u.email.toLowerCase() === emailLower)) {
+                    showToast('User with this email already exists.', 'error');
+                    return;
+                }
+            }
+
+            const codeLower = employeeCode.trim().toLowerCase();
+            if (customUsers.some(u => u.employeeCode && u.employeeCode.toLowerCase() === codeLower) || users.some(u => u.employeeCode && u.employeeCode.toLowerCase() === codeLower)) {
+                showToast('User with this employee code already exists.', 'error');
                 return;
             }
+
             const newUser = {
+                id: Date.now().toString(),
                 name: userName.trim(),
-                email: userEmail.trim(),
+                email: enteredEmail,
                 employeeCode: employeeCode.trim(),
                 password: password || '123456',
                 position,
@@ -313,7 +362,11 @@ export const AdminPanel: React.FC = () => {
             // Custom user: load full details from localStorage
             const stored = localStorage.getItem('custom_users');
             const customUsers: any[] = stored ? JSON.parse(stored) : [];
-            const detail = customUsers.find(u => u.email.toLowerCase() === user.email.toLowerCase());
+            const detail = customUsers.find(u => {
+                const uId = u.id || u.employeeCode || u.email;
+                const userId = user.id || user.employeeCode || user.email;
+                return uId && userId && uId.toLowerCase() === userId.toLowerCase();
+            });
             if (detail) {
                 setEditingUser(user);
                 setUserName(detail.name || '');
@@ -595,7 +648,7 @@ export const AdminPanel: React.FC = () => {
                                 filteredUsers.map(user => (
                                     <tr key={user.id}>
                                         <td style={{ fontWeight: 500 }}>{user.name}</td>
-                                        <td>{user.email}</td>
+                                        <td>{user.email || <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>—</span>}</td>
                                         <td>
                                             <span className={`${styles.badge} ${getRoleBadgeClass(user.role)}`}>
                                                 {user.role || 'User'}
@@ -724,14 +777,13 @@ export const AdminPanel: React.FC = () => {
                             {/* Row 2: Email (full width) */}
                             <div style={{ marginBottom: '1.25rem' }}>
                                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', color: '#374151', marginBottom: '0.45rem', letterSpacing: '0.02em' }}>
-                                    EMAIL ADDRESS <span style={{ color: '#ef4444' }}>*</span>
+                                    EMAIL ADDRESS (OPTIONAL)
                                 </label>
                                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                     <input
                                         type="email"
                                         value={userEmail}
                                         onChange={(e) => setUserEmail(e.target.value)}
-                                        required
                                         placeholder="user@example.com"
                                         style={{
                                             width: '100%', paddingLeft: '0.75rem', paddingRight: '0.75rem',
@@ -1057,25 +1109,29 @@ export const AdminPanel: React.FC = () => {
                                             className={styles.searchBox}
                                         />
                                         <div className={styles.selectionList}>
-                                            {filteredDeptUsers.map(user => (
-                                                <div key={user.email} className={styles.multiSelectItem}>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        id={`user-${user.email}`}
-                                                        checked={selectedUsers.some(u => u.email === user.email)}
-                                                        onChange={() => {
-                                                            if (selectedUsers.some(u => u.email === user.email)) {
-                                                                setSelectedUsers(selectedUsers.filter(u => u.email !== user.email));
-                                                            } else {
-                                                                setSelectedUsers([...selectedUsers, { name: user.name, email: user.email }]);
-                                                            }
-                                                        }}
-                                                    />
-                                                    <label htmlFor={`user-${user.email}`} style={{ cursor: 'pointer', flex: 1, fontSize: '0.85rem' }}>
-                                                        {user.name} <span style={{ opacity: 0.6, fontSize: '0.75rem' }}>({user.email})</span>
-                                                    </label>
-                                                </div>
-                                            ))}
+                                            {filteredDeptUsers.map(user => {
+                                                const userId = user.id || user.employeeCode || user.email;
+                                                const isSelected = selectedUsers.some(u => (u.id && u.id === user.id) || (u.employeeCode && u.employeeCode === user.employeeCode) || (u.email && u.email === user.email));
+                                                return (
+                                                    <div key={userId} className={styles.multiSelectItem}>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            id={`user-${userId}`}
+                                                            checked={isSelected}
+                                                            onChange={() => {
+                                                                if (isSelected) {
+                                                                    setSelectedUsers(selectedUsers.filter(u => !((u.id && u.id === user.id) || (u.employeeCode && u.employeeCode === user.employeeCode) || (u.email && u.email === user.email))));
+                                                                } else {
+                                                                    setSelectedUsers([...selectedUsers, { id: user.id, name: user.name, email: user.email, employeeCode: user.employeeCode }]);
+                                                                }
+                                                            }}
+                                                        />
+                                                        <label htmlFor={`user-${userId}`} style={{ cursor: 'pointer', flex: 1, fontSize: '0.85rem' }}>
+                                                            {user.name} {user.email ? <span style={{ opacity: 0.6, fontSize: '0.75rem' }}>({user.email})</span> : ''}
+                                                        </label>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                     
@@ -1085,18 +1141,21 @@ export const AdminPanel: React.FC = () => {
                                         </div>
                                         <div className={styles.chipList}>
                                             {selectedUsers.length > 0 ? (
-                                                selectedUsers.map(u => (
-                                                    <span key={u.email} className={styles.removableChip}>
-                                                        {u.name || u.email}
-                                                        <button 
-                                                            type="button" 
-                                                            className={styles.chipRemoveBtn}
-                                                            onClick={() => setSelectedUsers(selectedUsers.filter(item => item.email !== u.email))}
-                                                        >
-                                                            &times;
-                                                        </button>
-                                                    </span>
-                                                ))
+                                                selectedUsers.map(u => {
+                                                    const chipKey = u.id || u.employeeCode || u.email;
+                                                    return (
+                                                        <span key={chipKey} className={styles.removableChip}>
+                                                            {u.name || u.email || u.employeeCode || '—'}
+                                                            <button 
+                                                                type="button" 
+                                                                className={styles.chipRemoveBtn}
+                                                                onClick={() => setSelectedUsers(selectedUsers.filter(item => !((item.id && item.id === u.id) || (item.employeeCode && item.employeeCode === u.employeeCode) || (item.email && item.email === u.email))))}
+                                                            >
+                                                                &times;
+                                                            </button>
+                                                        </span>
+                                                    );
+                                                })
                                             ) : (
                                                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', padding: '1rem' }}>No users selected yet.</div>
                                             )}
@@ -1231,7 +1290,7 @@ export const AdminPanel: React.FC = () => {
                                 <div className={styles.chipList} style={{ background: '#f9fafb', padding: '1rem', borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', minHeight: '60px' }}>
                                     {editingDept.users.map(u => (
                                         <span key={u.email} className={styles.deptTag} style={{ display: 'inline-flex', padding: '0.25rem 0.5rem', background: '#eef2ff', borderColor: '#c7d2fe', color: '#3730a3', borderRadius: '6px', fontSize: '0.85rem' }}>
-                                            {u.name || u.email} <span style={{ opacity: 0.6, fontSize: '0.75rem', marginLeft: '0.25rem' }}>({u.email})</span>
+                                            {u.name || u.email || '—'} {u.email ? <span style={{ opacity: 0.6, fontSize: '0.75rem', marginLeft: '0.25rem' }}>({u.email})</span> : ''}
                                         </span>
                                     ))}
                                     {editingDept.users.length === 0 && <div style={{ color: '#6b7280' }}>No users assigned.</div>}

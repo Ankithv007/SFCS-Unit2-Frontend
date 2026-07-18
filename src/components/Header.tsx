@@ -178,7 +178,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                                 />
                             </div>
                             <h3 className={styles.menuName}>{user?.name || 'User'}</h3>
-                            <p className={styles.menuEmail}>{user?.email}</p>
+                            <p className={styles.menuEmail}>{user?.email || '—'}</p>
                         </div>
                         <div className={styles.menuActions}>
                             <button

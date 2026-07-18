@@ -29,7 +29,16 @@ export const useAuth = () => {
         const storedUser = localStorage.getItem('user_data');
 
         if (token && storedUser) {
-            setUser(JSON.parse(storedUser));
+            try {
+                const parsed = JSON.parse(storedUser);
+                if (parsed && parsed.email && parsed.email.toLowerCase().endsWith('@sfcs.local')) {
+                    parsed.email = '';
+                    localStorage.setItem('user_data', JSON.stringify(parsed));
+                }
+                setUser(parsed);
+            } catch (e) {
+                setUser(JSON.parse(storedUser));
+            }
             setIsAuthenticated(true);
         }
         setIsLoading(false);
@@ -110,12 +119,12 @@ export const useAuth = () => {
                     }
                 }
 
-                // 2. Check custom users in localStorage — match by email OR employee code
+                 // 2. Check custom users in localStorage — match by email OR employee code
                 const storedCustomUsers = localStorage.getItem('custom_users');
                 const customUsers = storedCustomUsers ? JSON.parse(storedCustomUsers) : [];
                 const customUser = customUsers.find(
                     (u: any) =>
-                        (u.email.toLowerCase() === identifier || (u.employeeCode && u.employeeCode.toLowerCase() === identifier))
+                        (((u.email && u.email.toLowerCase() === identifier) || (u.employeeCode && u.employeeCode.toLowerCase() === identifier)))
                         && u.password === password
                 );
 
@@ -124,9 +133,9 @@ export const useAuth = () => {
                         throw new Error('User account is inactive.');
                     }
                     const sessionUser: User = {
-                        email: customUser.email,
+                        email: customUser.email || '',
                         name: customUser.name,
-                        id: customUser.email, // Use email as unique identifier for custom users
+                        id: customUser.id || customUser.employeeCode || customUser.email || Date.now().toString(),
                         role: customUser.position || 'User'
                     };
 

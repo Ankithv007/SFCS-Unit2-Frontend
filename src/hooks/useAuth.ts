@@ -74,11 +74,74 @@ export const useAuth = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const data = await apiFetch('/api/auth/login', {
-                method: 'POST',
-                body: JSON.stringify({ email, password })
-            });
-            // Backend now returns avatar in user object
+            let data;
+            try {
+                data = await apiFetch('/api/auth/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ email, password })
+                });
+            } catch (backendErr: any) {
+                const identifier = email.trim().toLowerCase();
+
+                // 1. Check if identifier is a registered employee code (from Signup page)
+                //    If so, resolve it to an email and retry the backend login
+                const empCodes = JSON.parse(localStorage.getItem('registered_employee_codes') || '{}');
+                if (empCodes[identifier]) {
+                    const resolvedEmail = empCodes[identifier];
+                    try {
+                        const retryData = await apiFetch('/api/auth/login', {
+                            method: 'POST',
+                            body: JSON.stringify({ email: resolvedEmail, password })
+                        });
+                        const sessionUser: User = {
+                            email: retryData.user.email,
+                            name: retryData.user.name,
+                            id: retryData.user.id,
+                            avatar: retryData.user.avatar,
+                            role: retryData.user.role || 'User'
+                        };
+                        setUser(sessionUser);
+                        setIsAuthenticated(true);
+                        localStorage.setItem('auth_token', retryData.token);
+                        localStorage.setItem('user_data', JSON.stringify(sessionUser));
+                        return;
+                    } catch {
+                        // Fall through to custom user check
+                    }
+                }
+
+                // 2. Check custom users in localStorage — match by email OR employee code
+                const storedCustomUsers = localStorage.getItem('custom_users');
+                const customUsers = storedCustomUsers ? JSON.parse(storedCustomUsers) : [];
+                const customUser = customUsers.find(
+                    (u: any) =>
+                        (u.email.toLowerCase() === identifier || (u.employeeCode && u.employeeCode.toLowerCase() === identifier))
+                        && u.password === password
+                );
+
+                if (customUser) {
+                    if (customUser.status === 'Inactive') {
+                        throw new Error('User account is inactive.');
+                    }
+                    const sessionUser: User = {
+                        email: customUser.email,
+                        name: customUser.name,
+                        id: customUser.email, // Use email as unique identifier for custom users
+                        role: customUser.position || 'User'
+                    };
+
+                    setUser(sessionUser);
+                    setIsAuthenticated(true);
+
+                    localStorage.setItem('auth_token', 'mock_token_' + sessionUser.id);
+                    localStorage.setItem('user_data', JSON.stringify(sessionUser));
+                    return;
+                }
+                // If not found locally either, rethrow the backend error
+                throw backendErr;
+            }
+
+            // Backend successfully logged in
             const sessionUser: User = {
                 email: data.user.email,
                 name: data.user.name,

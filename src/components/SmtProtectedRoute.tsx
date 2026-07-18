@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
 import { useSmtAuth } from '../context/SmtAuthContext';
 import { useAuth } from '../hooks/useAuth';
 
@@ -8,24 +7,20 @@ interface SmtProtectedRouteProps {
 }
 
 export const SmtProtectedRoute: React.FC<SmtProtectedRouteProps> = ({ children }) => {
-    const { isSmtAuthenticated, smtLoading, authenticatedPath, smtUser, smtLogin } = useSmtAuth();
+    const { isSmtAuthenticated, smtLoading, smtLogin } = useSmtAuth();
     const { user } = useAuth();
-    const location = useLocation();
 
-    const authorizedRoles = ['Super Admin', 'Admin', 'Manager'];
-    const isGlobalAdmin = user && authorizedRoles.includes(user.role);
-
-    // Auto-login to SMT if user is a global Admin/Manager/Super Admin but not yet SMT authenticated
+    // Auto-login to SMT silently if user is logged in globally
     useEffect(() => {
-        if (!isSmtAuthenticated && isGlobalAdmin) {
+        if (!isSmtAuthenticated && user) {
             smtLogin({
                 id: user.id.toString(),
                 name: user.name || '',
                 userId: user.email || '',
                 role: user.role || 'Operator'
-            }, '/smt/work-order');
+            }, window.location.pathname);
         }
-    }, [isSmtAuthenticated, isGlobalAdmin, user, smtLogin]);
+    }, [isSmtAuthenticated, user, smtLogin]);
 
     if (smtLoading) {
         return (
@@ -33,28 +28,6 @@ export const SmtProtectedRoute: React.FC<SmtProtectedRouteProps> = ({ children }
                 <div className="loading-spinner">Verifying SMT Access...</div>
             </div>
         );
-    }
-
-    const hasAccess = isSmtAuthenticated || isGlobalAdmin;
-
-    // Check if not authenticated, or if the current path doesn't start with the authenticated path
-    // Global admins can access any SMT path
-    const isAuthorizedPath = (authenticatedPath && location.pathname.startsWith(authenticatedPath)) || isGlobalAdmin;
-
-    if (!hasAccess || !isAuthorizedPath) {
-        // Redirect to SMT login but save the current location they were trying to go to
-        return <Navigate to="/smt/login" state={{ from: location }} replace />;
-    }
-
-    // Enforce SMT Work Order / History page restrictions: only Admins and Managers can access them
-    const isWorkOrderPath = location.pathname.startsWith('/smt/work-order') || location.pathname.startsWith('/smt/workorder-history');
-    if (isWorkOrderPath) {
-        const currentRole = (smtUser?.role || user?.role || '').trim().toLowerCase();
-        const allowed = ['super admin', 'admin', 'manager'];
-        if (!currentRole || !allowed.includes(currentRole)) {
-            // Redirect unauthorized operators/employees to standard station page
-            return <Navigate to="/smt/printing" state={{ accessError: 'Access Denied: Only Admins or Managers can access this page.' }} replace />;
-        }
     }
 
     return <>{children}</>;

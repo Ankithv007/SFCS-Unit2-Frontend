@@ -19,10 +19,11 @@ export const Signup: React.FC = () => {
     const [step, setStep] = useState<SignupStep>('details');
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
+    const [employeeCode, setEmployeeCode] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [otp, setOtp] = useState('');
-    const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({});
+    const [errors, setErrors] = useState<{ name?: string; email?: string; employeeCode?: string; password?: string; confirmPassword?: string }>({});
     const [timer, setTimer] = useState(30);
 
     useEffect(() => {
@@ -34,8 +35,9 @@ export const Signup: React.FC = () => {
     }, [step, timer]);
 
     const validateDetails = () => {
-        const newErrors: { name?: string; email?: string } = {};
+        const newErrors: { name?: string; email?: string; employeeCode?: string } = {};
         if (!name) newErrors.name = 'Name is required';
+        if (!employeeCode.trim()) newErrors.employeeCode = 'Employee Code is required';
         if (!email) newErrors.email = 'Email is required';
         else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Invalid email format';
 
@@ -55,7 +57,10 @@ export const Signup: React.FC = () => {
                 return;
             }
 
-            // 2. Request OTP (Create Pending User)
+            // 2. Store employee code in sessionStorage to persist through OTP/password steps
+            sessionStorage.setItem('signup_employee_code', employeeCode.trim());
+
+            // 3. Request OTP (Create Pending User)
             await requestSignupOtp(name, email);
             setStep('otp');
             setTimer(30);
@@ -99,6 +104,17 @@ export const Signup: React.FC = () => {
 
         try {
             await createPassword(email, password, confirmPassword);
+
+            // Save employee code to localStorage for future login lookup
+            const savedCode = sessionStorage.getItem('signup_employee_code') || '';
+            if (savedCode) {
+                // Store as a registered employee code so login can match it
+                const empCodes = JSON.parse(localStorage.getItem('registered_employee_codes') || '{}');
+                empCodes[savedCode.toLowerCase()] = email.toLowerCase();
+                localStorage.setItem('registered_employee_codes', JSON.stringify(empCodes));
+                sessionStorage.removeItem('signup_employee_code');
+            }
+
             setStep('success');
             showToast('Account created successfully!', 'success');
         } catch (err: any) {
@@ -179,6 +195,22 @@ export const Signup: React.FC = () => {
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
                                     <circle cx="12" cy="7" r="4" />
+                                </svg>
+                            }
+                        />
+                        <FormField
+                            id="employeeCode"
+                            label="Employee Code"
+                            value={employeeCode}
+                            onChange={(e) => setEmployeeCode(e.target.value)}
+                            error={errors.employeeCode}
+                            placeholder="e.g. EMP-001"
+                            disabled={isLoading}
+                            icon={
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect width="16" height="12" x="4" y="6" rx="2" />
+                                    <path d="M8 6V4" /><path d="M16 6V4" />
+                                    <path d="M8 12h.01" /><path d="M12 12h.01" /><path d="M16 12h.01" />
                                 </svg>
                             }
                         />

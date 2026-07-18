@@ -55,11 +55,7 @@ import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 import { BackendProtectedRoute } from './components/BackendProtectedRoute';
-import { BackendLogin } from './pages/backend/BackendLogin';
-
 import { SmtProtectedRoute } from './components/SmtProtectedRoute';
-import { SmtLogin } from './pages/smt/SmtLogin';
-
 const LegacyReturnBomRedirect: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     return <Navigate to={`/smt/material-management/bom-view/${id}`} replace />;
@@ -95,6 +91,22 @@ export const router = createBrowserRouter([
             },
             {
                 path: '/admin-panel',
+                element: (
+                    <ProtectedRoute>
+                        <AdminPanel />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/admin-panel/create-user',
+                element: (
+                    <ProtectedRoute>
+                        <AdminPanel />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/admin-panel/create-department',
                 element: (
                     <ProtectedRoute>
                         <AdminPanel />
@@ -205,13 +217,14 @@ export const router = createBrowserRouter([
                     </ProtectedRoute>
                 ),
             },
-            {
-                path: '/backend/login',
-                element: <BackendLogin />,
-            },
+
             {
                 path: '/backend',
-                element: <BackendProtectedRoute children={<Outlet />} />,
+                element: (
+                    <ProtectedRoute>
+                        <BackendProtectedRoute children={<Outlet />} />
+                    </ProtectedRoute>
+                ),
                 children: [
                     {
                         path: 'work-order',
@@ -267,13 +280,14 @@ export const router = createBrowserRouter([
                     },
                 ]
             },
-            {
-                path: '/smt/login',
-                element: <SmtLogin />,
-            },
+
             {
                 path: '/smt',
-                element: <SmtProtectedRoute children={<Outlet />} />,
+                element: (
+                    <ProtectedRoute>
+                        <SmtProtectedRoute children={<Outlet />} />
+                    </ProtectedRoute>
+                ),
                 children: [
                     {
                         path: 'work-order',

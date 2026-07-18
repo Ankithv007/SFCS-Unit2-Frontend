@@ -9,6 +9,7 @@ import {
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../../components/Toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,7 @@ const SmtTrackItems: React.FC = () => {
     const [isDownloading, setIsDownloading] = useState(false);
     
     const navigate = useNavigate();
+    const { showToast } = useToast();
     
     // Filter State
     const [filterDate, setFilterDate] = useState('');
@@ -113,6 +115,7 @@ const SmtTrackItems: React.FC = () => {
     const [showFilter, setShowFilter] = useState(false);
     const [workOrdersList, setWorkOrdersList] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
+    const [serialSearch, setSerialSearch] = useState('');
     const ITEMS_PER_PAGE = 50;
 
     const inputRef = useRef<HTMLInputElement>(null);
@@ -232,15 +235,50 @@ const SmtTrackItems: React.FC = () => {
             const finalStatus = s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING';
             if (finalStatus !== filterStatus) matches = false;
         }
+        if (serialSearch.trim()) {
+            const snQuery = serialSearch.trim().toLowerCase();
+            const snVal = (s.serial_number || '').toLowerCase();
+            if (!snVal.includes(snQuery)) matches = false;
+        }
         return matches;
     }) || [];
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [filterDate, filterStatus]);
+    }, [filterDate, filterStatus, serialSearch]);
 
     const totalPages = Math.ceil(filteredSerials.length / ITEMS_PER_PAGE);
     const currentSerials = filteredSerials.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+    const [isExporting, setIsExporting] = useState(false);
+
+    const handleDownloadExcel = async () => {
+        if (!woData?.work_order_id) return;
+        setIsExporting(true);
+        try {
+            const blob = await apiFetch(`/api/smt/track/export/wo/${encodeURIComponent(woData.work_order_id)}`) as Blob;
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+
+            const now = new Date();
+            const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+            const cleanWo = woData.work_order_id.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const fileName = `SMT_WorkOrder_Report_${cleanWo}_${timestamp}.xlsx`;
+
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            showToast('Excel report downloaded successfully!', 'success');
+        } catch (error: any) {
+            console.error('Export error:', error);
+            showToast(error.message || 'Failed to export Excel report', 'error');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const completedCount = filteredSerials.filter((s: any) => s.final_status_label === 'Completed').length;
     const pendingCount = filteredSerials.length - completedCount;
@@ -256,42 +294,68 @@ const SmtTrackItems: React.FC = () => {
                         <p className={styles.headerSub}>Complete SMT production lifecycle visibility</p>
                     </div>
                 </div>
-                {data && (
-                    <button 
-                        type="button"
-                        onClick={handleDownloadPdf}
-                        disabled={isDownloading}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            background: '#3b82f6', color: '#fff', border: 'none',
-                            padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
-                            cursor: isDownloading ? 'not-allowed' : 'pointer',
-                            opacity: isDownloading ? 0.7 : 1,
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <Download size={18} />
-                        {isDownloading ? 'Generating PDF...' : 'Download PDF'}
-                    </button>
-                )}
-                {woData && (
-                    <button 
-                        type="button"
-                        onClick={handleDownloadPdf}
-                        disabled={isDownloading}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            background: '#3b82f6', color: '#fff', border: 'none',
-                            padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
-                            cursor: isDownloading ? 'not-allowed' : 'pointer',
-                            opacity: isDownloading ? 0.7 : 1,
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <Download size={18} />
-                        {isDownloading ? 'Generating PDF...' : 'Download PDF'}
-                    </button>
-                )}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    {data && (
+                        <button 
+                            type="button"
+                            onClick={handleDownloadPdf}
+                            disabled={isDownloading}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '8px',
+                                background: '#3b82f6', color: '#fff', border: 'none',
+                                padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
+                                cursor: isDownloading ? 'not-allowed' : 'pointer',
+                                opacity: isDownloading ? 0.7 : 1,
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <Download size={18} />
+                            {isDownloading ? 'Generating PDF...' : 'Download PDF'}
+                        </button>
+                    )}
+                    {woData && (
+                        <>
+                            <button 
+                                type="button"
+                                onClick={handleDownloadPdf}
+                                disabled={isDownloading}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    background: '#3b82f6', color: '#fff', border: 'none',
+                                    padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
+                                    cursor: isDownloading ? 'not-allowed' : 'pointer',
+                                    opacity: isDownloading ? 0.7 : 1,
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <Download size={18} />
+                                {isDownloading ? 'Generating PDF...' : 'Download PDF'}
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={handleDownloadExcel}
+                                disabled={isExporting}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    background: '#10b981', color: '#fff', border: 'none',
+                                    padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
+                                    cursor: isExporting ? 'not-allowed' : 'pointer',
+                                    opacity: isExporting ? 0.7 : 1,
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                    <line x1="8" y1="13" x2="16" y2="13" />
+                                    <line x1="8" y1="17" x2="16" y2="17" />
+                                    <line x1="10" y1="9" x2="10" y2="9.01" />
+                                </svg>
+                                {isExporting ? 'Exporting Excel...' : 'Download Excel'}
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* ── Search ── */}
@@ -696,7 +760,7 @@ const SmtTrackItems: React.FC = () => {
                         {/* Solder Paste Preparation Details removed per Enhancement 2 */}
 
                         <div className={styles.historyPanel} style={{ marginTop: '20px' }}>
-                            <h3 className={styles.panelTitle} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <h3 className={styles.panelTitle} style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <Package size={18} /> Work Order Serials ({filteredSerials.length})
                                 </span>
@@ -706,6 +770,22 @@ const SmtTrackItems: React.FC = () => {
                                 <span style={{ fontSize: '13px', color: '#92400e', background: '#fef3c7', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                                     Pending: {pendingCount}
                                 </span>
+                                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', minWidth: '240px' }}>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search Serial Number / Barcode..." 
+                                        value={serialSearch}
+                                        onChange={(e) => setSerialSearch(e.target.value)}
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: '6px 12px', 
+                                            fontSize: '12px', 
+                                            border: '1px solid #cbd5e1', 
+                                            borderRadius: '6px',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                </div>
                             </h3>
                             <div className={styles.tableContainer}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>

@@ -21,8 +21,8 @@ export const Login: React.FC = () => {
 
     const validate = () => {
         const newErrors: { email?: string; password?: string } = {};
-        if (!email) newErrors.email = 'Email is required';
-        else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Invalid email format';
+        // Accept either a valid email OR a non-empty employee code
+        if (!email.trim()) newErrors.email = 'Email Address or Employee Code is required';
 
         if (!password) newErrors.password = 'Password is required';
         else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
@@ -64,12 +64,12 @@ export const Login: React.FC = () => {
                 <form onSubmit={handleSubmit} className={styles.form}>
                     <FormField
                         id="email"
-                        label="Email Address"
-                        type="email"
+                        label="Email Address / Employee Code"
+                        type="text"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         error={errors.email}
-                        placeholder="Enter your email address"
+                        placeholder="Enter your email address or employee code"
                         disabled={isLoading}
                         icon={
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

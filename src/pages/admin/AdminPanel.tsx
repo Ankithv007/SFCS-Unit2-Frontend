@@ -12,7 +12,6 @@ import { AuditLogsTab } from './components/AuditLogsTab';
 import { UserModal } from './components/UserModal';
 import { DepartmentWizardModal } from './components/DepartmentWizardModal';
 import { DepartmentViewModal } from './components/DepartmentViewModal';
-import { MigrationModal } from './components/MigrationModal';
 import { AuditDetailDrawer } from './components/AuditDetailDrawer';
 import { ConfirmModal } from './components/ConfirmModal';
 
@@ -70,12 +69,6 @@ export const AdminPanel: React.FC = () => {
         setAuditStartDate,
         setAuditEndDate,
 
-        // Migration
-        hasLegacyData,
-        legacyCustomUsers,
-        legacyDepartments,
-        handleMigrateLegacyData,
-
         // Modals
         isUserModalOpen,
         setIsUserModalOpen,
@@ -91,9 +84,6 @@ export const AdminPanel: React.FC = () => {
 
         selectedDeptForView,
         setSelectedDeptForView,
-
-        isMigrationModalOpen,
-        setIsMigrationModalOpen,
 
         selectedAuditLog,
         setSelectedAuditLog,
@@ -173,18 +163,6 @@ export const AdminPanel: React.FC = () => {
                     <div className={`${styles.kpiIcon} ${styles.iconTeal}`}>📜</div>
                 </div>
             </div>
-
-            {/* LocalStorage Migration Banner (If legacy data exists) */}
-            {hasLegacyData && (
-                <div className={styles.migrationBanner}>
-                    <div className={styles.migrationText}>
-                        ⚡ <strong>Legacy Data Detected:</strong> Found {legacyCustomUsers.length} custom users and {legacyDepartments.length} departments stored in browser local storage.
-                    </div>
-                    <button className={styles.migrationBtn} onClick={() => setIsMigrationModalOpen(true)}>
-                        Launch Guided Migration Wizard →
-                    </button>
-                </div>
-            )}
 
             {/* Dashboard Tabs & Primary Actions */}
             <div className={styles.tabHeader}>
@@ -334,14 +312,6 @@ export const AdminPanel: React.FC = () => {
                 isOpen={!!selectedDeptForView}
                 department={selectedDeptForView}
                 onClose={() => setSelectedDeptForView(null)}
-            />
-
-            <MigrationModal
-                isOpen={isMigrationModalOpen}
-                customUsers={legacyCustomUsers}
-                departments={legacyDepartments}
-                onMigrate={handleMigrateLegacyData}
-                onClose={() => setIsMigrationModalOpen(false)}
             />
 
             <AuditDetailDrawer

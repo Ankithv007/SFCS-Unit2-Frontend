@@ -36,11 +36,6 @@ export function useAdminPanel() {
     const [auditEndDate, setAuditEndDate] = useState('');
     const [loadingAudit, setLoadingAudit] = useState(false);
 
-    // LocalStorage legacy migration state
-    const [legacyCustomUsers, setLegacyCustomUsers] = useState<any[]>([]);
-    const [legacyDepartments, setLegacyDepartments] = useState<any[]>([]);
-    const [hasLegacyData, setHasLegacyData] = useState(false);
-
     // Modals state
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [selectedUserForEdit, setSelectedUserForEdit] = useState<AdminUser | null>(null);
@@ -49,7 +44,6 @@ export function useAdminPanel() {
     const [selectedDeptForEdit, setSelectedDeptForEdit] = useState<AdminDepartment | null>(null);
 
     const [selectedDeptForView, setSelectedDeptForView] = useState<AdminDepartment | null>(null);
-    const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false);
     const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLogItem | null>(null);
 
     // Confirmation Modal state
@@ -66,29 +60,6 @@ export function useAdminPanel() {
         message: '',
         onConfirm: () => {}
     });
-
-    // Check Legacy LocalStorage Data
-    useEffect(() => {
-        try {
-            const rawCustomUsers = localStorage.getItem('custom_users');
-            const rawDepts = localStorage.getItem('departments');
-
-            let parsedUsers = rawCustomUsers ? JSON.parse(rawCustomUsers) : [];
-            let parsedDepts = rawDepts ? JSON.parse(rawDepts) : [];
-
-            if (!Array.isArray(parsedUsers)) parsedUsers = [];
-            if (!Array.isArray(parsedDepts)) parsedDepts = [];
-
-            setLegacyCustomUsers(parsedUsers);
-            setLegacyDepartments(parsedDepts);
-
-            if (parsedUsers.length > 0 || parsedDepts.length > 0) {
-                setHasLegacyData(true);
-            }
-        } catch (e) {
-            console.error('Failed to parse legacy storage', e);
-        }
-    }, []);
 
     // Fetch Users
     const fetchUsers = useCallback(async () => {
@@ -278,22 +249,6 @@ export function useAdminPanel() {
         });
     };
 
-    // Legacy Data Migration Handler
-    const handleMigrateLegacyData = async (cUsers: any[], depts: any[]) => {
-        const res = await adminService.migrateLegacyData({
-            customUsers: cUsers,
-            departments: depts
-        });
-
-        // Clean up LocalStorage keys after server confirmation
-        localStorage.removeItem('custom_users');
-        localStorage.removeItem('departments');
-        setHasLegacyData(false);
-
-        showToast(res.message, 'success');
-        refreshAll();
-    };
-
     return {
         // Tab
         activeTab,
@@ -345,12 +300,6 @@ export function useAdminPanel() {
         setAuditStartDate,
         setAuditEndDate,
 
-        // Legacy Migration
-        hasLegacyData,
-        legacyCustomUsers,
-        legacyDepartments,
-        handleMigrateLegacyData,
-
         // Modals State
         isUserModalOpen,
         setIsUserModalOpen,
@@ -366,9 +315,6 @@ export function useAdminPanel() {
 
         selectedDeptForView,
         setSelectedDeptForView,
-
-        isMigrationModalOpen,
-        setIsMigrationModalOpen,
 
         selectedAuditLog,
         setSelectedAuditLog,

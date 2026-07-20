@@ -219,16 +219,5 @@ export const adminService = {
         if (params.endDate) query.append('endDate', params.endDate);
 
         return apiFetch(`/api/auth/admin/audit-logs?${query.toString()}`);
-    },
-
-    // Legacy Migration API
-    migrateLegacyData: async (payload: {
-        customUsers?: any[];
-        departments?: any[];
-    }): Promise<{ success: boolean; message: string; data: { usersMigrated: number; deptsMigrated: number } }> => {
-        return apiFetch('/api/auth/admin/migrate-legacy', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        });
     }
 };

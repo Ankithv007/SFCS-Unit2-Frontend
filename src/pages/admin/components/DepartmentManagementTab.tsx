@@ -9,6 +9,8 @@ interface DepartmentManagementTabProps {
     onViewDepartment: (dept: AdminDepartment) => void;
     onEditDepartment: (dept: AdminDepartment) => void;
     onDeleteDepartment: (dept: AdminDepartment) => void;
+    onAddUsers: (dept: AdminDepartment) => void;
+    onAddPages: (dept: AdminDepartment) => void;
 }
 
 export const DepartmentManagementTab: React.FC<DepartmentManagementTabProps> = ({
@@ -16,7 +18,9 @@ export const DepartmentManagementTab: React.FC<DepartmentManagementTabProps> = (
     loading,
     onViewDepartment,
     onEditDepartment,
-    onDeleteDepartment
+    onDeleteDepartment,
+    onAddUsers,
+    onAddPages
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -110,6 +114,20 @@ export const DepartmentManagementTab: React.FC<DepartmentManagementTabProps> = (
                                                 title="Edit Department & Permissions"
                                             >
                                                 ✏️ Edit
+                                            </button>
+                                            <button
+                                                className={`${styles.iconBtn} ${styles.iconBtnSuccess}`}
+                                                onClick={() => onAddUsers(dept)}
+                                                title="Add Users"
+                                            >
+                                                👥 Add Users
+                                            </button>
+                                            <button
+                                                className={`${styles.iconBtn} ${styles.iconBtnPrimary}`}
+                                                onClick={() => onAddPages(dept)}
+                                                title="Add Pages"
+                                            >
+                                                🔐 Add Pages
                                             </button>
                                             <button
                                                 className={`${styles.iconBtn} ${styles.iconBtnDanger}`}

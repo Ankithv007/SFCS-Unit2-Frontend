@@ -8,6 +8,7 @@ interface DepartmentWizardModalProps {
     allUsers: AdminUser[];
     onSave: (payload: any) => Promise<void>;
     onClose: () => void;
+    initialStep?: 1 | 2 | 3;
 }
 
 const DEFAULT_SYSTEM_PAGES = [
@@ -41,7 +42,8 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
     department,
     allUsers,
     onSave,
-    onClose
+    onClose,
+    initialStep
 }) => {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [name, setName] = useState('');
@@ -51,6 +53,7 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     const [userSearch, setUserSearch] = useState('');
+    const [pageSearch, setPageSearch] = useState('');
 
     useEffect(() => {
         if (department) {
@@ -91,9 +94,10 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
             });
             setPermissions(pMap);
         }
-        setStep(1);
+        setStep(initialStep || 1);
         setErrorMsg('');
-    }, [department, isOpen]);
+        setPageSearch('');
+    }, [department, isOpen, initialStep]);
 
     if (!isOpen) return null;
 
@@ -209,8 +213,18 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
                     {/* Step 2: Permission Matrix */}
                     {step === 2 && (
                         <div>
-                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                Grant granular permissions for each system module. Check appropriate access boxes:
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                    Grant granular permissions for each system module. Check appropriate boxes:
+                                </div>
+                                <input
+                                    type="text"
+                                    className={styles.formInput}
+                                    style={{ width: '220px', padding: '0.35rem 0.65rem' }}
+                                    placeholder="Search pages..."
+                                    value={pageSearch}
+                                    onChange={(e) => setPageSearch(e.target.value)}
+                                />
                             </div>
                             <div className={styles.tableContainer} style={{ maxHeight: '380px' }}>
                                 <table className={styles.dataTable}>
@@ -225,7 +239,10 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {DEFAULT_SYSTEM_PAGES.map(({ module, page }) => {
+                                        {DEFAULT_SYSTEM_PAGES.filter(({ module, page }) => 
+                                            page.toLowerCase().includes(pageSearch.toLowerCase()) ||
+                                            module.toLowerCase().includes(pageSearch.toLowerCase())
+                                        ).map(({ module, page }) => {
                                             const perm = permissions[page] || { can_view: false, can_create: false, can_edit: false, can_delete: false, can_export: false };
                                             return (
                                                 <tr key={page}>

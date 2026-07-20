@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminService, type AdminUser, type AdminDepartment, type AuditLogItem } from '../services/adminService';
 import { useToast } from '../../../components/Toast';
+import { sessionPasswords } from '../components/UserModal';
 
 export function useAdminPanel() {
     const { showToast } = useToast();
@@ -154,9 +155,11 @@ export function useAdminPanel() {
     const handleResetPassword = (user: AdminUser) => {
         const newPass = prompt(`Enter new password for ${user.name}:`);
         if (newPass && newPass.trim().length >= 6) {
-            adminService.resetUserPassword(user.id, newPass.trim())
+            const trimmedPass = newPass.trim();
+            adminService.resetUserPassword(user.id, trimmedPass)
                 .then(() => {
                     showToast(`Password for ${user.name} reset successfully`, 'success');
+                    sessionPasswords[user.id] = trimmedPass;
                 })
                 .catch((err) => {
                     showToast(err.message || 'Failed to reset password', 'error');

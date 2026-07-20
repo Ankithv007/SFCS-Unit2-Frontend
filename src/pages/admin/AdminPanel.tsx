@@ -92,6 +92,8 @@ export const AdminPanel: React.FC = () => {
         setConfirmModal
     } = useAdminPanel();
 
+    const [initialDeptStep, setInitialDeptStep] = React.useState<1 | 2 | 3>(1);
+
     // Calculated KPI metrics
     const activeUsersCount = users.filter(u => u.status === 'active' && !u.deleted_at).length;
     const inactiveUsersCount = users.filter(u => u.status === 'inactive' || u.deleted_at).length;
@@ -210,6 +212,7 @@ export const AdminPanel: React.FC = () => {
                         className={styles.primaryActionBtn}
                         onClick={() => {
                             setSelectedDeptForEdit(null);
+                            setInitialDeptStep(1);
                             setIsDeptModalOpen(true);
                         }}
                     >
@@ -256,6 +259,17 @@ export const AdminPanel: React.FC = () => {
                     onViewDepartment={(d) => setSelectedDeptForView(d)}
                     onEditDepartment={(d) => {
                         setSelectedDeptForEdit(d);
+                        setInitialDeptStep(1);
+                        setIsDeptModalOpen(true);
+                    }}
+                    onAddUsers={(d) => {
+                        setSelectedDeptForEdit(d);
+                        setInitialDeptStep(3);
+                        setIsDeptModalOpen(true);
+                    }}
+                    onAddPages={(d) => {
+                        setSelectedDeptForEdit(d);
+                        setInitialDeptStep(2);
                         setIsDeptModalOpen(true);
                     }}
                     onDeleteDepartment={handleDeleteDepartment}
@@ -306,6 +320,7 @@ export const AdminPanel: React.FC = () => {
                 allUsers={users}
                 onSave={handleSaveDepartment}
                 onClose={() => setIsDeptModalOpen(false)}
+                initialStep={initialDeptStep}
             />
 
             <DepartmentViewModal

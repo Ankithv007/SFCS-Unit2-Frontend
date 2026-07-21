@@ -82,14 +82,21 @@ const SmtDowntimeTracker: React.FC = () => {
 
     // View Modal state
     const [viewRecord, setViewRecord] = useState<DowntimeRecord | null>(null);
+    if (metrics === null) {
+        console.log(metrics);
+    }
 
     // Analytics states
     const [analyticsRecords, setAnalyticsRecords] = useState<DowntimeRecord[]>([]);
-    const [analysisType, setAnalysisType] = useState<string>('Day Wise');
-    const [selectedDay, setSelectedDay] = useState<string>('');
-    const [selectedWeek, setSelectedWeek] = useState<string>('');
-    const [selectedMonth, setSelectedMonth] = useState<string>('');
-    const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
+    const [totalTimeAvailable, setTotalTimeAvailable] = useState<number | ''>('');
+    const [totalProduction, setTotalProduction] = useState<number | ''>('');
+    const [idealCycleTime, setIdealCycleTime] = useState<number | ''>('');
+    const [scrapProduced, setScrapProduced] = useState<number | ''>('');
+    const [reasonCode, setReasonCode] = useState('');
+    const [activeTooltip, setActiveTooltip] = useState<{ visible: boolean; text: string; x: number; y: number }>({ visible: false, text: '', x: 0, y: 0 });
+    const [hoveredSlice, setHoveredSlice] = useState<{ chart: string; index: number } | null>(null);
 
     const fetchAnalyticsRecords = async () => {
         try {
@@ -186,6 +193,7 @@ const SmtDowntimeTracker: React.FC = () => {
         setResponsiblePerson('');
         setStatus('Open');
         setRemarks('');
+        setReasonCode('');
         setEditingId(null);
     };
 
@@ -193,7 +201,7 @@ const SmtDowntimeTracker: React.FC = () => {
         e.preventDefault();
 
         // Frontend validations
-        if (!shift || !line || !machineName || !startTime || !endTime || !downtimeCategory || !downtimeDescription || !actionTaken || !responsiblePerson || !status) {
+        if (!shift || !line || !machineName || !startTime || !endTime || !downtimeCategory || !reasonCode || !downtimeDescription || !actionTaken || !responsiblePerson || !status) {
             showToast('Please fill all mandatory fields.', 'error');
             return;
         }
@@ -214,7 +222,7 @@ const SmtDowntimeTracker: React.FC = () => {
                 start_time: startTime,
                 end_time: endTime,
                 downtime_category: downtimeCategory,
-                downtime_description: downtimeDescription,
+                downtime_description: `[Reason Code: ${reasonCode}] ${downtimeDescription}`,
                 action_taken: actionTaken,
                 responsible_person: responsiblePerson,
                 status,
@@ -271,7 +279,16 @@ const SmtDowntimeTracker: React.FC = () => {
         setStartTime(formatDateForInput(record.start_time));
         setEndTime(formatDateForInput(record.end_time));
         setDowntimeCategory(record.downtime_category);
-        setDowntimeDescription(record.downtime_description);
+        
+        const match = (record.downtime_description || '').match(/^\[Reason Code: ([^\]]+)\]\s*(.*)$/);
+        if (match) {
+            setReasonCode(match[1]);
+            setDowntimeDescription(match[2]);
+        } else {
+            setReasonCode('');
+            setDowntimeDescription(record.downtime_description || '');
+        }
+
         setActionTaken(record.action_taken);
         setResponsiblePerson(record.responsible_person);
         setStatus(record.status);
@@ -312,121 +329,324 @@ const SmtDowntimeTracker: React.FC = () => {
         });
     };
 
-    // Available unique options from records
-    const availableDays = Array.from(new Set(analyticsRecords.map(r => r.start_time.split('T')[0])))
-        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
-    const availableWeeks = Array.from(new Set(analyticsRecords.map(r => {
-        const date = new Date(r.start_time);
-        const day = date.getDay();
-        const diff = date.getDate() - day; // Sunday of that week
-        const sunday = new Date(date.setDate(diff));
-        sunday.setHours(0,0,0,0);
-        return sunday.toISOString().split('T')[0];
-    }))).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    const timeAvailable = typeof totalTimeAvailable === 'number' ? totalTimeAvailable : 0;
+    const production = typeof totalProduction === 'number' ? totalProduction : 0;
+    const cycleTime = typeof idealCycleTime === 'number' ? idealCycleTime : 0;
+    const scrap = typeof scrapProduced === 'number' ? scrapProduced : 0;
 
-    const availableMonths = Array.from(new Set(analyticsRecords.map(r => {
-        const date = new Date(r.start_time);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    }))).sort((a, b) => new Date(b + '-01').getTime() - new Date(a + '-01').getTime());
+    // Filter downtime logs based on date range for OEE
+    const filteredForOee = analyticsRecords.filter(record => {
+        if (!record.start_time) return false;
+        const recordDate = new Date(record.start_time).getTime();
+        const start = fromDate ? new Date(fromDate + 'T00:00:00').getTime() : null;
+        const end = toDate ? new Date(toDate + 'T23:59:59').getTime() : null;
+        if (start && recordDate < start) return false;
+        if (end && recordDate > end) return false;
+        return true;
+    });
 
-    const getWeekRangeString = (sundayStr: string) => {
-        const sunday = new Date(sundayStr);
-        const saturday = new Date(sunday);
-        saturday.setDate(saturday.getDate() + 6);
-        const formatOptions: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' };
-        return `Week of ${sunday.toLocaleDateString('en-IN', formatOptions)} (${sunday.toLocaleDateString('en-IN', formatOptions)} - ${saturday.toLocaleDateString('en-IN', formatOptions)})`;
+    const plannedDowntime = filteredForOee
+        .filter(r => r.downtime_category === 'Planned')
+        .reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
+
+    const unplannedDowntime = filteredForOee
+        .filter(r => r.downtime_category === 'Unplanned')
+        .reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
+
+    const operatingTime = Math.max(0, timeAvailable - plannedDowntime - unplannedDowntime);
+
+    const availabilityRateDivisor = timeAvailable - plannedDowntime;
+    const availabilityRate = availabilityRateDivisor > 0 
+        ? (operatingTime / availabilityRateDivisor) * 100 
+        : 0;
+
+    const actualRunRate = operatingTime > 0 ? (production / operatingTime) : 0;
+    const performanceRate = cycleTime > 0 
+        ? (actualRunRate / cycleTime) * 100 
+        : 0;
+
+    const qualityRate = production > 0 
+        ? ((production - scrap) / production) * 100 
+        : 0;
+
+    const oee = (availabilityRate * performanceRate * qualityRate) / 10000;
+
+    const aLoss = 100 - availabilityRate;
+    const pLoss = 100 - performanceRate;
+    const qLoss = 100 - qualityRate;
+
+    const renderSimplePieChart = (value: number, color: string, lossColor: string, label: string) => {
+        const actualRate = value;
+        const actualLoss = 100 - value;
+
+        const val = Math.min(100, Math.max(0, value));
+        const loss = 100 - val;
+
+        const slices = [
+            { label: 'Rate', value: val, actualValue: actualRate, color: color },
+            { label: 'Loss', value: loss, actualValue: actualLoss, color: lossColor }
+        ];
+
+        const totalSlicesValue = slices.reduce((sum, s) => sum + s.value, 0) || 1;
+        const nonZeroSlices = slices.filter(s => s.value > 0).length;
+        const minVis = 10; 
+        const remainingVis = 100 - (nonZeroSlices * minVis);
+
+        const visualSlices = slices.map(s => {
+            if (s.value === 0) return { ...s, visPercent: 0 };
+            return { ...s, visPercent: minVis + ((s.value / totalSlicesValue) * remainingVis) };
+        });
+
+        let accumulatedPercent = 0;
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', width: '100%', maxWidth: '240px' }}>
+                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: '#334155' }}>{label}</h4>
+                <div style={{ width: '220px', height: '220px', position: 'relative' }}>
+                    <svg viewBox="-150 -150 300 300" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                        {visualSlices.map((slice, index) => {
+                            const percent = slice.visPercent / 100;
+                            if (percent === 0) return null;
+                            const angleSpan = percent * 360;
+                            const startAngle = accumulatedPercent * 360 - 90;
+                            const endAngle = (accumulatedPercent + percent) * 360 - 90;
+                            accumulatedPercent += percent;
+
+                            const radStart = (startAngle * Math.PI) / 180;
+                            const radEnd = (endAngle * Math.PI) / 180;
+                            const midAngle = startAngle + (angleSpan / 2);
+                            const radMid = (midAngle * Math.PI) / 180;
+
+                            const R = 100;
+                            const x1 = R * Math.cos(radStart);
+                            const y1 = R * Math.sin(radStart);
+                            const x2 = R * Math.cos(radEnd);
+                            const y2 = R * Math.sin(radEnd);
+
+                            const isHovered = hoveredSlice?.chart === label && hoveredSlice?.index === index;
+                            const explodeDist = isHovered ? 12 : 0;
+                            const explodeX = explodeDist * Math.cos(radMid);
+                            const explodeY = explodeDist * Math.sin(radMid);
+
+                            const isSmall = slice.value < 18;
+                            const textR = isSmall ? 122 : 62;
+                            const tx = textR * Math.cos(radMid);
+                            const ty = textR * Math.sin(radMid);
+
+                            const lx1 = 60 * Math.cos(radMid);
+                            const ly1 = 60 * Math.sin(radMid);
+                            const lx2 = 115 * Math.cos(radMid);
+                            const ly2 = 115 * Math.sin(radMid);
+
+                            let textAnchor: "inherit" | "end" | "start" | "middle" | undefined = "middle";
+                            const cosAngle = Math.cos(radMid);
+                            if (isSmall) {
+                                if (cosAngle > 0.1) textAnchor = "start";
+                                else if (cosAngle < -0.1) textAnchor = "end";
+                            }
+
+                            const largeArc = angleSpan > 180 ? 1 : 0;
+                            const pathData = percent === 1
+                                ? `M 0 0 h 0 A ${R} ${R} 0 1 1 0 -${R} Z`
+                                : `M 0 0 L ${x1} ${y1} A ${R} ${R} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+                            return (
+                                <g key={index} style={{ transform: `translate(${explodeX}px, ${explodeY}px)`, transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                                    <path 
+                                        d={pathData} 
+                                        fill={slice.color} 
+                                        stroke="#ffffff" 
+                                        strokeWidth="2" 
+                                        style={{ cursor: 'pointer' }}
+                                        onMouseEnter={(e) => {
+                                            setHoveredSlice({ chart: label, index });
+                                            setActiveTooltip({ visible: true, text: `${label} ${slice.label}: ${slice.actualValue.toFixed(2)}%`, x: e.clientX, y: e.clientY });
+                                        }}
+                                        onMouseMove={(e) => setActiveTooltip(prev => ({ ...prev, x: e.clientX, y: e.clientY }))}
+                                        onMouseLeave={() => {
+                                            setHoveredSlice(null);
+                                            setActiveTooltip(prev => ({ ...prev, visible: false }));
+                                        }}
+                                        onClick={() => {
+                                            setHoveredSlice({ chart: label, index });
+                                        }}
+                                    />
+                                    {isSmall && (
+                                        <line x1={lx1} y1={ly1} x2={lx2} y2={ly2} stroke="#475569" strokeWidth="1.5" strokeDasharray="3,3" />
+                                    )}
+                                    <g style={{ pointerEvents: 'none' }}>
+                                        <text 
+                                            x={tx} 
+                                            y={ty - 4} 
+                                            textAnchor={textAnchor} 
+                                            fill={isSmall ? '#1e293b' : '#ffffff'} 
+                                            style={{ fontSize: '10px', fontWeight: '800', textShadow: isSmall ? 'none' : '0 1px 3px rgba(0,0,0,0.8)' }}
+                                        >
+                                            {slice.label}
+                                        </text>
+                                        <text 
+                                            x={tx} 
+                                            y={ty + 8} 
+                                            textAnchor={textAnchor} 
+                                            fill={isSmall ? '#1e293b' : '#ffffff'} 
+                                            style={{ fontSize: '10px', fontWeight: '800', textShadow: isSmall ? 'none' : '0 1px 3px rgba(0,0,0,0.8)' }}
+                                        >
+                                            {slice.actualValue.toFixed(2)}%
+                                        </text>
+                                    </g>
+                                </g>
+                            );
+                        })}
+                    </svg>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', width: '100%', padding: '0.5rem', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.8rem' }}>
+                    {slices.map((slice, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#475569', fontWeight: 500 }}>
+                                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: slice.color }} />
+                                {slice.label}:
+                            </span>
+                            <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{slice.actualValue.toFixed(2)}%</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
     };
 
-    const getMonthDisplayString = (yearMonthStr: string) => {
-        const [year, month] = yearMonthStr.split('-');
-        const d = new Date(Number(year), Number(month) - 1, 1);
-        return d.toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+    const renderOeePieChart = (oeeVal: number, aLossVal: number, pLossVal: number, qLossVal: number) => {
+        const slices = [
+            { label: 'OEE', value: Math.max(0, oeeVal), actualValue: oeeVal, color: '#10b981' },
+            { label: 'Avail Loss', value: Math.max(0, aLossVal), actualValue: aLossVal, color: '#ef4444' },
+            { label: 'Perf Loss', value: Math.max(0, pLossVal), actualValue: pLossVal, color: '#f59e0b' },
+            { label: 'Qual Loss', value: Math.max(0, qLossVal), actualValue: qLossVal, color: '#3b82f6' }
+        ];
+
+        const totalSlicesValue = slices.reduce((sum, s) => sum + s.value, 0) || 1;
+        const nonZeroSlices = slices.filter(s => s.value > 0).length;
+        const minVis = 10; 
+        const remainingVis = 100 - (nonZeroSlices * minVis);
+
+        const visualSlices = slices.map(s => {
+            if (s.value === 0) return { ...s, visPercent: 0 };
+            return { ...s, visPercent: minVis + ((s.value / totalSlicesValue) * remainingVis) };
+        });
+
+        let accumulatedPercent = 0;
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', width: '100%', maxWidth: '240px' }}>
+                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: '#334155' }}>Overall OEE Chart</h4>
+                <div style={{ width: '220px', height: '220px', position: 'relative' }}>
+                    <svg viewBox="-150 -150 300 300" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                        {visualSlices.map((slice, index) => {
+                            const percent = slice.visPercent / 100;
+                            if (percent === 0) return null;
+                            const angleSpan = percent * 360;
+                            const startAngle = accumulatedPercent * 360 - 90;
+                            const endAngle = (accumulatedPercent + percent) * 360 - 90;
+                            accumulatedPercent += percent;
+
+                            const radStart = (startAngle * Math.PI) / 180;
+                            const radEnd = (endAngle * Math.PI) / 180;
+                            const midAngle = startAngle + (angleSpan / 2);
+                            const radMid = (midAngle * Math.PI) / 180;
+
+                            const R = 100;
+                            const x1 = R * Math.cos(radStart);
+                            const y1 = R * Math.sin(radStart);
+                            const x2 = R * Math.cos(radEnd);
+                            const y2 = R * Math.sin(radEnd);
+
+                            const isHovered = hoveredSlice?.chart === 'OEE' && hoveredSlice?.index === index;
+                            const explodeDist = isHovered ? 12 : 0;
+                            const explodeX = explodeDist * Math.cos(radMid);
+                            const explodeY = explodeDist * Math.sin(radMid);
+
+                            const isSmall = slice.value < 18;
+                            const textR = isSmall ? 122 : 62;
+                            const tx = textR * Math.cos(radMid);
+                            const ty = textR * Math.sin(radMid);
+
+                            const lx1 = 60 * Math.cos(radMid);
+                            const ly1 = 60 * Math.sin(radMid);
+                            const lx2 = 115 * Math.cos(radMid);
+                            const ly2 = 115 * Math.sin(radMid);
+
+                            let textAnchor: "inherit" | "end" | "start" | "middle" | undefined = "middle";
+                            const cosAngle = Math.cos(radMid);
+                            if (isSmall) {
+                                if (cosAngle > 0.1) textAnchor = "start";
+                                else if (cosAngle < -0.1) textAnchor = "end";
+                            }
+
+                            const largeArc = angleSpan > 180 ? 1 : 0;
+                            const pathData = percent === 1
+                                ? `M 0 0 h 0 A ${R} ${R} 0 1 1 0 -${R} Z`
+                                : `M 0 0 L ${x1} ${y1} A ${R} ${R} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+                            return (
+                                <g key={index} style={{ transform: `translate(${explodeX}px, ${explodeY}px)`, transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                                    <path 
+                                        d={pathData} 
+                                        fill={slice.color} 
+                                        stroke="#ffffff" 
+                                        strokeWidth="2" 
+                                        style={{ cursor: 'pointer' }}
+                                        onMouseEnter={(e) => {
+                                            setHoveredSlice({ chart: 'OEE', index });
+                                            setActiveTooltip({ visible: true, text: `${slice.label}: ${slice.actualValue.toFixed(2)}%`, x: e.clientX, y: e.clientY });
+                                        }}
+                                        onMouseMove={(e) => setActiveTooltip(prev => ({ ...prev, x: e.clientX, y: e.clientY }))}
+                                        onMouseLeave={() => {
+                                            setHoveredSlice(null);
+                                            setActiveTooltip(prev => ({ ...prev, visible: false }));
+                                        }}
+                                        onClick={() => {
+                                            setHoveredSlice({ chart: 'OEE', index });
+                                        }}
+                                    />
+                                    {isSmall && (
+                                        <line x1={lx1} y1={ly1} x2={lx2} y2={ly2} stroke="#475569" strokeWidth="1.5" strokeDasharray="3,3" />
+                                    )}
+                                    <g style={{ pointerEvents: 'none' }}>
+                                        <text 
+                                            x={tx} 
+                                            y={ty - 4} 
+                                            textAnchor={textAnchor} 
+                                            fill={isSmall ? '#1e293b' : '#ffffff'} 
+                                            style={{ fontSize: '10px', fontWeight: '800', textShadow: isSmall ? 'none' : '0 1px 3px rgba(0,0,0,0.8)' }}
+                                        >
+                                            {slice.label}
+                                        </text>
+                                        <text 
+                                            x={tx} 
+                                            y={ty + 8} 
+                                            textAnchor={textAnchor} 
+                                            fill={isSmall ? '#1e293b' : '#ffffff'} 
+                                            style={{ fontSize: '10px', fontWeight: '800', textShadow: isSmall ? 'none' : '0 1px 3px rgba(0,0,0,0.8)' }}
+                                        >
+                                            {slice.actualValue.toFixed(2)}%
+                                        </text>
+                                    </g>
+                                </g>
+                            );
+                        })}
+                    </svg>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', width: '100%', padding: '0.5rem', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.8rem' }}>
+                    {slices.map((slice, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#475569', fontWeight: 500 }}>
+                                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: slice.color }} />
+                                {slice.label}:
+                            </span>
+                            <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{slice.actualValue.toFixed(2)}%</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
     };
-
-    const filteredAnalyticsRecords = analyticsRecords.filter(record => {
-        if (analysisType === 'Day Wise') {
-            if (!selectedDay) return false;
-            return record.start_time.split('T')[0] === selectedDay;
-        } else if (analysisType === 'Week Wise') {
-            if (!selectedWeek) return false;
-            const rDate = new Date(record.start_time);
-            rDate.setHours(0,0,0,0);
-            const wStart = new Date(selectedWeek);
-            wEnd: {
-                const wEnd = new Date(wStart);
-                wEnd.setDate(wEnd.getDate() + 7);
-                return rDate >= wStart && rDate < wEnd;
-            }
-        } else if (analysisType === 'Month Wise') {
-            if (!selectedMonth) return false;
-            const rDate = new Date(record.start_time);
-            const yearStr = String(rDate.getFullYear());
-            const monthStr = String(rDate.getMonth() + 1).padStart(2, '0');
-            return `${yearStr}-${monthStr}` === selectedMonth;
-        }
-        return false;
-    });
-
-    const totalDurationFiltered = filteredAnalyticsRecords.reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
-
-    const categoriesList = [
-        'Planned', 'Unplanned', 'Breakdown', 'Material Shortage', 
-        'Power Failure', 'NPI Issues', 'Setup', 'Program Change', 'Quality Issue'
-    ];
-
-    const categoryData = categoriesList.map(cat => {
-        const catRecords = filteredAnalyticsRecords.filter(r => r.downtime_category === cat);
-        const duration = catRecords.reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
-        return {
-            category: cat,
-            duration,
-            records: catRecords
-        };
-    });
-
-    const categoryDataWithPercentage = categoryData.map(d => {
-        const percentage = totalDurationFiltered > 0 ? (d.duration / totalDurationFiltered) * 100 : 0;
-        return {
-            ...d,
-            percentage
-        };
-    });
-
-    // Calculate visual percentages for SVG slices (so all categories are always visible, and small non-zero slices remain distinguishable)
-    const minVisualPercent = 3.5; // 3.5% minimum slice size for all categories
-    const totalMinSpace = categoriesList.length * minVisualPercent; // 9 * 3.5 = 31.5%
-    const remainingSpace = 100 - totalMinSpace; // 68.5%
-    
-    const visualCategoryData = categoryDataWithPercentage.map(d => {
-        let visualPercentage = minVisualPercent;
-        if (totalDurationFiltered > 0) {
-            visualPercentage += (d.percentage / 100) * remainingSpace;
-        } else {
-            // If everything is 0, distribute equally
-            visualPercentage = 100 / categoriesList.length;
-        }
-        return {
-            ...d,
-            visualPercentage
-        };
-    });
-
-    const colorsMap: Record<string, string> = {
-        'Planned': '#3b82f6',
-        'Unplanned': '#10b981',
-        'Breakdown': '#ef4444',
-        'Material Shortage': '#f59e0b',
-        'Power Failure': '#8b5cf6',
-        'NPI Issues': '#ec4899',
-        'Setup': '#f97316',
-        'Program Change': '#14b8a6',
-    };
-
-    const isPeriodSelected = 
-        (analysisType === 'Day Wise' && !!selectedDay) ||
-        (analysisType === 'Week Wise' && !!selectedWeek) ||
-        (analysisType === 'Month Wise' && !!selectedMonth);
 
     return (
         <div className={styles.container}>
@@ -437,39 +657,7 @@ const SmtDowntimeTracker: React.FC = () => {
                 </div>
             </div>
 
-            {/* Dashboard Summary Cards */}
-            <div className={styles.summaryGrid}>
-                <div className={styles.summaryCard}>
-                    <span className={styles.summaryLabel}>Total Records</span>
-                    <span className={styles.summaryValue}>{metrics.summary.total_records}</span>
-                    <span className={styles.summarySub}>Log Count</span>
-                </div>
-                <div className={styles.summaryCard}>
-                    <span className={styles.summaryLabel}>Total Duration</span>
-                    <span className={styles.summaryValue}>{metrics.summary.total_duration.toFixed(1)}m</span>
-                    <span className={styles.summarySub}>Total downtime minutes</span>
-                </div>
-                <div className={styles.summaryCard}>
-                    <span className={styles.summaryLabel}>Average Downtime</span>
-                    <span className={styles.summaryValue}>{metrics.summary.avg_duration.toFixed(1)}m</span>
-                    <span className={styles.summarySub}>Per incident average</span>
-                </div>
-                <div className={styles.summaryCard}>
-                    <span className={styles.summaryLabel}>Status Distribution</span>
-                    <span className={styles.summaryValue} style={{ fontSize: '1.25rem', marginTop: '0.5rem' }}>
-                        🟢 Closed: {metrics.summary.closed_issues} | 🔴 Open: {metrics.summary.open_issues}
-                    </span>
-                    <span className={styles.summarySub}>Active vs Solved Issues</span>
-                </div>
-                <div className={styles.summaryCard}>
-                    <span className={styles.summaryLabel}>Most Affected Machine</span>
-                    <span className={styles.summaryValue} style={{ fontSize: '1.25rem' }}>{metrics.summary.most_affected_machine}</span>
-                </div>
-                <div className={styles.summaryCard}>
-                    <span className={styles.summaryLabel}>Most Frequent Category</span>
-                    <span className={styles.summaryValue} style={{ fontSize: '1.25rem' }}>{metrics.summary.most_frequent_category}</span>
-                </div>
-            </div>
+
 
             {/* Entry Form */}
             <div className={styles.card}>
@@ -483,6 +671,7 @@ const SmtDowntimeTracker: React.FC = () => {
                                 <option value="Shift A">Shift A</option>
                                 <option value="Shift B">Shift B</option>
                                 <option value="Shift C">Shift C</option>
+                                <option value="General Shift">General Shift</option>
                             </select>
                         </div>
 
@@ -548,13 +737,20 @@ const SmtDowntimeTracker: React.FC = () => {
                                 <option value="">Select Category</option>
                                 <option value="Planned">Planned</option>
                                 <option value="Unplanned">Unplanned</option>
-                                <option value="Breakdown">Breakdown</option>
-                                <option value="Material Shortage">Material Shortage</option>
-                                <option value="Power Failure">Power Failure</option>
-                                <option value="NPI Issues">NPI Issues</option>
+                            </select>
+                        </div>
+
+                        <div className={styles.inputGroup}>
+                            <label>Reason Code <span>*</span></label>
+                            <select value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} className={styles.input} required>
+                                <option value="">Select Reason Code</option>
+                                <option value="Quality Issue">Quality Issue</option>
+                                <option value="NPI Issue">NPI Issue</option>
                                 <option value="Setup">Setup</option>
                                 <option value="Program Change">Program Change</option>
-                                <option value="Quality Issue">Quality Issue</option>
+                                <option value="Power Failure">Power Failure</option>
+                                <option value="Material Shortage">Material Shortage</option>
+                                <option value="Breakdown">Breakdown</option>
                             </select>
                         </div>
 
@@ -568,14 +764,6 @@ const SmtDowntimeTracker: React.FC = () => {
                                 placeholder="Enter Name"
                                 required
                             />
-                        </div>
-
-                        <div className={styles.inputGroup}>
-                            <label>Status <span>*</span></label>
-                            <select value={status} onChange={(e) => setStatus(e.target.value)} className={styles.input} required>
-                                <option value="Open">Open</option>
-                                <option value="Closed">Closed</option>
-                            </select>
                         </div>
 
                         <div className={`${styles.inputGroup} ${styles.formGridFull}`}>
@@ -656,14 +844,13 @@ const SmtDowntimeTracker: React.FC = () => {
                                     <th onClick={() => handleSort('end_time')} style={{ cursor: 'pointer' }}>End Time {sortBy === 'end_time' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}</th>
                                     <th onClick={() => handleSort('duration')} style={{ cursor: 'pointer' }}>Duration {sortBy === 'duration' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}</th>
                                     <th onClick={() => handleSort('responsible_person')} style={{ cursor: 'pointer' }}>Responsible {sortBy === 'responsible_person' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}</th>
-                                    <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}>Status {sortBy === 'status' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {records.length === 0 ? (
                                     <tr>
-                                        <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                        <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                                             No downtime logs match the search query.
                                         </td>
                                     </tr>
@@ -679,11 +866,6 @@ const SmtDowntimeTracker: React.FC = () => {
                                             <td>{formatDateTime(record.end_time)}</td>
                                             <td style={{ fontWeight: 600 }}>{Number(record.duration).toFixed(1)} mins</td>
                                             <td>{record.responsible_person}</td>
-                                            <td>
-                                                <span className={`${styles.badge} ${record.status === 'Open' ? styles.badgeOpen : styles.badgeClosed}`}>
-                                                    {record.status}
-                                                </span>
-                                            </td>
                                             <td className={styles.actionCell}>
                                                 <button onClick={() => setViewRecord(record)} className={styles.viewBtn}>View</button>
                                                 <button onClick={() => handleEdit(record)} className={styles.editBtn}>Edit</button>
@@ -733,224 +915,155 @@ const SmtDowntimeTracker: React.FC = () => {
             </div>
 
             {/* Downtime Category Analytics Section */}
+            {/* OEE Analytics Section */}
             <div className={styles.card}>
                 <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
-                    📊 Downtime Category Analytics
+                    📊 OEE Analytics Dashboard
                 </h3>
-                
-                {/* Filters Section */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+
+                {/* Date Filters Section */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
                     <div className={styles.inputGroup}>
-                        <label style={{ fontWeight: 'bold' }}>Analysis Type</label>
-                        <select
-                            value={analysisType}
-                            onChange={(e) => {
-                                setAnalysisType(e.target.value);
-                                setSelectedDay('');
-                                setSelectedWeek('');
-                                setSelectedMonth('');
-                            }}
+                        <label style={{ fontWeight: 'bold' }}>From Date</label>
+                        <input
+                            type="date"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
                             className={styles.input}
-                        >
-                            <option value="Day Wise">Day Wise</option>
-                            <option value="Week Wise">Week Wise</option>
-                            <option value="Month Wise">Month Wise</option>
-                        </select>
+                        />
                     </div>
-
-                    {analysisType === 'Day Wise' && (
-                        <div className={styles.inputGroup}>
-                            <label style={{ fontWeight: 'bold' }}>Select Day</label>
-                            <select
-                                value={selectedDay}
-                                onChange={(e) => setSelectedDay(e.target.value)}
-                                className={styles.input}
-                            >
-                                <option value="">Select Day</option>
-                                {availableDays.map(day => (
-                                    <option key={day} value={day}>
-                                        {new Date(day).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-
-                    {analysisType === 'Week Wise' && (
-                        <div className={styles.inputGroup}>
-                            <label style={{ fontWeight: 'bold' }}>Select Week</label>
-                            <select
-                                value={selectedWeek}
-                                onChange={(e) => setSelectedWeek(e.target.value)}
-                                className={styles.input}
-                            >
-                                <option value="">Select Week</option>
-                                {availableWeeks.map(week => (
-                                    <option key={week} value={week}>
-                                        {getWeekRangeString(week)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-
-                    {analysisType === 'Month Wise' && (
-                        <div className={styles.inputGroup}>
-                            <label style={{ fontWeight: 'bold' }}>Select Month</label>
-                            <select
-                                value={selectedMonth}
-                                onChange={(e) => setSelectedMonth(e.target.value)}
-                                className={styles.input}
-                            >
-                                <option value="">Select Month</option>
-                                {availableMonths.map(month => (
-                                    <option key={month} value={month}>
-                                        {getMonthDisplayString(month)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
+                    <div className={styles.inputGroup}>
+                        <label style={{ fontWeight: 'bold' }}>To Date</label>
+                        <input
+                            type="date"
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
+                            className={styles.input}
+                        />
+                    </div>
                 </div>
 
-                {/* Pie Chart Display */}
-                {isPeriodSelected && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', width: '100%' }}>
-                        <div style={{ width: '100%', maxWidth: '440px', aspectRatio: '1/1', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                            <svg viewBox="-350 -350 700 700" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                                {(() => {
-                                    let accumulatedPercent = 0;
-                                    return visualCategoryData.map((data) => {
-                                        const percent = data.visualPercentage / 100;
-                                        const angleSpan = percent * 360;
-                                        const startAngle = accumulatedPercent * 360 - 90;
-                                        const endAngle = (accumulatedPercent + percent) * 360 - 90;
-                                        accumulatedPercent += percent;
+                {/* Overall OEE Large Summary Card */}
+                <div style={{
+                    backgroundColor: 'var(--primary-light, #f0fdf4)',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: '8px',
+                    padding: '1.5rem',
+                    textAlign: 'center',
+                    marginBottom: '1.5rem'
+                }}>
+                    <span style={{ fontSize: '0.9rem', color: '#15803d', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Overall OEE</span>
+                    <h2 style={{ fontSize: '3rem', margin: '0.5rem 0 0 0', color: '#166534', fontWeight: '800' }}>
+                        {oee.toFixed(2)}%
+                    </h2>
+                </div>
 
-                                        const radStart = (startAngle * Math.PI) / 180;
-                                        const radEnd = (endAngle * Math.PI) / 180;
-                                        const radMid = ((startAngle + angleSpan / 2) * Math.PI) / 180;
-
-                                        const R = 260;
-                                        const x1 = R * Math.cos(radStart);
-                                        const y1 = R * Math.sin(radStart);
-                                        const x2 = R * Math.cos(radEnd);
-                                        const y2 = R * Math.sin(radEnd);
-
-                                        const largeArcFlag = angleSpan > 180 ? 1 : 0;
-                                        const pathData = `M 0 0 L ${x1} ${y1} A ${R} ${R} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
-
-                                        const sectorColor = colorsMap[data.category] || '#94a3b8';
-                                        const isHovered = hoveredCategory === data.category;
-
-                                        // Adjust label radius so 0% slices (which are very thin) project labels outward and don't overlap inside the center
-                                        const R_text = data.percentage === 0 ? 190 : 130;
-                                        const tx = R_text * Math.cos(radMid);
-                                        const ty = R_text * Math.sin(radMid);
-
-                                        let rotationAngle = startAngle + angleSpan / 2;
-                                        if (rotationAngle > 90 && rotationAngle < 270) {
-                                            rotationAngle += 180;
-                                        }
-
-                                        return (
-                                            <g key={data.category}>
-                                                <path
-                                                    d={pathData}
-                                                    fill={sectorColor}
-                                                    stroke="#ffffff"
-                                                    strokeWidth="2"
-                                                    onMouseEnter={() => setHoveredCategory(data.category)}
-                                                    onMouseLeave={() => setHoveredCategory(null)}
-                                                    style={{
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.3s ease',
-                                                        transform: isHovered 
-                                                            ? `translate(${12 * Math.cos(radMid)}px, ${12 * Math.sin(radMid)}px) scale(1.03)` 
-                                                            : 'scale(1)',
-                                                        transformOrigin: '0px 0px',
-                                                        opacity: isHovered ? 1 : 0.95
-                                                    }}
-                                                />
-                                                <text
-                                                    x={tx}
-                                                    y={ty}
-                                                    textAnchor="middle"
-                                                    dominantBaseline="middle"
-                                                    fill="#ffffff"
-                                                    style={{
-                                                        fontSize: '12px',
-                                                        fontWeight: 'bold',
-                                                        textShadow: '0px 1px 3px rgba(0,0,0,0.85)',
-                                                        pointerEvents: 'none',
-                                                        transition: 'all 0.3s ease',
-                                                        transform: isHovered 
-                                                            ? `translate(${12 * Math.cos(radMid)}px, ${12 * Math.sin(radMid)}px) rotate(${rotationAngle}deg)` 
-                                                            : `rotate(${rotationAngle}deg)`,
-                                                        transformOrigin: `${tx}px ${ty}px`
-                                                    }}
-                                                >
-                                                    <tspan x={tx} dy="-0.3em">{data.category}</tspan>
-                                                    <tspan x={tx} dy="1.2em">{data.percentage.toFixed(0)}%</tspan>
-                                                </text>
-                                            </g>
-                                        );
-                                    });
-                                })()}
-                                <circle cx="0" cy="0" r="15" fill="#ffffff" stroke="#e2e8f0" strokeWidth="2" />
-                            </svg>
-                        </div>
-
-                        {/* Interactive Legend */}
-                        <div style={{
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            justifyContent: 'center',
-                            gap: '1rem',
-                            marginTop: '1rem',
-                            padding: '1rem',
-                            backgroundColor: '#f8fafc',
-                            borderRadius: '8px',
-                            border: '1px solid #e2e8f0',
-                            width: '100%',
-                            maxWidth: '600px'
-                        }}>
-                            {visualCategoryData.map(data => {
-                                const color = colorsMap[data.category] || '#94a3b8';
-                                const isHovered = hoveredCategory === data.category;
-                                return (
-                                    <div 
-                                        key={data.category}
-                                        onMouseEnter={() => setHoveredCategory(data.category)}
-                                        onMouseLeave={() => setHoveredCategory(null)}
-                                        style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '0.5rem',
-                                            fontSize: '0.85rem',
-                                            cursor: 'pointer',
-                                            padding: '0.25rem 0.5rem',
-                                            borderRadius: '4px',
-                                            backgroundColor: isHovered ? '#e2e8f0' : 'transparent',
-                                            transition: 'all 0.2s ease',
-                                            fontWeight: isHovered ? 'bold' : 'normal'
-                                        }}
-                                    >
-                                        <span style={{
-                                            display: 'inline-block',
-                                            width: '10px',
-                                            height: '10px',
-                                            borderRadius: '50%',
-                                            backgroundColor: color,
-                                            border: '1px solid #ffffff'
-                                        }}></span>
-                                        <span>{data.category}: {data.percentage.toFixed(1)}% ({data.duration.toFixed(0)} Minutes)</span>
-                                    </div>
-                                );
-                            })}
+                {/* Grid of 3 Calculation Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+                    {/* Availability Card */}
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', backgroundColor: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                        <h4 style={{ margin: '0 0 1rem 0', color: '#1e293b', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>Section 1 - Availability</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div className={styles.inputGroup}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Total Time Available (Mins)</label>
+                                <input
+                                    type="number"
+                                    value={totalTimeAvailable}
+                                    onChange={(e) => setTotalTimeAvailable(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                                    className={styles.input}
+                                    placeholder="Enter Minutes"
+                                    style={{ height: '36px' }}
+                                />
+                            </div>
+                            <div className={styles.inputGroup}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Planned Downtime (Mins)</label>
+                                <input type="text" value={plannedDowntime > 0 ? `${plannedDowntime.toFixed(2)} mins` : '0.00 mins'} readOnly disabled className={styles.input} style={{ height: '36px', backgroundColor: '#f8fafc' }} />
+                            </div>
+                            <div className={styles.inputGroup}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Unplanned Downtime (Mins)</label>
+                                <input type="text" value={unplannedDowntime > 0 ? `${unplannedDowntime.toFixed(2)} mins` : '0.00 mins'} readOnly disabled className={styles.input} style={{ height: '36px', backgroundColor: '#f8fafc' }} />
+                            </div>
+                            <div className={styles.inputGroup}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Operating Time (Mins)</label>
+                                <input type="text" value={operatingTime > 0 ? `${operatingTime.toFixed(2)} mins` : '0.00 mins'} readOnly disabled className={styles.input} style={{ height: '36px', backgroundColor: '#f8fafc' }} />
+                            </div>
+                            <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#475569' }}>Availability Rate:</span>
+                                <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#3b82f6' }}>{availabilityRate.toFixed(2)}%</span>
+                            </div>
                         </div>
                     </div>
-                )}
+
+                    {/* Performance Card */}
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', backgroundColor: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                        <h4 style={{ margin: '0 0 1rem 0', color: '#1e293b', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>Section 2 - Performance</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div className={styles.inputGroup}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Total Production (Pieces)</label>
+                                <input
+                                    type="number"
+                                    value={totalProduction}
+                                    onChange={(e) => setTotalProduction(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                                    className={styles.input}
+                                    placeholder="Enter Pieces"
+                                    style={{ height: '36px' }}
+                                />
+                            </div>
+                            <div className={styles.inputGroup}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Ideal Run/Cycle Time (Pcs/Min)</label>
+                                <input
+                                    type="number"
+                                    value={idealCycleTime}
+                                    onChange={(e) => setIdealCycleTime(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                                    className={styles.input}
+                                    placeholder="Enter Pieces/Min"
+                                    style={{ height: '36px' }}
+                                />
+                            </div>
+                            <div style={{ marginTop: '5.2rem', paddingTop: '0.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#475569' }}>Performance Rate:</span>
+                                <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#f59e0b' }}>{performanceRate.toFixed(2)}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Quality Card */}
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', backgroundColor: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                        <h4 style={{ margin: '0 0 1rem 0', color: '#1e293b', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>Section 3 - Quality</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div className={styles.inputGroup}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>Reject / Scrap Produced (Pieces)</label>
+                                <input
+                                    type="number"
+                                    value={scrapProduced}
+                                    onChange={(e) => setScrapProduced(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                                    className={styles.input}
+                                    placeholder="Enter Pieces"
+                                    style={{ height: '36px' }}
+                                />
+                            </div>
+                            <div style={{ marginTop: '9rem', paddingTop: '0.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#475569' }}>Quality Rate:</span>
+                                <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#10b981' }}>{qualityRate.toFixed(2)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Pie Charts Visual Grid */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: '2rem',
+                    justifyItems: 'center',
+                    paddingTop: '1.5rem',
+                    borderTop: '1px solid #f1f5f9'
+                }}>
+                    {renderOeePieChart(oee, aLoss, pLoss, qLoss)}
+                    {renderSimplePieChart(availabilityRate, '#3b82f6', '#ef4444', 'Availability')}
+                    {renderSimplePieChart(performanceRate, '#f59e0b', '#b91c1c', 'Performance')}
+                    {renderSimplePieChart(qualityRate, '#10b981', '#7c3aed', 'Quality')}
+                </div>
             </div>
 
             {/* View Record Details Modal */}
@@ -993,12 +1106,7 @@ const SmtDowntimeTracker: React.FC = () => {
                                         {Number(viewRecord.duration).toFixed(1)} minutes
                                     </span>
                                 </div>
-                                <div className={styles.modalField}>
-                                    <span className={styles.fieldLabel}>Status</span>
-                                    <span className={`${styles.badge} ${viewRecord.status === 'Open' ? styles.badgeOpen : styles.badgeClosed}`} style={{ width: 'fit-content', padding: '0.2rem 0.5rem' }}>
-                                        {viewRecord.status}
-                                    </span>
-                                </div>
+
                                 <div className={styles.modalField}>
                                     <span className={styles.fieldLabel}>Responsible Person</span>
                                     <span className={styles.fieldValue}>{viewRecord.responsible_person}</span>
@@ -1025,6 +1133,26 @@ const SmtDowntimeTracker: React.FC = () => {
                             <button onClick={() => setViewRecord(null)} className={styles.secondaryButton}>Close</button>
                         </div>
                     </div>
+                </div>
+            )}
+            {activeTooltip.visible && (
+                <div style={{
+                    position: 'fixed',
+                    left: activeTooltip.x + 12 + 'px',
+                    top: activeTooltip.y + 12 + 'px',
+                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                    color: '#ffffff',
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem',
+                    fontWeight: 'bold',
+                    pointerEvents: 'none',
+                    zIndex: 9999,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    transition: 'left 0.05s ease, top 0.05s ease'
+                }}>
+                    {activeTooltip.text}
                 </div>
             )}
         </div>

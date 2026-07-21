@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import { formatScanError } from '../../utils/errorFormatter';
 import styles from './Packing.module.css';
-import sharedStyles from '../smt/WorkOrder.module.css';
+import sharedStyles from '../smt/work-order/WorkOrder.module.css';
 
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';

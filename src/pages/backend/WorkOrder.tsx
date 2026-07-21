@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './WorkOrder.module.css';
-import sharedStyles from '../smt/WorkOrder.module.css';
+import sharedStyles from '../smt/work-order/WorkOrder.module.css';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import {

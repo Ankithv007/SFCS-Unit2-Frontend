@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import JSZip from 'jszip';
 import { apiFetch } from '../../../utils/api';
 import { useSmtAuth } from '../../../context/SmtAuthContext';
 import styles from './Document.module.css';
@@ -83,12 +84,18 @@ const Document: React.FC = () => {
     const [qmsRemarks, setQmsRemarks] = useState('');
 
     // File Upload States
-    const [uploadedFiles, setUploadedFiles] = useState<{ [key: string]: File | null }>({
+    const [uploadedFiles, setUploadedFiles] = useState<{
+        bom: File | null;
+        pfc: File | null;
+        xy: File | null;
+        ecn: File | null;
+        drawing: File[];
+    }>({
         bom: null,
         pfc: null,
         xy: null,
         ecn: null,
-        drawing: null
+        drawing: []
     });
 
     // Active QMS records
@@ -146,7 +153,62 @@ const Document: React.FC = () => {
         setWoDetails(details || null);
     };
 
-    const handleFileChange = (category: string, file: File | null) => {
+    const handleFileChange = (category: string, file: File | null, fileList?: FileList | null) => {
+        if (category === 'drawing') {
+            if (fileList && fileList.length > 0) {
+                const newFiles: File[] = [];
+                for (let i = 0; i < fileList.length; i++) {
+                    const f = fileList[i];
+                    if (f.size > 50 * 1024 * 1024) {
+                        addToast(`File ${f.name} size must not exceed 50MB.`, 'error');
+                        continue;
+                    }
+                    const ext = f.name.substring(f.name.lastIndexOf('.')).toLowerCase();
+                    const allowed = ['.pdf', '.xls', '.xlsx', '.csv', '.zip', '.txt'];
+                    if (!allowed.includes(ext)) {
+                        addToast(`Invalid file extension for ${f.name}. Allowed: PDF, Excel, CSV, TXT, ZIP.`, 'error');
+                        continue;
+                    }
+                    newFiles.push(f);
+                }
+                if (newFiles.length > 0) {
+                    setUploadedFiles(prev => {
+                        const roomLeft = 3 - prev.drawing.length;
+                        if (roomLeft <= 0) {
+                            addToast('Maximum 3 Assembly Drawing files allowed.', 'error');
+                            return prev;
+                        }
+                        const toAdd = newFiles.slice(0, roomLeft);
+                        if (newFiles.length > roomLeft) {
+                            addToast(`Only ${roomLeft} more file(s) can be added (max 3).`, 'info');
+                        }
+                        return { ...prev, drawing: [...prev.drawing, ...toAdd] };
+                    });
+                }
+            } else if (file) {
+                if (file.size > 50 * 1024 * 1024) {
+                    addToast('File size must not exceed 50MB.', 'error');
+                    return;
+                }
+                const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+                const allowed = ['.pdf', '.xls', '.xlsx', '.csv', '.zip', '.txt'];
+                if (!allowed.includes(ext)) {
+                    addToast('Invalid file extension. Allowed: PDF, Excel, CSV, TXT, ZIP.', 'error');
+                    return;
+                }
+                setUploadedFiles(prev => {
+                    if (prev.drawing.length >= 3) {
+                        addToast('Maximum 3 Assembly Drawing files allowed.', 'error');
+                        return prev;
+                    }
+                    return { ...prev, drawing: [...prev.drawing, file] };
+                });
+            }
+            const fileInput = document.getElementById('file-drawing') as HTMLInputElement;
+            if (fileInput) fileInput.value = '';
+            return;
+        }
+
         if (!file) {
             setUploadedFiles(prev => ({ ...prev, [category]: null }));
             return;
@@ -158,9 +220,9 @@ const Document: React.FC = () => {
         }
 
         const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-        const allowed = ['.pdf', '.xls', '.xlsx', '.csv', '.zip'];
+        const allowed = ['.pdf', '.xls', '.xlsx', '.csv', '.zip', '.txt'];
         if (!allowed.includes(ext)) {
-            addToast('Invalid file extension. Allowed: PDF, Excel, CSV, ZIP.', 'error');
+            addToast('Invalid file extension. Allowed: PDF, Excel, CSV, TXT, ZIP.', 'error');
             return;
         }
 
@@ -173,10 +235,18 @@ const Document: React.FC = () => {
         if (fileInput) fileInput.value = '';
     };
 
+    const handleRemoveDrawingFile = (index: number) => {
+        setUploadedFiles(prev => ({
+            ...prev,
+            drawing: prev.drawing.filter((_, i) => i !== index)
+        }));
+    };
+
     const getFileIcon = (file: File) => {
         const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
         if (ext === '.pdf') return 'PDF';
         if (ext === '.csv') return 'CSV';
+        if (ext === '.txt') return 'TXT';
         if (ext === '.xls' || ext === '.xlsx') return 'EXCEL';
         if (ext === '.zip') return 'ZIP';
         return 'FILE';
@@ -184,7 +254,7 @@ const Document: React.FC = () => {
 
     const getBadgeClass = (type: string) => {
         if (type === 'PDF') return styles.badgePdf;
-        if (type === 'CSV') return styles.badgeCsv;
+        if (type === 'CSV' || type === 'TXT') return styles.badgeCsv;
         if (type === 'EXCEL') return styles.badgeExcel;
         if (type === 'ZIP') return styles.badgeZip;
         return styles.badgeFile;
@@ -193,18 +263,22 @@ const Document: React.FC = () => {
     const handleLocalPreview = (file: File) => {
         const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
         
-        if (ext === '.csv') {
+        if (ext === '.csv' || ext === '.txt') {
             const reader = new FileReader();
             reader.onload = (e) => {
                 const text = e.target?.result as string;
-                const rows = text.split('\n')
-                    .map(line => line.split(',').map(cell => cell.trim().replace(/^"|"$/g, '')))
-                    .filter(row => row.length > 0 && row.some(cell => cell !== ''));
+                const rows = ext === '.csv'
+                    ? text.split('\n')
+                        .map(line => line.split(',').map(cell => cell.trim().replace(/^"|"$/g, '')))
+                        .filter(row => row.length > 0 && row.some(cell => cell !== ''))
+                    : text.split('\n')
+                        .map(line => [line])
+                        .filter(row => row.length > 0 && row[0] !== '');
                 setCsvPreviewData(rows);
                 setPreviewModal({ originalName: file.name, url: '', isCsv: true });
             };
             reader.onerror = () => {
-                addToast('Failed to read CSV file locally', 'error');
+                addToast('Failed to read text file locally', 'error');
             };
             reader.readAsText(file);
         } else if (ext === '.pdf') {
@@ -229,8 +303,65 @@ const Document: React.FC = () => {
             document.body.removeChild(link);
             addToast('ZIP archive downloaded locally.', 'info');
         } else {
-            addToast('Browser preview is only supported for PDF and CSV.', 'info');
+            addToast('Browser preview is supported for PDF, CSV, and TXT.', 'info');
         }
+    };
+
+    const optimizeDrawingFilesIfNeeded = async (files: File[]): Promise<File[]> => {
+        const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+        const MAX_TOTAL_SIZE = 100 * 1024 * 1024; // 100 MB
+
+        if (totalSize <= MAX_TOTAL_SIZE || files.length === 0) {
+            return files;
+        }
+
+        addToast('Optimizing documents...', 'info');
+
+        const optimizedFiles: File[] = [];
+
+        for (const file of files) {
+            const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+            try {
+                if (ext === '.xlsx' || ext === '.zip') {
+                    const zipData = await file.arrayBuffer();
+                    const zip = await JSZip.loadAsync(zipData);
+                    const newZip = new JSZip();
+                    
+                    const entryNames = Object.keys(zip.files);
+                    for (const entryName of entryNames) {
+                        const zipEntry = zip.files[entryName];
+                        if (!zipEntry.dir) {
+                            const content = await zipEntry.async('uint8array');
+                            newZip.file(entryName, content, { compression: 'DEFLATE', compressionOptions: { level: 9 } });
+                        }
+                    }
+
+                    const compressedBlob = await newZip.generateAsync({
+                        type: 'blob',
+                        compression: 'DEFLATE',
+                        compressionOptions: { level: 9 }
+                    });
+
+                    if (compressedBlob.size < file.size) {
+                        optimizedFiles.push(new File([compressedBlob], file.name, { type: file.type || 'application/octet-stream' }));
+                        continue;
+                    }
+                } else if (ext === '.csv' || ext === '.txt') {
+                    const text = await file.text();
+                    const cleaned = text.split('\n').map(line => line.trimEnd()).join('\n');
+                    const blob = new Blob([cleaned], { type: file.type || 'text/plain' });
+                    if (blob.size < file.size) {
+                        optimizedFiles.push(new File([blob], file.name, { type: file.type }));
+                        continue;
+                    }
+                }
+            } catch {
+                // Preserve original file if individual file optimization is not supported
+            }
+            optimizedFiles.push(file);
+        }
+
+        return optimizedFiles;
     };
 
     const handleCreateQms = async (e: React.FormEvent) => {
@@ -246,6 +377,11 @@ const Document: React.FC = () => {
 
         setIsSubmitting(true);
         try {
+            // Check total Assembly Drawing size & optimize if > 100 MB
+            const drawingFiles = await optimizeDrawingFilesIfNeeded(uploadedFiles.drawing);
+
+            addToast('Uploading documents...', 'info');
+
             const formData = new FormData();
             formData.append('work_order_number', selectedWoNum);
             formData.append('po_number', woDetails?.po_number || '');
@@ -260,7 +396,7 @@ const Document: React.FC = () => {
             if (uploadedFiles.pfc) formData.append('pfc', uploadedFiles.pfc);
             if (uploadedFiles.xy) formData.append('xy', uploadedFiles.xy);
             if (uploadedFiles.ecn) formData.append('ecn', uploadedFiles.ecn);
-            if (uploadedFiles.drawing) formData.append('drawing', uploadedFiles.drawing);
+            drawingFiles.forEach(f => formData.append('drawing', f));
 
             const token = localStorage.getItem('auth_token') || '';
             const response = await fetch('/api/smt/qms/create', {
@@ -282,13 +418,13 @@ const Document: React.FC = () => {
                 throw new Error(result.message || result.error || 'Failed to create Document Process');
             }
 
-            addToast('Document Process record and documents created successfully.', 'success');
+            addToast('Upload completed successfully.', 'success');
             
             // Reset fields
             setSelectedWoNum('');
             setWoDetails(null);
             setQmsRemarks('');
-            setUploadedFiles({ bom: null, pfc: null, xy: null, ecn: null, drawing: null });
+            setUploadedFiles({ bom: null, pfc: null, xy: null, ecn: null, drawing: [] });
             
             fetchWorkOrders(); // Refresh Work Order dropdown list automatically
             fetchQmsRecords();
@@ -305,38 +441,62 @@ const Document: React.FC = () => {
         const token = localStorage.getItem('auth_token') || '';
         const url = `/api/smt/qms/files/view/${qmsId}/${fileType}?token=${encodeURIComponent(token)}`;
         
-        if (ext === '.csv') {
+        if (ext === '.csv' || ext === '.txt') {
             try {
                 addToast('Loading preview...', 'info');
                 const res = await fetch(url);
                 if (!res.ok) throw new Error();
                 const text = await res.text();
                 
-                // Parse CSV rows
-                const rows = text.split('\n')
-                    .map(line => line.split(',').map(cell => cell.trim().replace(/^"|"$/g, '')))
-                    .filter(row => row.length > 0 && row.some(cell => cell !== ''));
+                // Parse CSV or TXT rows
+                const rows = ext === '.csv'
+                    ? text.split('\n')
+                        .map(line => line.split(',').map(cell => cell.trim().replace(/^"|"$/g, '')))
+                        .filter(row => row.length > 0 && row.some(cell => cell !== ''))
+                    : text.split('\n')
+                        .map(line => [line])
+                        .filter(row => row.length > 0 && row[0] !== '');
                 
                 setCsvPreviewData(rows);
                 setPreviewModal({ originalName, url, isCsv: true });
             } catch {
-                addToast('Failed to load CSV preview. Please download instead.', 'error');
+                addToast('Failed to load text preview. Please download instead.', 'error');
             }
         } else if (ext === '.pdf') {
             setPreviewModal({ originalName, url, isCsv: false });
         } else {
-            addToast('Browser preview is only supported for PDF and CSV. Please download to view locally.', 'info');
+            addToast('Browser preview is supported for PDF, CSV, and TXT. Please download to view locally.', 'info');
         }
+    };
+
+    const getUserRole = (): string => {
+        if (smtUser?.role) return smtUser.role;
+        try {
+            const userStr = localStorage.getItem('user');
+            if (userStr) {
+                const userObj = JSON.parse(userStr);
+                if (userObj?.role) return userObj.role;
+            }
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                if (payload?.role) return payload.role;
+            }
+        } catch {
+            // fallback
+        }
+        return '';
     };
 
     // Soft Delete
     const handleDeleteQms = async (qmsId: number) => {
-        const isSuperAdmin = smtUser?.role === 'Super Admin';
-        if (!isSuperAdmin) {
-            addToast("Only Super Admin is authorized to delete records.\nPlease contact your Super Admin if this record needs to be deleted.", "error");
+        const userRole = getUserRole();
+        if (userRole.trim().toLowerCase() !== 'super admin') {
+            addToast('Only Super Admin can delete Document Process records.', 'error');
             return;
         }
-        if (!window.confirm('Are you sure you want to soft delete this Document Process record? This action will be logged in the audit trail.')) {
+
+        if (!window.confirm('Are you sure you want to soft delete this Document Process record?')) {
             return;
         }
 
@@ -351,13 +511,19 @@ const Document: React.FC = () => {
                 body: JSON.stringify({ userName: smtUser?.name || 'Operator' })
             });
 
-            const res = await response.json();
-            if (!response.ok) throw new Error(res.error || 'Delete failed');
+            if (response.status === 403) {
+                addToast('Only Super Admin can delete Document Process records.', 'error');
+                return;
+            }
 
-            addToast('Document Process record soft deleted.', 'success');
+            const res = await response.json();
+            if (!response.ok) throw new Error(res.error || res.message || 'Delete failed');
+
+            addToast('Document Process record soft deleted successfully.', 'success');
+            setSelectedQmsRecord(null);
             fetchQmsRecords();
         } catch (err: any) {
-            addToast(err.message, 'error');
+            addToast(err.message || 'Failed to delete record', 'error');
         }
     };
 
@@ -559,12 +725,12 @@ const Document: React.FC = () => {
                     {/* Drag-and-drop / select File categories */}
                     <div className={styles.uploadSection}>
                         <label style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: '1.25rem' }}>
-                            Upload Documents (Max 50MB each; PDF, Excel, CSV, ZIP)
+                            Upload Documents (Max 50MB each; PDF, Excel, CSV, TXT, ZIP)
                         </label>
                         <div className={styles.uploadGrid}>
-                            {['bom', 'pfc', 'xy', 'ecn', 'drawing'].map(category => {
-                                const currentFile = uploadedFiles[category];
-                                const catLabel = category === 'bom' ? 'BOM *' : category === 'xy' ? 'XY DATA' : category === 'drawing' ? 'Assembly Drawing' : category.toUpperCase();
+                            {['bom', 'pfc', 'xy', 'ecn'].map(category => {
+                                const currentFile = (uploadedFiles as any)[category];
+                                const catLabel = category === 'bom' ? 'BOM *' : category === 'xy' ? 'XY DATA' : category.toUpperCase();
                                 
                                 return currentFile ? (
                                     <div key={category} className={styles.uploadCard}>
@@ -605,6 +771,7 @@ const Document: React.FC = () => {
                                             id={`file-${category}`}
                                             type="file"
                                             style={{ display: 'none' }}
+                                            accept={category === 'xy' ? ".pdf,.xls,.xlsx,.csv,.zip,.txt" : ".pdf,.xls,.xlsx,.csv,.zip"}
                                             onChange={(e) => handleFileChange(category, e.target.files?.[0] || null)}
                                         />
                                     </div>
@@ -618,14 +785,89 @@ const Document: React.FC = () => {
                                             id={`file-${category}`}
                                             type="file"
                                             style={{ display: 'none' }}
+                                            accept={category === 'xy' ? ".pdf,.xls,.xlsx,.csv,.zip,.txt" : ".pdf,.xls,.xlsx,.csv,.zip"}
                                             onChange={(e) => handleFileChange(category, e.target.files?.[0] || null)}
                                         />
                                         <UploadCloud className={styles.dropzoneIcon} size={32} />
                                         <span className={styles.dropzoneText}>{catLabel}</span>
-                                        <span className={styles.dropzoneExt}>PDF, Excel, CSV, ZIP</span>
+                                        <span className={styles.dropzoneExt}>
+                                            {category === 'xy' ? 'PDF, Excel, CSV, TXT, ZIP' : 'PDF, Excel, CSV, ZIP'}
+                                        </span>
                                     </div>
                                 );
                             })}
+
+                            {/* Assembly Drawing Section (Card(s) & Secondary [+ Add Document] Button) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                <input 
+                                    id="file-drawing"
+                                    type="file"
+                                    multiple
+                                    style={{ display: 'none' }}
+                                    accept=".pdf,.xls,.xlsx,.csv,.zip,.txt"
+                                    onChange={(e) => handleFileChange('drawing', null, e.target.files)}
+                                />
+
+                                {uploadedFiles.drawing.length === 0 ? (
+                                    <div 
+                                        className={styles.dropzone}
+                                        onClick={() => document.getElementById('file-drawing')?.click()}
+                                    >
+                                        <UploadCloud className={styles.dropzoneIcon} size={32} />
+                                        <span className={styles.dropzoneText}>Assembly Drawing</span>
+                                        <span className={styles.dropzoneExt}>PDF, Excel, CSV, TXT, ZIP</span>
+                                    </div>
+                                ) : (
+                                    uploadedFiles.drawing.map((file, idx) => (
+                                        <div key={`drawing-${idx}`} className={styles.uploadCard}>
+                                            <div className={styles.uploadCardInfo}>
+                                                <span className={`${styles.fileBadge} ${getBadgeClass(getFileIcon(file))}`}>
+                                                    {getFileIcon(file)}
+                                                </span>
+                                                <span className={styles.fileName} title={file.name}>
+                                                    {file.name}
+                                                </span>
+                                            </div>
+                                            <div className={styles.fileSize}>
+                                                {formatBytes(file.size)}
+                                            </div>
+                                            <div className={styles.uploadCardActions}>
+                                                <button 
+                                                    type="button" 
+                                                    className={`${styles.button} ${styles.btnSecondary} ${styles.cardActionBtn}`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleLocalPreview(file);
+                                                    }}
+                                                >
+                                                    View
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    className={`${styles.button} ${styles.btnSecondary} ${styles.cardActionBtn} ${styles.cardActionBtnRemove}`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRemoveDrawingFile(idx);
+                                                    }}
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+
+                                {uploadedFiles.drawing.length < 3 && (
+                                    <button 
+                                        type="button" 
+                                        className={`${styles.button} ${styles.btnSecondary}`}
+                                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 600, padding: '0.5rem 1rem' }}
+                                        onClick={() => document.getElementById('file-drawing')?.click()}
+                                    >
+                                        + Add Document
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -789,9 +1031,17 @@ const Document: React.FC = () => {
                                                 let latestUser = selectedQmsRecord.created_by || 'System';
                                                 let latestTime = selectedQmsRecord.created_at;
                                                 Object.keys(meta).forEach(k => {
-                                                    if (meta[k]?.uploadedAt && (!latestTime || new Date(meta[k].uploadedAt) > new Date(latestTime))) {
-                                                        latestTime = meta[k].uploadedAt;
-                                                        latestUser = meta[k].uploadedBy;
+                                                    const item = meta[k];
+                                                    if (Array.isArray(item)) {
+                                                        item.forEach(subItem => {
+                                                            if (subItem?.uploadedAt && (!latestTime || new Date(subItem.uploadedAt) > new Date(latestTime))) {
+                                                                latestTime = subItem.uploadedAt;
+                                                                latestUser = subItem.uploadedBy;
+                                                            }
+                                                        });
+                                                    } else if (item?.uploadedAt && (!latestTime || new Date(item.uploadedAt) > new Date(latestTime))) {
+                                                        latestTime = item.uploadedAt;
+                                                        latestUser = item.uploadedBy;
                                                     }
                                                 });
                                                 return latestUser;
@@ -805,8 +1055,15 @@ const Document: React.FC = () => {
                                                 let latestTime = selectedQmsRecord.created_at;
                                                 const meta = selectedQmsRecord.files_metadata || {};
                                                 Object.keys(meta).forEach(k => {
-                                                    if (meta[k]?.uploadedAt && (!latestTime || new Date(meta[k].uploadedAt) > new Date(latestTime))) {
-                                                        latestTime = meta[k].uploadedAt;
+                                                    const item = meta[k];
+                                                    if (Array.isArray(item)) {
+                                                        item.forEach(subItem => {
+                                                            if (subItem?.uploadedAt && (!latestTime || new Date(subItem.uploadedAt) > new Date(latestTime))) {
+                                                                latestTime = subItem.uploadedAt;
+                                                            }
+                                                        });
+                                                    } else if (item?.uploadedAt && (!latestTime || new Date(item.uploadedAt) > new Date(latestTime))) {
+                                                        latestTime = item.uploadedAt;
                                                     }
                                                 });
                                                 return latestTime ? new Date(latestTime).toLocaleString() : '—';
@@ -820,11 +1077,12 @@ const Document: React.FC = () => {
                             <div className={styles.detailsSection} style={{ marginTop: '2rem' }}>
                                 <h4 className={styles.sectionTitle}>Current Files</h4>
                                 <div className={styles.filesList}>
-                                    {['bom', 'pfc', 'xy', 'ecn', 'drawing'].map(key => {
+                                    {/* BOM, PFC, XY, ECN */}
+                                    {['bom', 'pfc', 'xy', 'ecn'].map(key => {
                                         const meta = selectedQmsRecord.files_metadata || {};
                                         const fileMeta = meta[key];
                                         const hasFile = !!fileMeta;
-                                        const fileTypeLabel = key === 'xy' ? 'XY Data' : key === 'drawing' ? 'Drawing' : key.toUpperCase();
+                                        const fileTypeLabel = key === 'xy' ? 'XY Data' : key.toUpperCase();
                                         const isTarget = fileUpdateTarget === key;
                                         const token = localStorage.getItem('auth_token') || '';
 
@@ -888,12 +1146,12 @@ const Document: React.FC = () => {
                                                         <h5>Upload New {fileTypeLabel} Document</h5>
                                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                                                             <div className={styles.inputGroup}>
-                                                                <label className={styles.inputLabel}>Choose File (PDF, Excel, CSV, ZIP | Max 50MB) <span style={{ color: '#ef4444' }}>*</span></label>
+                                                                <label className={styles.inputLabel}>Choose File ({key === 'xy' ? 'PDF, Excel, CSV, TXT, ZIP' : 'PDF, Excel, CSV, ZIP'} | Max 50MB) <span style={{ color: '#ef4444' }}>*</span></label>
                                                                 <input 
                                                                     type="file" 
                                                                     onChange={(e) => setFileUpdateFile(e.target.files?.[0] || null)}
                                                                     required
-                                                                    accept=".pdf,.xls,.xlsx,.csv,.zip"
+                                                                    accept={key === 'xy' ? ".pdf,.xls,.xlsx,.csv,.zip,.txt" : ".pdf,.xls,.xlsx,.csv,.zip"}
                                                                 />
                                                             </div>
                                                             <div className={styles.inputGroup}>
@@ -919,9 +1177,9 @@ const Document: React.FC = () => {
                                                             <button 
                                                                 type="submit" 
                                                                 className={`${styles.button} ${styles.btnPrimary}`}
-                                                                disabled={isFileUpdating || !fileUpdateFile || !fileUpdateRemarks.trim()}
+                                                                disabled={isFileUpdating}
                                                             >
-                                                                {isFileUpdating ? 'Uploading...' : 'Confirm Upload'}
+                                                                {isFileUpdating ? 'Updating...' : 'Submit Update'}
                                                             </button>
                                                         </div>
                                                     </form>
@@ -929,6 +1187,177 @@ const Document: React.FC = () => {
                                             </div>
                                         );
                                     })}
+
+                                    {/* Assembly Drawing File(s) */}
+                                    {(() => {
+                                        const drawingPaths = selectedQmsRecord.assembly_drawing_file_path 
+                                            ? selectedQmsRecord.assembly_drawing_file_path.split(';').filter(Boolean) 
+                                            : [];
+                                        const meta = selectedQmsRecord.files_metadata || {};
+                                        const drawingMetaList = Array.isArray(meta.drawing) ? meta.drawing : (meta.drawing ? [meta.drawing] : []);
+                                        const token = localStorage.getItem('auth_token') || '';
+
+                                        if (drawingPaths.length === 0) {
+                                            const isTarget = fileUpdateTarget === 'drawing';
+                                            return (
+                                                <div key="drawing-empty" className={styles.fileRow}>
+                                                    <div className={styles.fileInfo}>
+                                                        <span className={styles.fileTypeBadge}>Assembly Drawing</span>
+                                                        <span className={styles.noFileUploaded}>No file uploaded</span>
+                                                    </div>
+                                                    <div className={styles.fileActions}>
+                                                        <button 
+                                                            className={`${styles.button} ${styles.btnPrimary} ${styles.btnSmall}`}
+                                                            onClick={() => {
+                                                                setFileUpdateTarget(isTarget ? null : 'drawing');
+                                                                setFileUpdateFile(null);
+                                                                setFileUpdateRemarks('');
+                                                            }}
+                                                        >
+                                                            <UploadCloud size={14} /> Replace File
+                                                        </button>
+                                                    </div>
+
+                                                    {isTarget && (
+                                                        <form onSubmit={handleFileReplacementSubmit} className={styles.inlineReplaceForm}>
+                                                            <h5>Upload New Assembly Drawing Document</h5>
+                                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                                                <div className={styles.inputGroup}>
+                                                                    <label className={styles.inputLabel}>Choose File (PDF, Excel, CSV, TXT, ZIP | Max 50MB) <span style={{ color: '#ef4444' }}>*</span></label>
+                                                                    <input 
+                                                                        type="file" 
+                                                                        onChange={(e) => setFileUpdateFile(e.target.files?.[0] || null)}
+                                                                        required
+                                                                        accept=".pdf,.xls,.xlsx,.csv,.zip,.txt"
+                                                                    />
+                                                                </div>
+                                                                <div className={styles.inputGroup}>
+                                                                    <label className={styles.inputLabel}>Remarks / Reason for Update <span style={{ color: '#ef4444' }}>*</span></label>
+                                                                    <textarea 
+                                                                        rows={2} 
+                                                                        value={fileUpdateRemarks} 
+                                                                        onChange={(e) => setFileUpdateRemarks(e.target.value)}
+                                                                        placeholder="Enter comments for this document update..."
+                                                                        required
+                                                                        className={styles.textarea}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                                                <button 
+                                                                    type="button" 
+                                                                    className={`${styles.button} ${styles.btnSecondary}`}
+                                                                    onClick={() => setFileUpdateTarget(null)}
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                                <button 
+                                                                    type="submit" 
+                                                                    className={`${styles.button} ${styles.btnPrimary}`}
+                                                                    disabled={isFileUpdating}
+                                                                >
+                                                                    {isFileUpdating ? 'Updating...' : 'Submit Update'}
+                                                                </button>
+                                                            </div>
+                                                        </form>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
+
+                                        return drawingPaths.map((pathStr, idx) => {
+                                            const fileKey = idx === 0 ? 'drawing' : `drawing_${idx}`;
+                                            const fileMeta = drawingMetaList[idx] || (idx === 0 ? meta.drawing : null);
+                                            const fileTypeLabel = drawingPaths.length > 1 ? `Assembly Drawing ${idx + 1}` : 'Assembly Drawing';
+                                            const isTarget = fileUpdateTarget === fileKey;
+                                            const originalName = fileMeta?.originalName || pathStr.split('/').pop() || 'Assembly Drawing';
+
+                                            return (
+                                                <div key={`drawing-${idx}`} className={styles.fileRow}>
+                                                    <div className={styles.fileInfo}>
+                                                        <span className={styles.fileTypeBadge}>{fileTypeLabel}</span>
+                                                        <div className={styles.fileNameContainer}>
+                                                            <span className={styles.fileName}>{originalName}</span>
+                                                            <span className={styles.fileMetaText}>
+                                                                Current Revision: Rev {fileMeta?.revision || '1'} | Uploaded by: {fileMeta?.uploadedBy || '—'} on {fileMeta?.uploadedAt ? new Date(fileMeta.uploadedAt).toLocaleString() : '—'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className={styles.fileActions}>
+                                                        <button 
+                                                            className={`${styles.button} ${styles.btnSecondary} ${styles.btnSmall}`} 
+                                                            onClick={() => handleViewFile(selectedQmsRecord.id, fileKey, originalName)}
+                                                        >
+                                                             <Eye size={14} /> View File
+                                                        </button>
+                                                        <a 
+                                                            href={`/api/smt/qms/files/download/${selectedQmsRecord.id}/${fileKey}?token=${encodeURIComponent(token)}`} 
+                                                            className={`${styles.button} ${styles.btnSecondary} ${styles.btnSmall} ${styles.btnLink}`}
+                                                            download
+                                                        >
+                                                            <Download size={14} /> Download
+                                                        </a>
+                                                        <button 
+                                                            className={`${styles.button} ${styles.btnPrimary} ${styles.btnSmall}`}
+                                                            onClick={() => {
+                                                                setFileUpdateTarget(isTarget ? null : fileKey);
+                                                                setFileUpdateFile(null);
+                                                                setFileUpdateRemarks('');
+                                                            }}
+                                                        >
+                                                            <UploadCloud size={14} /> Replace File
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Inline Replace Form */}
+                                                    {isTarget && (
+                                                        <form onSubmit={handleFileReplacementSubmit} className={styles.inlineReplaceForm}>
+                                                            <h5>Upload New {fileTypeLabel} Document</h5>
+                                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                                                <div className={styles.inputGroup}>
+                                                                    <label className={styles.inputLabel}>Choose File (PDF, Excel, CSV, TXT, ZIP | Max 50MB) <span style={{ color: '#ef4444' }}>*</span></label>
+                                                                    <input 
+                                                                        type="file" 
+                                                                        onChange={(e) => setFileUpdateFile(e.target.files?.[0] || null)}
+                                                                        required
+                                                                        accept=".pdf,.xls,.xlsx,.csv,.zip,.txt"
+                                                                    />
+                                                                </div>
+                                                                <div className={styles.inputGroup}>
+                                                                    <label className={styles.inputLabel}>Remarks / Reason for Update <span style={{ color: '#ef4444' }}>*</span></label>
+                                                                    <textarea 
+                                                                        rows={2} 
+                                                                        value={fileUpdateRemarks} 
+                                                                        onChange={(e) => setFileUpdateRemarks(e.target.value)}
+                                                                        placeholder="Enter comments for this document update..."
+                                                                        required
+                                                                        className={styles.textarea}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                                                <button 
+                                                                    type="button" 
+                                                                    className={`${styles.button} ${styles.btnSecondary}`}
+                                                                    onClick={() => setFileUpdateTarget(null)}
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                                <button 
+                                                                    type="submit" 
+                                                                    className={`${styles.button} ${styles.btnPrimary}`}
+                                                                    disabled={isFileUpdating}
+                                                                >
+                                                                    {isFileUpdating ? 'Updating...' : 'Submit Update'}
+                                                                </button>
+                                                            </div>
+                                                        </form>
+                                                    )}
+                                                </div>
+                                            );
+                                        });
+                                    })()}
                                 </div>
                             </div>
 

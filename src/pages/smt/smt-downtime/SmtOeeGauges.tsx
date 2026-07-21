@@ -85,7 +85,7 @@ export const SmtOeeGauges: React.FC<SmtOeeGaugesProps> = ({
                             fontSize="20"
                             fontWeight="800"
                         >
-                            {clampedValue.toFixed(1)}%
+                            {value.toFixed(2)}%
                         </text>
                         <text
                             x="70"

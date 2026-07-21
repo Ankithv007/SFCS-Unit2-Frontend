@@ -10,7 +10,7 @@ export interface DowntimeRecord {
     downtime_description: string;
     action_taken: string;
     responsible_person: string;
-    status: string;
+    status?: string;
     remarks?: string;
     created_by?: string;
     created_by_name?: string;

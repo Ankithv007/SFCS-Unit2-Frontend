@@ -56,12 +56,6 @@ export const SmtDowntimeModal: React.FC<SmtDowntimeModalProps> = ({ record, onCl
                             <strong>Responsible:</strong> {record.responsible_person}
                         </div>
                         <div>
-                            <strong>Status:</strong>{' '}
-                            <span className={`${styles.badge} ${record.status === 'Closed' ? styles.badgeClosed : styles.badgeOpen}`}>
-                                {record.status}
-                            </span>
-                        </div>
-                        <div>
                             <strong>Logged By:</strong> {record.created_by_name || record.created_by || 'System User'}
                         </div>
                     </div>

@@ -171,7 +171,7 @@ export const useSmtDowntime = () => {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!shift || !line || !machineName || !startTime || !endTime || !downtimeCategory || !reasonCode || !downtimeDescription || !actionTaken || !responsiblePerson || !status) {
+        if (!shift || !line || !machineName || !startTime || !endTime || !downtimeCategory || !reasonCode || !downtimeDescription || !actionTaken || !responsiblePerson) {
             showToast('Please fill all mandatory fields.', 'error');
             return;
         }
@@ -195,7 +195,6 @@ export const useSmtDowntime = () => {
                 downtime_description: `[Reason Code: ${reasonCode}] ${downtimeDescription}`,
                 action_taken: actionTaken,
                 responsible_person: responsiblePerson,
-                status,
                 remarks
             };
 
@@ -261,7 +260,7 @@ export const useSmtDowntime = () => {
 
         setActionTaken(record.action_taken);
         setResponsiblePerson(record.responsible_person);
-        setStatus(record.status);
+        setStatus(record.status || 'Open');
         setRemarks(record.remarks || '');
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -318,20 +317,20 @@ export const useSmtDowntime = () => {
 
     const availabilityRateDivisor = plannedProductionTime;
     const availabilityRate = availabilityRateDivisor > 0 
-        ? Math.min(100, Math.max(0, (operatingTime / availabilityRateDivisor) * 100))
+        ? (operatingTime / availabilityRateDivisor) * 100
         : 0;
 
     const actualRunRate = operatingTime > 0 ? (production / operatingTime) : 0;
     const performanceRate = cycleTime > 0 
-        ? Math.min(100, Math.max(0, (actualRunRate / cycleTime) * 100))
+        ? (actualRunRate / cycleTime) * 100
         : 0;
 
     const goodProduction = Math.max(0, production - scrap);
     const qualityRate = production > 0 
-        ? Math.min(100, Math.max(0, (goodProduction / production) * 100))
+        ? (goodProduction / production) * 100
         : 0;
 
-    const oee = Math.min(100, Math.max(0, (availabilityRate * performanceRate * qualityRate) / 10000));
+    const oee = (availabilityRate * performanceRate * qualityRate) / 10000;
 
     // MTTR & MTBF (Mean Time To Repair & Mean Time Between Failures)
     const unplannedCount = filteredForOee.filter(r => r.downtime_category === 'Unplanned').length;

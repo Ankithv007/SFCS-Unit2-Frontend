@@ -49,7 +49,6 @@ export const SmtDowntimeForm: React.FC<SmtDowntimeFormProps> = ({ formState, onS
         downtimeDescription, setDowntimeDescription,
         actionTaken, setActionTaken,
         responsiblePerson, setResponsiblePerson,
-        status, setStatus,
         remarks, setRemarks,
         editingId, saving
     } = formState;
@@ -164,14 +163,6 @@ export const SmtDowntimeForm: React.FC<SmtDowntimeFormProps> = ({ formState, onS
                 <div className={styles.formSectionGroup}>
                     <h4 className={styles.formGroupHeading}>3. Details & Resolution</h4>
                     <div className={styles.formGrid}>
-                        <div className={styles.inputGroup}>
-                            <label className={styles.inputLabel}>Status <span className={styles.requiredStar}>*</span></label>
-                            <select value={status} onChange={(e) => setStatus(e.target.value)} className={styles.input} required>
-                                <option value="Open">Open</option>
-                                <option value="Closed">Closed</option>
-                            </select>
-                        </div>
-
                         <div className={`${styles.inputGroup} ${styles.formGridFull}`}>
                             <label className={styles.inputLabel}>Downtime Description <span className={styles.requiredStar}>*</span></label>
                             <textarea

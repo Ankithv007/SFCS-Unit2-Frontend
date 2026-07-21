@@ -104,16 +104,13 @@ export const SmtDowntimeTable: React.FC<SmtDowntimeTableProps> = ({
                                 <th onClick={() => onSort('responsible_person')} className={styles.sortableHeader}>
                                     Responsible {sortBy === 'responsible_person' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
-                                <th onClick={() => onSort('status')} className={styles.sortableHeader}>
-                                    Status {sortBy === 'status' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
-                                </th>
                                 <th style={{ textAlign: 'center' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {records.length === 0 ? (
                                 <tr>
-                                    <td colSpan={11} className={styles.tableEmptyRow}>
+                                    <td colSpan={10} className={styles.tableEmptyRow}>
                                         No downtime logs found matching current search criteria.
                                     </td>
                                 </tr>
@@ -139,12 +136,6 @@ export const SmtDowntimeTable: React.FC<SmtDowntimeTableProps> = ({
                                                 </span>
                                             </td>
                                             <td className={styles.fontMedium}>{record.responsible_person}</td>
-                                            <td>
-                                                <span className={`${styles.statusBadge} ${record.status === 'Closed' ? styles.statusClosed : styles.statusOpen}`}>
-                                                    <span className={styles.statusDot} />
-                                                    {record.status}
-                                                </span>
-                                            </td>
                                             <td className={styles.actionCell}>
                                                 <button onClick={() => onView(record)} className={styles.actionBtnView} title="View Details">
                                                     👁 View

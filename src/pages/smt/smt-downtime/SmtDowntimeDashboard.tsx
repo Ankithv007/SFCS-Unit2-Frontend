@@ -41,32 +41,6 @@ export const SmtDowntimeDashboard: React.FC<SmtDowntimeDashboardProps> = ({ metr
                     </div>
                 </div>
 
-                <div className={`${styles.kpiCard} ${styles.borderAmber}`}>
-                    <div className={styles.kpiHeader}>
-                        <span className={styles.kpiIcon}>⚡</span>
-                        <span className={styles.kpiTitle}>MTTR (Mean Time to Repair)</span>
-                    </div>
-                    <div className={styles.kpiBody}>
-                        <span className={styles.kpiValue} style={{ color: '#d97706' }}>
-                            {summary.mttr !== undefined ? summary.mttr.toFixed(1) : Number(summary.avg_duration).toFixed(1)} <span className={styles.kpiUnit}>mins</span>
-                        </span>
-                        <span className={styles.kpiSubtext}>Average duration per event</span>
-                    </div>
-                </div>
-
-                <div className={`${styles.kpiCard} ${styles.borderGreen}`}>
-                    <div className={styles.kpiHeader}>
-                        <span className={styles.kpiIcon}>🔄</span>
-                        <span className={styles.kpiTitle}>MTBF (Mean Time Between Failures)</span>
-                    </div>
-                    <div className={styles.kpiBody}>
-                        <span className={styles.kpiValue} style={{ color: '#059669' }}>
-                            {summary.mtbf !== undefined ? summary.mtbf.toFixed(1) : '0.0'} <span className={styles.kpiUnit}>mins</span>
-                        </span>
-                        <span className={styles.kpiSubtext}>Operating time between events</span>
-                    </div>
-                </div>
-
                 <div className={`${styles.kpiCard} ${styles.borderRed}`}>
                     <div className={styles.kpiHeader}>
                         <span className={styles.kpiIcon}>🚨</span>

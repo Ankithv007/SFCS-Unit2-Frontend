@@ -333,11 +333,21 @@ export const useSmtDowntime = () => {
 
     const oee = Math.min(100, Math.max(0, (availabilityRate * performanceRate * qualityRate) / 10000));
 
-    // MTTR & MTBF
+    // MTTR & MTBF (Mean Time To Repair & Mean Time Between Failures)
     const unplannedCount = filteredForOee.filter(r => r.downtime_category === 'Unplanned').length;
-    const totalIncidentsCount = filteredForOee.length;
-    const mttr = totalIncidentsCount > 0 ? (plannedDowntime + unplannedDowntime) / totalIncidentsCount : 0;
-    const mtbf = unplannedCount > 0 ? operatingTime / unplannedCount : (operatingTime > 0 ? operatingTime : 0);
+    const totalFilteredCount = filteredForOee.length;
+    const totalFilteredDowntime = plannedDowntime + unplannedDowntime;
+
+    // MTTR = Average Duration per breakdown incident (Unplanned duration / Unplanned count, or Total Duration / Total Incidents)
+    const mttr = unplannedCount > 0 
+        ? unplannedDowntime / unplannedCount 
+        : (totalFilteredCount > 0 ? totalFilteredDowntime / totalFilteredCount : 0);
+
+    // MTBF = Operating Time / Unplanned Failures (or total operating time if no failures occurred)
+    const mtbf = unplannedCount > 0 
+        ? operatingTime / unplannedCount 
+        : (operatingTime > 0 ? operatingTime : 0);
+
 
     // Dynamic Reason Code Breakdown & Daily Trend Aggregation
     const reasonMap: { [key: string]: number } = {};

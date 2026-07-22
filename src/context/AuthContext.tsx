@@ -110,12 +110,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 body: JSON.stringify({ email, password })
             });
 
-            if (data.success) {
+            if (data && data.token) {
                 localStorage.setItem('auth_token', data.token);
                 // Profile & permissions will be fetched next
                 await refreshUser();
             } else {
-                throw new Error(data.message || 'Login failed');
+                throw new Error(data?.message || 'Login failed');
             }
         } catch (err: any) {
             setError(err.message || 'Login failed');

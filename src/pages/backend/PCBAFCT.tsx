@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import { formatScanError } from '../../utils/errorFormatter';
+import { checkDeletePermission } from '../../utils/security';
 import styles from './PCBAFCT.module.css';
 import sharedStyles from '../smt/work-order/WorkOrder.module.css';
 
@@ -514,8 +515,7 @@ const PCBAFCT: React.FC = () => {
     };
 
     const handleDeleteBatch = async (batchId: number) => {
-        if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
-            showToast('You do not have permission to delete this record.', 'error');
+        if (!checkDeletePermission(user?.role, showToast)) {
             return;
         }
         if (!window.confirm('Are you sure you want to delete this batch? This action cannot be undone.')) return;
@@ -908,8 +908,7 @@ const PCBAFCT: React.FC = () => {
                                                             <button
                                                                 className={sharedStyles.deleteBtn}
                                                                 onClick={async () => {
-                                                                    if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
-                                                                        showToast('You do not have permission to delete this record.', 'error');
+                                                                    if (!checkDeletePermission(user?.role, showToast)) {
                                                                         return;
                                                                     }
                                                                     if (!window.confirm('Are you sure you want to delete this record?')) return;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
+import { checkDeletePermission } from '../../utils/security';
 import styles from './WorkOrder.module.css';
 import sharedStyles from '../smt/work-order/WorkOrder.module.css';
 import { useToast } from '../../components/Toast';
@@ -125,8 +126,7 @@ const WorkOrder: React.FC = () => {
     };
 
     const handleDeleteClick = (wo: WorkOrderRecord) => {
-        if (!(user?.role === 'Super Admin' || user?.role === 'Admin')) {
-            showToast('You do not have permission to delete this record.', 'error');
+        if (!checkDeletePermission(user?.role, showToast)) {
             return;
         }
         console.log("DELETE CLICKED", wo);

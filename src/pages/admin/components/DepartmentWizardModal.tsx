@@ -6,41 +6,17 @@ interface DepartmentWizardModalProps {
     isOpen: boolean;
     department: AdminDepartment | null;
     allUsers: AdminUser[];
+    systemPages: any[];
     onSave: (payload: any) => Promise<void>;
     onClose: () => void;
     initialStep?: 1 | 2 | 3;
 }
 
-const DEFAULT_SYSTEM_PAGES = [
-    { module: 'Core', page: '/dashboard' },
-    { module: 'Core', page: '/admin-panel' },
-    { module: 'SMT Production', page: '/smt/work-order' },
-    { module: 'SMT Production', page: '/smt/serial-number' },
-    { module: 'SMT Production', page: '/smt/printing' },
-    { module: 'SMT Production', page: '/smt/solder-paste' },
-    { module: 'SMT Production', page: '/smt/pre-aoi' },
-    { module: 'SMT Production', page: '/smt/post-aoi' },
-    { module: 'SMT Production', page: '/smt/rework' },
-    { module: 'SMT Production', page: '/smt/smt-fg' },
-    { module: 'SMT Production', page: '/smt/track-items' },
-    { module: 'SMT Production', page: '/smt/material-management' },
-    { module: 'Backend Assembly', page: '/backend/work-order' },
-    { module: 'Backend Assembly', page: '/backend/pth' },
-    { module: 'Backend Assembly', page: '/backend/vi' },
-    { module: 'Backend Assembly', page: '/backend/flashing' },
-    { module: 'Backend Assembly', page: '/backend/pcba-fct' },
-    { module: 'Backend Assembly', page: '/backend/assembly' },
-    { module: 'Backend Assembly', page: '/backend/unit-testing' },
-    { module: 'Backend Assembly', page: '/backend/packing' },
-    { module: 'Quality & Inventory', page: '/qc-inspection' },
-    { module: 'Quality & Inventory', page: '/purchase-order' },
-    { module: 'Quality & Inventory', page: '/pre-testing/iqc' }
-];
-
 export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
     isOpen,
     department,
     allUsers,
+    systemPages,
     onSave,
     onClose,
     initialStep
@@ -49,7 +25,7 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
-    const [permissions, setPermissions] = useState<Record<string, PermissionItem>>({});
+    const [permissions, setPermissions] = useState<Record<number, PermissionItem>>({});
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     const [userSearch, setUserSearch] = useState('');
@@ -61,18 +37,23 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
             setDescription(department.description || '');
             setSelectedUserIds(department.users ? department.users.map(u => u.user_id) : []);
 
-            // Map existing permissions or defaults
-            const pMap: Record<string, PermissionItem> = {};
-            DEFAULT_SYSTEM_PAGES.forEach(({ module, page }) => {
-                const existing = department.permissions?.find(p => p.page === page);
-                pMap[page] = existing || {
-                    module,
-                    page,
-                    can_view: true,
-                    can_create: false,
-                    can_edit: false,
-                    can_delete: false,
-                    can_export: false
+            // Map existing permissions or defaults dynamically
+            const pMap: Record<number, PermissionItem> = {};
+            systemPages.forEach((sp) => {
+                const existing = department.permissions?.find(
+                    p => p.system_page_id === sp.id || p.permission_key === sp.permission_key
+                );
+                pMap[sp.id] = {
+                    id: existing?.id,
+                    system_page_id: sp.id,
+                    module: sp.module_name,
+                    page: sp.route_path,
+                    permission_key: sp.permission_key,
+                    can_view: existing ? existing.can_view : false,
+                    can_create: existing ? existing.can_create : false,
+                    can_edit: existing ? existing.can_edit : false,
+                    can_delete: existing ? existing.can_delete : false,
+                    can_export: existing ? existing.can_export : false
                 };
             });
             setPermissions(pMap);
@@ -80,11 +61,13 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
             setName('');
             setDescription('');
             setSelectedUserIds([]);
-            const pMap: Record<string, PermissionItem> = {};
-            DEFAULT_SYSTEM_PAGES.forEach(({ module, page }) => {
-                pMap[page] = {
-                    module,
-                    page,
+            const pMap: Record<number, PermissionItem> = {};
+            systemPages.forEach((sp) => {
+                pMap[sp.id] = {
+                    system_page_id: sp.id,
+                    module: sp.module_name,
+                    page: sp.route_path,
+                    permission_key: sp.permission_key,
                     can_view: false,
                     can_create: false,
                     can_edit: false,
@@ -97,16 +80,16 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
         setStep(initialStep || 1);
         setErrorMsg('');
         setPageSearch('');
-    }, [department, isOpen, initialStep]);
+    }, [department, isOpen, initialStep, systemPages]);
 
     if (!isOpen) return null;
 
-    const togglePermission = (page: string, field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete' | 'can_export') => {
+    const togglePermission = (systemPageId: number, field: 'can_view' | 'can_create' | 'can_edit' | 'can_delete' | 'can_export') => {
         setPermissions(prev => ({
             ...prev,
-            [page]: {
-                ...prev[page],
-                [field]: !prev[page]?.[field]
+            [systemPageId]: {
+                ...prev[systemPageId],
+                [field]: !prev[systemPageId]?.[field]
             }
         }));
     };
@@ -137,7 +120,9 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
         setErrorMsg('');
         try {
             setSubmitting(true);
-            const permArray = Object.values(permissions).filter(p => p.can_view || p.can_create || p.can_edit || p.can_delete || p.can_export);
+            const permArray = Object.values(permissions).filter(
+                p => p.can_view || p.can_create || p.can_edit || p.can_delete || p.can_export
+            );
             await onSave({
                 name: name.trim(),
                 description: description.trim(),
@@ -239,31 +224,45 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {DEFAULT_SYSTEM_PAGES.filter(({ module, page }) => 
-                                            page.toLowerCase().includes(pageSearch.toLowerCase()) ||
-                                            module.toLowerCase().includes(pageSearch.toLowerCase())
-                                        ).map(({ module, page }) => {
-                                            const perm = permissions[page] || { can_view: false, can_create: false, can_edit: false, can_delete: false, can_export: false };
+                                        {systemPages.filter((sp) => 
+                                            sp.route_path.toLowerCase().includes(pageSearch.toLowerCase()) ||
+                                            sp.module_name.toLowerCase().includes(pageSearch.toLowerCase()) ||
+                                            sp.page_name.toLowerCase().includes(pageSearch.toLowerCase())
+                                        ).map((sp) => {
+                                            const perm = permissions[sp.id] || {
+                                                system_page_id: sp.id,
+                                                module: sp.module_name,
+                                                page: sp.route_path,
+                                                permission_key: sp.permission_key,
+                                                can_view: false,
+                                                can_create: false,
+                                                can_edit: false,
+                                                can_delete: false,
+                                                can_export: false
+                                            };
                                             return (
-                                                <tr key={page}>
+                                                <tr key={sp.id}>
                                                     <td>
-                                                        <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{page}</div>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{module}</div>
+                                                        <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{sp.page_name}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                            {sp.module_name} &bull; <code style={{ fontSize: '0.7rem', color: 'var(--accent)' }}>{sp.permission_key}</code>
+                                                        </div>
+                                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{sp.route_path}</div>
                                                     </td>
                                                     <td style={{ textAlign: 'center' }}>
-                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_view} onChange={() => togglePermission(page, 'can_view')} />
+                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_view} onChange={() => togglePermission(sp.id, 'can_view')} />
                                                     </td>
                                                     <td style={{ textAlign: 'center' }}>
-                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_create} onChange={() => togglePermission(page, 'can_create')} />
+                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_create} onChange={() => togglePermission(sp.id, 'can_create')} />
                                                     </td>
                                                     <td style={{ textAlign: 'center' }}>
-                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_edit} onChange={() => togglePermission(page, 'can_edit')} />
+                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_edit} onChange={() => togglePermission(sp.id, 'can_edit')} />
                                                     </td>
                                                     <td style={{ textAlign: 'center' }}>
-                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_delete} onChange={() => togglePermission(page, 'can_delete')} />
+                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_delete} onChange={() => togglePermission(sp.id, 'can_delete')} />
                                                     </td>
                                                     <td style={{ textAlign: 'center' }}>
-                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_export} onChange={() => togglePermission(page, 'can_export')} />
+                                                        <input type="checkbox" className={styles.checkbox} checked={perm.can_export} onChange={() => togglePermission(sp.id, 'can_export')} />
                                                     </td>
                                                 </tr>
                                             );

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminService, type AdminUser, type AdminDepartment, type AuditLogItem } from '../services/adminService';
 import { useToast } from '../../../components/Toast';
 import { sessionPasswords } from '../components/UserModal';
+import { systemPagesConfig } from '../../../routes';
 
 export function useAdminPanel() {
     const { showToast } = useToast();
@@ -36,6 +37,10 @@ export function useAdminPanel() {
     const [auditStartDate, setAuditStartDate] = useState('');
     const [auditEndDate, setAuditEndDate] = useState('');
     const [loadingAudit, setLoadingAudit] = useState(false);
+
+    // System Pages state
+    const [systemPages, setSystemPages] = useState<any[]>([]);
+    const [loadingSystemPages, setLoadingSystemPages] = useState(false);
 
     // Modals state
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -119,6 +124,34 @@ export function useAdminPanel() {
         }
     }, [auditPage, auditLimit, auditSearch, auditActionFilter, auditStartDate, auditEndDate, showToast]);
 
+    // Fetch System Pages
+    const fetchSystemPages = useCallback(async () => {
+        setLoadingSystemPages(true);
+        try {
+            const res = await adminService.getSystemPages();
+            setSystemPages(res.data);
+        } catch (err: any) {
+            showToast(err.message || 'Failed to fetch system pages', 'error');
+        } finally {
+            setLoadingSystemPages(false);
+        }
+    }, [showToast]);
+
+    // Sync System Pages
+    const handleSyncSystemPages = async () => {
+        try {
+            const res = await adminService.syncSystemPages(systemPagesConfig);
+            if (res.success) {
+                showToast(res.message || 'System pages synchronized successfully', 'success');
+                fetchSystemPages();
+            } else {
+                showToast(res.message || 'Sync completed with warnings', 'info');
+            }
+        } catch (err: any) {
+            showToast(err.message || 'Failed to synchronize system pages', 'error');
+        }
+    };
+
     // Triggers based on tab
     useEffect(() => {
         if (activeTab === 'users') {
@@ -127,16 +160,18 @@ export function useAdminPanel() {
         } else if (activeTab === 'departments' || activeTab === 'permissions') {
             fetchDepartments();
             fetchUsers(); // needed for department member user checkboxes
+            fetchSystemPages(); // needed for permissions step
         } else if (activeTab === 'audit') {
             fetchAuditLogs();
         }
-    }, [activeTab, fetchUsers, fetchDepartments, fetchAuditLogs]);
+    }, [activeTab, fetchUsers, fetchDepartments, fetchAuditLogs, fetchSystemPages]);
 
     // Refresh active data
     const refreshAll = () => {
         fetchUsers();
         fetchDepartments();
         fetchAuditLogs();
+        fetchSystemPages();
         showToast('Admin data refreshed', 'info');
     };
 
@@ -323,6 +358,11 @@ export function useAdminPanel() {
         setSelectedAuditLog,
 
         confirmModal,
-        setConfirmModal
+        setConfirmModal,
+
+        // System Pages
+        systemPages,
+        loadingSystemPages,
+        handleSyncSystemPages
     };
 }

@@ -89,7 +89,11 @@ export const AdminPanel: React.FC = () => {
         setSelectedAuditLog,
 
         confirmModal,
-        setConfirmModal
+        setConfirmModal,
+
+        // System Pages
+        systemPages,
+        handleSyncSystemPages
     } = useAdminPanel();
 
     const [initialDeptStep, setInitialDeptStep] = React.useState<1 | 2 | 3>(1);
@@ -114,6 +118,11 @@ export const AdminPanel: React.FC = () => {
                 </div>
 
                 <div className={styles.topActions}>
+                    {currentUser?.role === 'Super Admin' && (
+                        <button className={styles.refreshBtn} style={{ backgroundColor: 'var(--accent, #6366f1)', color: 'white' }} onClick={handleSyncSystemPages} title="Sync System Pages">
+                            ⚙️ Sync System Pages
+                        </button>
+                    )}
                     <button className={styles.refreshBtn} onClick={refreshAll} title="Refresh All Data">
                         🔄 Refresh Data
                     </button>
@@ -318,6 +327,7 @@ export const AdminPanel: React.FC = () => {
                 isOpen={isDeptModalOpen}
                 department={selectedDeptForEdit}
                 allUsers={users}
+                systemPages={systemPages}
                 onSave={handleSaveDepartment}
                 onClose={() => setIsDeptModalOpen(false)}
                 initialStep={initialDeptStep}

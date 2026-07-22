@@ -20,6 +20,8 @@ export interface AdminUser {
 
 export interface PermissionItem {
     id?: number;
+    system_page_id?: number;
+    permission_key?: string;
     module: string;
     page: string;
     can_view: boolean;
@@ -219,5 +221,17 @@ export const adminService = {
         if (params.endDate) query.append('endDate', params.endDate);
 
         return apiFetch(`/api/auth/admin/audit-logs?${query.toString()}`);
+    },
+
+    // System Pages APIs
+    getSystemPages: async (): Promise<{ success: boolean; data: any[] }> => {
+        return apiFetch('/api/auth/admin/system-pages');
+    },
+
+    syncSystemPages: async (routes: any[]): Promise<{ success: boolean; data: any; message?: string }> => {
+        return apiFetch('/api/auth/admin/system-pages/sync', {
+            method: 'POST',
+            body: JSON.stringify({ routes })
+        });
     }
 };

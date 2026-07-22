@@ -921,14 +921,26 @@ export const Printing: React.FC = () => {
 
             // ── SECTION 4: Production Summary ─────────────────────────────────
             sectionHeader('  4.  PRODUCTION SUMMARY', 124, 58, 237); // plum
-            const prod = data.production;
+            const prod = data.production || data.stats || {};
+            const q = prod.quantity ?? prod.workOrderQuantity ?? 0;
+            const p = prod.passed ?? 0;
+            const f = prod.failed ?? 0;
+            const pend = prod.pending ?? 0;
+            const inv = prod.invalid ?? 0;
+            const dup = prod.duplicate ?? prod.duplicate_scan_count ?? 0;
+
+            const yieldVal = (q && q > 0)
+                ? (((p || 0) / q) * 100).toFixed(2) + '%'
+                : '0.00%';
+
             [
-                ['Work Order Quantity', val(prod.quantity)],
-                ['Passed Quantity', val(prod.passed)],
-                ['Failed Quantity', val(prod.failed)],
-                ['Pending Quantity', val(prod.pending)],
-                ['Invalid Scan Quantity', val(prod.invalid)],
-                ['Duplicate Scan Quantity', val(prod.duplicate)]
+                ['Work Order Quantity', val(q)],
+                ['Passed Quantity', val(p)],
+                ['Yield (%)', yieldVal],
+                ['Failed Quantity', val(f)],
+                ['Pending Quantity', val(pend)],
+                ['Invalid Scan Quantity', val(inv)],
+                ['Duplicate Scan Quantity', val(dup)]
             ].forEach(([l, v], i) => kvRow(l, v, i % 2 === 0));
 
             y += 5;

@@ -875,14 +875,26 @@ const Rework: React.FC = () => {
 
             // ── SECTION 4: Production Summary ─────────────────────────────────
             sectionHeader('  4.  PRODUCTION SUMMARY', 124, 58, 237);
-            const prod = data.production;
+            const prod = data.production || data.stats || {};
+            const q = prod.quantity ?? prod.reworkTargetQty ?? prod.workOrderQuantity ?? 0;
+            const p = prod.passed ?? 0;
+            const f = prod.failed ?? 0;
+            const pend = prod.pending ?? 0;
+            const inv = prod.invalid ?? 0;
+            const dup = prod.duplicate ?? prod.duplicate_scan_count ?? 0;
+
+            const yieldVal = (q && q > 0)
+                ? (((p || 0) / q) * 100).toFixed(2) + '%'
+                : '0.00%';
+
             [
-                ['Rework Target (Failed) Qty', val(prod.quantity)],
-                ['Repaired (Passed) Qty', val(prod.passed)],
-                ['Failed Qty', val(prod.failed)],
-                ['Pending Qty', val(prod.pending)],
-                ['Invalid Scan Qty', val(prod.invalid)],
-                ['Duplicate Scan Qty', val(prod.duplicate)]
+                ['Rework Target (Failed) Qty', val(q)],
+                ['Repaired (Passed) Qty', val(p)],
+                ['Yield (%)', yieldVal],
+                ['Failed Qty', val(f)],
+                ['Pending Qty', val(pend)],
+                ['Invalid Scan Qty', val(inv)],
+                ['Duplicate Scan Qty', val(dup)]
             ].forEach(([l, v], i) => kvRow(l, v, i % 2 === 0));
 
             y += 5;
@@ -1680,6 +1692,12 @@ const Rework: React.FC = () => {
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #16a34a', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Repaired (Passed)</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#15803d' }}>{stats.passed}</h2>
+                        </div>
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #0d9488', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Yield (%)</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0f766e' }}>
+                                {stats.workOrderQuantity > 0 ? ((stats.passed / stats.workOrderQuantity) * 100).toFixed(2) : '0.00'}%
+                            </h2>
                         </div>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #dc2626', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Failed</p>

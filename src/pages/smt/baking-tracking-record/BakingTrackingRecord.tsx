@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styles from './BakingTrackingRecord.module.css';
 import { useSmtAuth } from '../../../context/SmtAuthContext';
+import { useAuth } from '../../../hooks/useAuth';
 import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
 
@@ -38,6 +39,7 @@ interface BakingRecord {
 
 const BakingTrackingRecord: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
+    const { user } = useAuth();
     const { showToast } = useToast();
 
     // 1. Create Form State
@@ -95,7 +97,7 @@ const BakingTrackingRecord: React.FC = () => {
     const [stopRemarks, setStopRemarks] = useState('');
     const [stopping, setStopping] = useState(false);
 
-    const isSuperAdmin = smtUser?.role === 'Super Admin';
+    const isSuperAdmin = smtUser?.role === 'Super Admin' || user?.role === 'Super Admin';
 
     // Format timestamps with second precision in IST 12-hour format
     const formatTimestamp = (dateStr: string | null) => {
@@ -745,12 +747,14 @@ const BakingTrackingRecord: React.FC = () => {
                                                 >
                                                     View
                                                 </button>
-                                                <button
-                                                    onClick={() => handleDelete(rec.id)}
-                                                    className={styles.deleteButton}
-                                                >
-                                                    Delete
-                                                </button>
+                                                {isSuperAdmin && (
+                                                    <button
+                                                        onClick={() => handleDelete(rec.id)}
+                                                        className={styles.deleteButton}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

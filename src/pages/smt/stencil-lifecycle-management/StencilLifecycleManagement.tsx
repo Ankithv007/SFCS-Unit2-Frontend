@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import styles from './StencilLifecycleManagement.module.css';
 import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
 import { useSmtAuth } from '../../../context/SmtAuthContext';
+import { useAuth } from '../../../hooks/useAuth';
 import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
 
@@ -67,6 +68,7 @@ interface DetailModalData {
 
 const StencilLifecycleManagement: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
+    const { user } = useAuth();
     const { showToast } = useToast();
 
     // Data lists from backend
@@ -99,7 +101,7 @@ const StencilLifecycleManagement: React.FC = () => {
     const [viewDetailData, setViewDetailData] = useState<DetailModalData | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
-    const isSuperAdmin = smtUser?.role === 'Super Admin';
+    const isSuperAdmin = smtUser?.role === 'Super Admin' || user?.role === 'Super Admin';
 
     const lastWarnedRef = useRef<{ stencilId: string; level: number } | null>(null);
 
@@ -711,18 +713,16 @@ const StencilLifecycleManagement: React.FC = () => {
                                                 >
                                                     View
                                                 </button>
-                                                <button
-                                                    onClick={() => {
-                                                        if (!isSuperAdmin) {
-                                                            showToast("Only Super Admin is authorized to delete records.\nPlease contact your Super Admin if this record needs to be deleted.", "error");
-                                                        } else {
+                                                {isSuperAdmin && (
+                                                    <button
+                                                        onClick={() => {
                                                             setConfirmDeleteId(rec.id);
-                                                        }
-                                                    }}
-                                                    className={styles.deleteButton}
-                                                >
-                                                    Delete
-                                                </button>
+                                                        }}
+                                                        className={styles.deleteButton}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

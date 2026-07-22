@@ -597,7 +597,7 @@ const QA: React.FC = () => {
                                             <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
                                                 {batch.status === 'completed' ? <><Eye size={14} /> View</> : <><Search size={14} /> Start Scanning</>}
                                             </button>
-                                            {showDelete && (
+                                            {showDelete && user?.role === 'Super Admin' && (
                                                 <button className={sharedStyles.deleteButton} onClick={() => handleDeleteBatch(batch.id)}>
                                                     <Trash2 size={14} />
                                                 </button>
@@ -808,7 +808,8 @@ const QA: React.FC = () => {
                                                                     <Pencil size={14} />
                                                                 </button>
                                                             )}
-                                                            <button
+                                                            {user?.role === 'Super Admin' && (
+<button
                                                                 className={sharedStyles.deleteBtn}
                                                                 onClick={async () => {
                                                                     if (!checkDeletePermission(user?.role, showToast)) {
@@ -826,6 +827,7 @@ const QA: React.FC = () => {
                                                             >
                                                                 <Trash2 size={14} />
                                                             </button>
+)}
                                                         </div>
                                                     </td>
                                                 </tr>

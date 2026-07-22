@@ -1006,6 +1006,7 @@ export const WorkOrder: React.FC = () => {
                                                             ✏️ Edit
                                                         </button>
 
+                                                        {isSuperAdmin && (
                                                             <button
                                                                 onClick={() => handleDeleteWorkOrder(wo.work_order_id)}
                                                                 className={styles.deleteButton}
@@ -1014,6 +1015,7 @@ export const WorkOrder: React.FC = () => {
                                                             >
                                                                 {deletingId === wo.work_order_id ? '...' : '🗑️'}
                                                             </button>
+                                                        )}
 
                                                     </div>
                                                 </td>

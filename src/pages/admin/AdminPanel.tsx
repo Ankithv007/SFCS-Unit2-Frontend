@@ -26,6 +26,7 @@ export const AdminPanel: React.FC = () => {
 
         // Users
         users,
+        allUsersList,
         totalUsers,
         userPage,
         userLimit,
@@ -326,7 +327,7 @@ export const AdminPanel: React.FC = () => {
             <DepartmentWizardModal
                 isOpen={isDeptModalOpen}
                 department={selectedDeptForEdit}
-                allUsers={users}
+                allUsers={allUsersList}
                 systemPages={systemPages}
                 onSave={handleSaveDepartment}
                 onClose={() => setIsDeptModalOpen(false)}

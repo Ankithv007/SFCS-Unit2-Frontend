@@ -1,6 +1,8 @@
 import React from 'react';
 import type { DowntimeRecord } from './smtDowntime.types';
 import styles from './SmtDowntimeTracker.module.css';
+import { useSmtAuth } from '../../../context/SmtAuthContext';
+import { useAuth } from '../../../hooks/useAuth';
 
 interface SmtDowntimeTableProps {
     records: DowntimeRecord[];
@@ -35,6 +37,10 @@ export const SmtDowntimeTable: React.FC<SmtDowntimeTableProps> = ({
     onEdit,
     onDelete
 }) => {
+    const { smtUser } = useSmtAuth();
+    const { user } = useAuth();
+    const isSuperAdmin = smtUser?.role === 'Super Admin' || user?.role === 'Super Admin';
+
     const formatDateTime = (isoString?: string) => {
         if (!isoString) return '—';
         const d = new Date(isoString);
@@ -143,9 +149,11 @@ export const SmtDowntimeTable: React.FC<SmtDowntimeTableProps> = ({
                                                 <button onClick={() => onEdit(record)} className={styles.actionBtnEdit} title="Edit Incident">
                                                     ✏ Edit
                                                 </button>
-                                                <button onClick={() => onDelete(record.id)} className={styles.actionBtnDelete} title="Delete Record">
-                                                    🗑 Delete
-                                                </button>
+                                                {isSuperAdmin && (
+                                                    <button onClick={() => onDelete(record.id)} className={styles.actionBtnDelete} title="Delete Record">
+                                                        🗑 Delete
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     );

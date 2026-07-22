@@ -493,7 +493,8 @@ const Debug: React.FC = () => {
                                                                 <Pencil size={14} />
                                                             </button>
                                                         )}
-                                                        <button
+                                                        {user?.role === 'Super Admin' && (
+<button
                                                             className={sharedStyles.deleteBtn}
                                                             onClick={async () => {
                                                                 if (!checkDeletePermission(user?.role, showToast)) {
@@ -511,6 +512,7 @@ const Debug: React.FC = () => {
                                                         >
                                                             <Trash2 size={14} />
                                                         </button>
+)}
                                                     </div>
                                                 </td>
                                             </tr>

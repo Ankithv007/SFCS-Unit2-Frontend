@@ -273,13 +273,15 @@ const WorkOrder: React.FC = () => {
                                                     <Eye size={14} /> View
                                                 </button>
 
-                                                <button
+                                                {user?.role === 'Super Admin' && (
+<button
                                                     type="button"
                                                     className={styles.deleteBtn}
                                                     onClick={() => handleDeleteClick(wo)}
                                                 >
                                                     <Trash2 size={14} /> Delete
                                                 </button>
+)}
 
                                             </div>
                                         </td>

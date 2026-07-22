@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styles from '../AdminPanel.module.css';
 import type { AdminDepartment } from '../services/adminService';
 import { TableSkeleton } from './TableSkeleton';
+import { useAuth } from '../../../hooks/useAuth';
 
 interface DepartmentManagementTabProps {
     departments: AdminDepartment[];
@@ -22,6 +23,8 @@ export const DepartmentManagementTab: React.FC<DepartmentManagementTabProps> = (
     onAddUsers,
     onAddPages
 }) => {
+    const { user } = useAuth();
+    const isSuperAdmin = user?.role === 'Super Admin';
     const [searchQuery, setSearchQuery] = useState('');
 
     const filteredDepts = departments.filter(d => 
@@ -129,13 +132,15 @@ export const DepartmentManagementTab: React.FC<DepartmentManagementTabProps> = (
                                             >
                                                 🔐 Add Pages
                                             </button>
-                                            <button
-                                                className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                                                onClick={() => onDeleteDepartment(dept)}
-                                                title="Delete Department"
-                                            >
-                                                🗑️ Delete
-                                            </button>
+                                            {isSuperAdmin && (
+                                                <button
+                                                    className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                                                    onClick={() => onDeleteDepartment(dept)}
+                                                    title="Delete Department"
+                                                >
+                                                    🗑️ Delete
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>

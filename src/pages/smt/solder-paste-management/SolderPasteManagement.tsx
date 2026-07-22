@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../utils/api';
 import styles from './SolderPasteManagement.module.css';
+import { useAuth } from '../../../hooks/useAuth';
 import { FlaskConical, List, X, Plus, Edit2, Trash2, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock, Timer, Zap, ChevronRight, ChevronDown } from 'lucide-react';
 
 interface Can { 
@@ -340,6 +341,8 @@ const OperationView: React.FC<{ onMasterList: () => void }> = ({ onMasterList })
 
 // ─── Master List View ─────────────────────────────────────────────────────────
 const MasterListView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'Super Admin';
   const [cans, setCans] = useState<Can[]>([]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -661,7 +664,9 @@ const MasterListView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <td>
                                   <div className={styles.actionsCell}>
                                     <button className={styles.btnSecondary} onClick={() => openEdit(c)} title='Edit'><Edit2 size={13}/></button>
-                                    <button className={styles.btnDanger} onClick={() => handleDelete(c.id, c.can_id)} title='Deactivate'><Trash2 size={13}/></button>
+                                    {isSuperAdmin && (
+                                      <button className={styles.btnDanger} onClick={() => handleDelete(c.id, c.can_id)} title='Deactivate'><Trash2 size={13}/></button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>

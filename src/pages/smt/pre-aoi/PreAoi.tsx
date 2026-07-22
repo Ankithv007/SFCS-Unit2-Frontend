@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSmtAuth } from '../../../context/SmtAuthContext';
+import { useAuth } from '../../../hooks/useAuth';
 import styles from './PreAoi.module.css';
 import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
 import { BarcodeSearch } from '../../../components/BarcodeSearch';
@@ -83,6 +84,7 @@ interface ScanRecord {
 
 const PreAoi: React.FC = () => {
     const { smtUser } = useSmtAuth();
+    const { user } = useAuth();
 
     const formatTimestamp = (dStr: string | null | undefined) => {
         if (!dStr) return '—';
@@ -196,7 +198,7 @@ const PreAoi: React.FC = () => {
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
     // Role helpers
-    const isSuperAdmin = smtUser?.role === 'Super Admin';
+    const isSuperAdmin = smtUser?.role === 'Super Admin' || user?.role === 'Super Admin';
 
     // ─── Initial Load ────────────────────────────────────────────────────────
     useEffect(() => {
@@ -1441,13 +1443,15 @@ const PreAoi: React.FC = () => {
                                                         >
                                                             View Details / Resume
                                                         </button>
-                                                        <button
-                                                            className={styles.secondaryButton}
-                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', color: '#b91c1c', borderColor: '#fca5a5' }}
-                                                            onClick={() => handleDeleteSession(session.id, session.work_order_id)}
-                                                        >
-                                                            Delete
-                                                        </button>
+                                                        {isSuperAdmin && (
+                                                            <button
+                                                                className={styles.secondaryButton}
+                                                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', color: '#b91c1c', borderColor: '#fca5a5' }}
+                                                                onClick={() => handleDeleteSession(session.id, session.work_order_id)}
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -1609,13 +1613,15 @@ const PreAoi: React.FC = () => {
                                                         >
                                                             PDF 📄
                                                         </button>
-                                                        <button
-                                                            className={styles.secondaryButton}
-                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', color: '#b91c1c', borderColor: '#fca5a5' }}
-                                                            onClick={() => handleDeleteSession(session.id, session.work_order_id)}
-                                                        >
-                                                            Delete
-                                                        </button>
+                                                        {isSuperAdmin && (
+                                                            <button
+                                                                className={styles.secondaryButton}
+                                                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', color: '#b91c1c', borderColor: '#fca5a5' }}
+                                                                onClick={() => handleDeleteSession(session.id, session.work_order_id)}
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}

@@ -2,6 +2,7 @@ import React from 'react';
 import styles from '../AdminPanel.module.css';
 import type { AdminUser, AdminDepartment } from '../services/adminService';
 import { TableSkeleton } from './TableSkeleton';
+import { useAuth } from '../../../hooks/useAuth';
 
 interface UserManagementTabProps {
     users: AdminUser[];
@@ -52,6 +53,9 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
     onRestoreUser,
     onDeleteUser
 }) => {
+    const { user: authUser } = useAuth();
+    const isSuperAdmin = authUser?.role === 'Super Admin';
+
     return (
         <div>
             {/* Toolbar */}
@@ -206,13 +210,15 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
                                                         >
                                                             {user.status === 'active' ? '🔴' : '🟢'}
                                                         </button>
-                                                        <button
-                                                            className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                                                            onClick={() => onDeleteUser(user)}
-                                                            title="Soft-Delete Account"
-                                                        >
-                                                            🗑️
-                                                        </button>
+                                                        {isSuperAdmin && (
+                                                            <button
+                                                                className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                                                                onClick={() => onDeleteUser(user)}
+                                                                title="Soft-Delete Account"
+                                                            >
+                                                                🗑️
+                                                            </button>
+                                                        )}
                                                     </>
                                                 ) : (
                                                     <button

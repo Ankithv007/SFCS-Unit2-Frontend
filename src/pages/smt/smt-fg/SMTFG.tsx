@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSmtAuth } from '../../../context/SmtAuthContext';
+import { useAuth } from '../../../hooks/useAuth';
 import styles from './SMTFG.module.css';
 import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
 import { BarcodeSearch } from '../../../components/BarcodeSearch';
@@ -80,7 +81,8 @@ interface ScanRecord {
 
 const SMTFG: React.FC = () => {
     const { smtUser } = useSmtAuth();
-    const isSuperAdmin = smtUser?.role === 'Super Admin';
+    const { user } = useAuth();
+    const isSuperAdmin = smtUser?.role === 'Super Admin' || user?.role === 'Super Admin';
 
     const formatTimestamp = (dStr: string | null | undefined) => {
         if (!dStr) return '—';
@@ -1054,9 +1056,11 @@ const SMTFG: React.FC = () => {
                                                             <button className={styles.secondaryButton} style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }} onClick={() => handleResumeSession(s)}>
                                                                 Resume
                                                             </button>
-                                                            <button className={styles.deleteTextButton} onClick={() => handleDeleteSession(s.id)}>
-                                                                Delete
-                                                            </button>
+                                                            {isSuperAdmin && (
+                                                                <button className={styles.deleteTextButton} onClick={() => handleDeleteSession(s.id)}>
+                                                                    Delete
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>

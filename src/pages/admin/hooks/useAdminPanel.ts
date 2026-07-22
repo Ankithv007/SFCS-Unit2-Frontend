@@ -12,6 +12,7 @@ export function useAdminPanel() {
 
     // Users state
     const [users, setUsers] = useState<AdminUser[]>([]);
+    const [allUsersList, setAllUsersList] = useState<AdminUser[]>([]);
     const [totalUsers, setTotalUsers] = useState(0);
     const [userPage, setUserPage] = useState(1);
     const [userLimit, setUserLimit] = useState(10);
@@ -89,6 +90,18 @@ export function useAdminPanel() {
         }
     }, [userPage, userLimit, userSearch, userRoleFilter, userStatusFilter, includeDeleted, showToast]);
 
+    const fetchAllUsers = useCallback(async () => {
+        try {
+            const res = await adminService.getUsers({
+                limit: 10000,
+                includeDeleted: true
+            });
+            setAllUsersList(res.data || []);
+        } catch (err: any) {
+            console.error('Failed to fetch all users for roster:', err);
+        }
+    }, []);
+
     // Fetch Departments
     const fetchDepartments = useCallback(async () => {
         setLoadingDepts(true);
@@ -154,6 +167,7 @@ export function useAdminPanel() {
 
     // Triggers based on tab
     useEffect(() => {
+        fetchAllUsers();
         if (activeTab === 'users') {
             fetchUsers();
             fetchDepartments(); // needed for user modal department checkboxes
@@ -164,11 +178,12 @@ export function useAdminPanel() {
         } else if (activeTab === 'audit') {
             fetchAuditLogs();
         }
-    }, [activeTab, fetchUsers, fetchDepartments, fetchAuditLogs, fetchSystemPages]);
+    }, [activeTab, fetchUsers, fetchDepartments, fetchAuditLogs, fetchSystemPages, fetchAllUsers]);
 
     // Refresh active data
     const refreshAll = () => {
         fetchUsers();
+        fetchAllUsers();
         fetchDepartments();
         fetchAuditLogs();
         fetchSystemPages();
@@ -295,6 +310,7 @@ export function useAdminPanel() {
 
         // User Tab state & handlers
         users,
+        allUsersList,
         totalUsers,
         userPage,
         userLimit,

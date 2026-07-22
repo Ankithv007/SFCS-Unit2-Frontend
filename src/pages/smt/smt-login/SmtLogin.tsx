@@ -110,12 +110,6 @@ export const SmtLogin: React.FC = () => {
         setError('');
 
         try {
-            if ((userId || '').toUpperCase() === 'ADMIN' && password === '1234') {
-                smtLogin({ id: 'admin', name: 'System Admin', userId: 'ADMIN', role: 'Admin' }, from);
-                navigate(from, { replace: true });
-                return;
-            }
-
             const res = await fetch('/api/smt/employees/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

@@ -96,12 +96,6 @@ export const BackendLogin: React.FC = () => {
         setError('');
 
         try {
-            if ((userId || '').toUpperCase() === 'ADMIN' && password === '1234') {
-                backendLogin({ id: 'admin', name: 'System Admin', userId: 'ADMIN', role: 'Super Admin' }, from);
-                navigate(from, { replace: true });
-                return;
-            }
-
             const res = await fetch('/api/backend/employees/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

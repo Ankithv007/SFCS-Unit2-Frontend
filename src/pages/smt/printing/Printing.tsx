@@ -72,6 +72,8 @@ interface PrintingSession {
     work_order_id: string;
     stencil_lifecycle_id: string;
     squeegee_number: string;
+    squeegee_front_number?: string;
+    squeegee_rear_number?: string;
     solder_paste_barcode: string;
     side: string;
     status: string; // Pending, In Progress, Completed, Paused, Cancelled, Aborted
@@ -121,7 +123,8 @@ export const Printing: React.FC = () => {
     const [eligibleWos, setEligibleWos] = useState<EligibleWorkOrder[]>([]);
     const [selectedWoId, setSelectedWoId] = useState('');
     const [stencilDetails, setStencilDetails] = useState<StencilDetails | null>(null);
-    const [squeegeeNumber, setSqueegeeNumber] = useState('');
+    const [squeegeeFrontNumber, setSqueegeeFrontNumber] = useState('');
+    const [squeegeeRearNumber, setSqueegeeRearNumber] = useState('');
     const [solderPasteBarcode, setSolderPasteBarcode] = useState('');
     const [side, setSide] = useState('Top');
 
@@ -484,8 +487,12 @@ export const Printing: React.FC = () => {
             addToast('Cannot start session without Stencil Lifecycle Details.', 'error');
             return;
         }
-        if (!squeegeeNumber.trim()) {
-            addToast('Squeegee Number is mandatory.', 'error');
+        if (!squeegeeFrontNumber.trim()) {
+            addToast('Squeegee Front Number is mandatory.', 'error');
+            return;
+        }
+        if (!squeegeeRearNumber.trim()) {
+            addToast('Squeegee Rear Number is mandatory.', 'error');
             return;
         }
         if (!solderPasteBarcode.trim()) {
@@ -516,7 +523,9 @@ export const Printing: React.FC = () => {
             const payload = {
                 work_order_id: selectedWoId,
                 stencil_lifecycle_id: stencilDetails.stencil_lifecycle_id,
-                squeegee_number: squeegeeNumber.trim(),
+                squeegee_number: squeegeeFrontNumber.trim(),
+                squeegee_front_number: squeegeeFrontNumber.trim(),
+                squeegee_rear_number: squeegeeRearNumber.trim(),
                 solder_paste_barcode: solderPasteBarcode.trim(),
                 side
             };
@@ -541,7 +550,8 @@ export const Printing: React.FC = () => {
     const resetSetupForm = () => {
         setSelectedWoId('');
         setStencilDetails(null);
-        setSqueegeeNumber('');
+        setSqueegeeFrontNumber('');
+        setSqueegeeRearNumber('');
         setSolderPasteBarcode('');
         setSide('Top');
     };
@@ -911,7 +921,8 @@ export const Printing: React.FC = () => {
             sectionHeader('  3.  PRINTING SESSION DETAILS', 67, 56, 202); // indigo
             const sess = data.session;
             [
-                ['Squeegee Number', val(sess.squeegeeNumber)],
+                ['Squeegee Front Number', val(sess.squeegeeFrontNumber)],
+                ['Squeegee Rear Number', val(sess.squeegeeRearNumber)],
                 ['Solder Paste Barcode', val(sess.solderPasteBarcode)],
                 ['PCB Side', val(sess.pcbSide)],
                 ['Printing Started By', val(sess.startedBy)],
@@ -1254,13 +1265,25 @@ export const Printing: React.FC = () => {
                                 </div>
 
                                 <div className={styles.inputGroup}>
-                                    <label>Squeegee Number *</label>
+                                    <label>Squeegee Front Number *</label>
                                     <input
                                         type="text"
                                         className={styles.input}
-                                        placeholder="Enter Squeegee Identification"
-                                        value={squeegeeNumber}
-                                        onChange={e => setSqueegeeNumber(e.target.value)}
+                                        placeholder="Enter Squeegee Front Identification"
+                                        value={squeegeeFrontNumber}
+                                        onChange={e => setSqueegeeFrontNumber(e.target.value)}
+                                        required
+                                    />
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label>Squeegee Rear Number *</label>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Enter Squeegee Rear Identification"
+                                        value={squeegeeRearNumber}
+                                        onChange={e => setSqueegeeRearNumber(e.target.value)}
                                         required
                                     />
                                 </div>
@@ -1461,7 +1484,6 @@ export const Printing: React.FC = () => {
                                                 <th>Product Name</th>
                                                 <th>Target Qty</th>
                                                 <th>Stencil Name</th>
-                                                <th>Squeegee No</th>
                                                 <th>Solder Paste</th>
                                                 <th>Side</th>
                                                 <th>Status</th>
@@ -1475,7 +1497,6 @@ export const Printing: React.FC = () => {
                                                     <td>{session.product_name || '-'}</td>
                                                     <td>{session.work_order_quantity || '-'}</td>
                                                     <td>{session.stencil_name || '-'}</td>
-                                                    <td>{session.squeegee_number}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{session.solder_paste_barcode}</td>
                                                     <td>{session.side}</td>
                                                     <td>{getStatusBadge(session.status)}</td>
@@ -1613,7 +1634,6 @@ export const Printing: React.FC = () => {
                                                 <th>Product Name</th>
                                                 <th>Target Qty</th>
                                                 <th>Stencil Name</th>
-                                                <th>Squeegee No</th>
                                                 <th>Solder Paste</th>
                                                 <th>Side</th>
                                                 <th>Status</th>
@@ -1628,7 +1648,6 @@ export const Printing: React.FC = () => {
                                                     <td>{session.product_name || '-'}</td>
                                                     <td>{session.work_order_quantity || '-'}</td>
                                                     <td>{session.stencil_name || '-'}</td>
-                                                    <td>{session.squeegee_number}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{session.solder_paste_barcode}</td>
                                                     <td>{session.side}</td>
                                                     <td>{getStatusBadge(session.status)}</td>
@@ -1754,8 +1773,12 @@ export const Printing: React.FC = () => {
                                 <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.side}</strong>
                             </div>
                             <div>
-                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Squeegee Number</p>
-                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.squeegee_number}</strong>
+                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Squeegee Front Number</p>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.squeegee_front_number || activeSession.squeegee_number}</strong>
+                            </div>
+                            <div>
+                                <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Squeegee Rear Number</p>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.squeegee_rear_number || activeSession.squeegee_number}</strong>
                             </div>
                             <div>
                                 <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Solder Paste Barcode</p>

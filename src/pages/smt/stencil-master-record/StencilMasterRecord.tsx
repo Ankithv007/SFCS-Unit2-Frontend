@@ -120,6 +120,22 @@ const StencilMasterRecord: React.FC = () => {
         }
     };
 
+    const handleDelete = async (id: string) => {
+        if (!window.confirm('Are you sure you want to delete this stencil master record?')) {
+            return;
+        }
+        try {
+            await apiFetch(`/api/smt/stencil-management/${id}`, {
+                method: 'DELETE'
+            });
+            showToast('Stencil Record Deleted Successfully.', 'success');
+            fetchRecords();
+        } catch (err: any) {
+            console.error('Deletion failed:', err);
+            showToast(err.message || 'Failed to delete stencil record.', 'error');
+        }
+    };
+
     // Debounce search query
     useEffect(() => {
         const handler = setTimeout(() => {
@@ -485,6 +501,15 @@ const StencilMasterRecord: React.FC = () => {
                                                         onClick={() => setEditRecord(rec)}
                                                     >
                                                         Edit
+                                                    </button>
+                                                )}
+                                                {smtUser?.role === 'Super Admin' && (
+                                                    <button
+                                                        className={styles.deleteButton}
+                                                        onClick={() => handleDelete(rec.id)}
+                                                        style={{ marginLeft: '0.25rem' }}
+                                                    >
+                                                        Delete
                                                     </button>
                                                 )}
                                             </div>

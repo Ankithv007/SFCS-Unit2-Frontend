@@ -18,7 +18,13 @@ export interface DowntimeRecord {
     updated_by?: string;
     updated_by_name?: string;
     updated_at?: string;
-    work_order_number?: string;
+    work_order_id?: string | null;
+    po_id?: string | null;
+    product_name?: string | null;
+    work_order_sides?: string | null;
+    work_order_quantity?: number | null;
+    panel_quantity?: number | null;
+    product_description?: string | null;
 }
 
 export interface DashboardSummary {
@@ -75,4 +81,7 @@ export interface DowntimeFormState {
     status: string;
     remarks: string;
     editingId: string | null;
+    workOrderId: string;
+    manualWorkOrder: string;
 }
+

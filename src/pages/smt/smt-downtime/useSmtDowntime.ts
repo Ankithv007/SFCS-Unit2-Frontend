@@ -24,6 +24,11 @@ export const useSmtDowntime = () => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
+    // Work Order states
+    const [workOrderId, setWorkOrderId] = useState('');
+    const [manualWorkOrder, setManualWorkOrder] = useState('');
+    const [eligibleWos, setEligibleWos] = useState<any[]>([]);
+
     // Records Table State
     const [records, setRecords] = useState<DowntimeRecord[]>([]);
     const [search, setSearch] = useState('');
@@ -132,6 +137,18 @@ export const useSmtDowntime = () => {
         }
     };
 
+    // Fetch Pending Work Orders
+    const fetchPendingWos = async () => {
+        try {
+            const res = await apiFetch('/api/smt/downtime-records/pending-wos');
+            if (res.success) {
+                setEligibleWos(res.data || []);
+            }
+        } catch (err) {
+            console.error('Error fetching pending work orders:', err);
+        }
+    };
+
     useEffect(() => {
         fetchRecords();
     }, [page, search, sortBy, sortOrder]);
@@ -139,6 +156,7 @@ export const useSmtDowntime = () => {
     useEffect(() => {
         fetchDashboardMetrics();
         fetchAnalyticsRecords();
+        fetchPendingWos();
     }, []);
 
     const handleSort = (field: string) => {
@@ -165,6 +183,8 @@ export const useSmtDowntime = () => {
         setStatus('Open');
         setRemarks('');
         setReasonCode('');
+        setWorkOrderId('');
+        setManualWorkOrder('');
         setEditingId(null);
     };
 
@@ -183,6 +203,17 @@ export const useSmtDowntime = () => {
             return;
         }
 
+        // Validate work order: either selected or manually typed, must be pending
+        const resolvedWO = workOrderId || manualWorkOrder.trim();
+        if (resolvedWO) {
+            // Validate against list
+            const matched = eligibleWos.find(w => w.id.toUpperCase() === resolvedWO.toUpperCase());
+            if (!matched) {
+                showToast(`Work Order ID "${resolvedWO}" is invalid or completed. Only Pending or In Progress Work Orders can be linked.`, 'error');
+                return;
+            }
+        }
+
         setSaving(true);
         try {
             const payload = {
@@ -195,7 +226,8 @@ export const useSmtDowntime = () => {
                 downtime_description: `[Reason Code: ${reasonCode}] ${downtimeDescription}`,
                 action_taken: actionTaken,
                 responsible_person: responsiblePerson,
-                remarks
+                remarks,
+                work_order_id: workOrderId || manualWorkOrder.trim() || null
             };
 
             if (editingId) {
@@ -262,6 +294,8 @@ export const useSmtDowntime = () => {
         setResponsiblePerson(record.responsible_person);
         setStatus(record.status || 'Open');
         setRemarks(record.remarks || '');
+        setWorkOrderId(record.work_order_id || '');
+        setManualWorkOrder(record.work_order_id || '');
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -399,7 +433,9 @@ export const useSmtDowntime = () => {
             responsiblePerson, setResponsiblePerson,
             status, setStatus,
             remarks, setRemarks,
-            editingId, saving
+            editingId, saving,
+            workOrderId, setWorkOrderId,
+            manualWorkOrder, setManualWorkOrder
         },
         handleClear,
         handleSave,
@@ -430,6 +466,7 @@ export const useSmtDowntime = () => {
         deleteTargetId, setDeleteTargetId,
         deleting, confirmDelete,
 
+        eligibleWos,
         oeeState: {
             fromDate, setFromDate,
             toDate, setToDate,

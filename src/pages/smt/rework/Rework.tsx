@@ -8,6 +8,7 @@ import { apiFetch } from '../../../utils/api';
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
+import SMTCountDetailsModal from '../../../components/SMTCountDetailsModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { 
@@ -53,7 +54,8 @@ interface ReworkSession {
     id: string;
     work_order_id: string;
     stencil_lifecycle_id: string;
-    squeegee_number: string;
+    squeegee_front_number: string;
+    squeegee_rear_number: string;
     solder_paste_barcode: string;
     side: string;
     status: string; // Pending, In Progress, Completed, Paused, Cancelled, Aborted
@@ -174,6 +176,7 @@ const Rework: React.FC = () => {
     const [showAbortModal, setShowAbortModal] = useState(false);
     const [failRemark, setFailRemark] = useState('');
     const [selectedScanToFail, setSelectedScanToFail] = useState<ScanRecord | null>(null);
+    const [showFailedModal, setShowFailedModal] = useState(false);
     const [selectedScanToRepair, setSelectedScanToRepair] = useState<{ barcode: string } | null>(null);
     const [repairRemark, setRepairRemark] = useState('');
     const [editingScanId, setEditingScanId] = useState<string | null>(null);
@@ -208,7 +211,7 @@ const Rework: React.FC = () => {
     }, []);
 
     // Determine if any modal/dialog is currently active
-    const isModalOpen = showAbortModal || !!selectedScanToFail || !!selectedScanToRepair || !!editingScanId || !!selectedQrBarcode || !!viewingRemarkText;
+    const isModalOpen = showAbortModal || !!selectedScanToFail || !!selectedScanToRepair || !!editingScanId || !!selectedQrBarcode || !!viewingRemarkText || showFailedModal;
 
     // Keep scanner input focused if scanning is active, no dialog is open, and search input is not focused
     useEffect(() => {
@@ -480,7 +483,8 @@ const Rework: React.FC = () => {
             const payload = {
                 work_order_id: selectedWoId,
                 stencil_lifecycle_id: autoPopulatedDetails.stencilLifecycleId,
-                squeegee_number: autoPopulatedDetails.squeegeeNumber,
+                squeegee_front_number: autoPopulatedDetails.squeegeeFrontNumber,
+                squeegee_rear_number: autoPopulatedDetails.squeegeeRearNumber,
                 solder_paste_barcode: autoPopulatedDetails.solderPasteBarcode,
                 side: autoPopulatedDetails.side
             };
@@ -856,7 +860,7 @@ const Rework: React.FC = () => {
                 ['Manufacturing Date', fmtDate(st.manufacturingDate)],
                 ['Side', val(st.side)],
                 ['Current Life Cycle Count', val(st.currentLifeCycleCount)],
-                ['Remaining Life Count', val(st.remainingLifeCount)]
+                ['Remaining Life Count', val(st.remainingLifeCycleCount)]
             ].forEach(([l, v], i) => kvRow(l, v, i % 2 === 0));
 
             y += 5;
@@ -865,7 +869,8 @@ const Rework: React.FC = () => {
             sectionHeader('  3.  REWORK SESSION DETAILS', 67, 56, 202);
             const sess = data.session;
             [
-                ['Squeegee Number', val(sess.squeegeeNumber)],
+                ['Squeegee Front Number', val(sess.squeegeeFrontNumber)],
+                ['Squeegee Rear Number', val(sess.squeegeeRearNumber)],
                 ['Solder Paste Barcode', val(sess.solderPasteBarcode)],
                 ['PCB Side', val(sess.pcbSide)],
                 ['Rework Started By', val(sess.startedBy)],
@@ -1271,8 +1276,8 @@ const Rework: React.FC = () => {
                         <h4>Printing Information</h4>
                         <div className={styles.infoGrid}>
                             <div className={styles.infoItem}>
-                                <span className={styles.infoLabel}>Squeegee Number</span>
-                                <span className={styles.infoValue}>{details.squeegeeNumber}</span>
+                                <span className={styles.infoLabel}>Squeegee Front Number</span>
+                                <span className={styles.infoValue}>{details.squeegeeFrontNumber}</span>
                             </div>
                             <div className={styles.infoItem}>
                                 <span className={styles.infoLabel}>Solder Paste Barcode</span>
@@ -1411,7 +1416,7 @@ const Rework: React.FC = () => {
                                                 <th>Product Name</th>
                                                 <th>Target Qty</th>
                                                 <th>Stencil Name</th>
-                                                <th>Squeegee No</th>
+                                                <th>Sqg. Front No.</th><th>Sqg. Rear No.</th>
                                                 <th>Solder Paste</th>
                                                 <th>Side</th>
                                                 <th>Status</th>
@@ -1425,7 +1430,7 @@ const Rework: React.FC = () => {
                                                     <td>{session.product_name || '-'}</td>
                                                     <td>{session.work_order_quantity || '-'}</td>
                                                     <td>{session.stencil_name || '-'}</td>
-                                                    <td>{session.squeegee_number}</td>
+                                                    <td>{session.squeegee_front_number || '-'}</td><td>{session.squeegee_rear_number || '-'}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{session.solder_paste_barcode}</td>
                                                     <td>{session.side}</td>
                                                     <td>{getStatusBadge(session.status)}</td>
@@ -1563,7 +1568,7 @@ const Rework: React.FC = () => {
                                                 <th>Product Name</th>
                                                 <th>Target Qty</th>
                                                 <th>Stencil Name</th>
-                                                <th>Squeegee No</th>
+                                                <th>Sqg. Front No.</th><th>Sqg. Rear No.</th>
                                                 <th>Solder Paste</th>
                                                 <th>Side</th>
                                                 <th>Status</th>
@@ -1578,7 +1583,7 @@ const Rework: React.FC = () => {
                                                     <td>{session.product_name || '-'}</td>
                                                     <td>{session.work_order_quantity || '-'}</td>
                                                     <td>{session.stencil_name || '-'}</td>
-                                                    <td>{session.squeegee_number}</td>
+                                                    <td>{session.squeegee_front_number || '-'}</td><td>{session.squeegee_rear_number || '-'}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{session.solder_paste_barcode}</td>
                                                     <td>{session.side}</td>
                                                     <td>{getStatusBadge(session.status)}</td>
@@ -1705,7 +1710,12 @@ const Rework: React.FC = () => {
                                 {stats.workOrderQuantity > 0 ? ((stats.passed / stats.workOrderQuantity) * 100).toFixed(2) : '0.00'}%
                             </h2>
                         </div>
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #dc2626', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                        <div 
+                            className={styles.card} 
+                            style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #dc2626', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                            onClick={() => setShowFailedModal(true)}
+                            title="Click to view Failed units"
+                        >
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Failed</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b91c1c' }}>{stats.failed}</h2>
                         </div>
@@ -2130,6 +2140,17 @@ const Rework: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Failed Count Modal */}
+            {showFailedModal && activeSession && (
+                <SMTCountDetailsModal
+                    workOrderId={activeSession.work_order_id}
+                    stage="Rework"
+                    type="FAILED"
+                    label="Rework Failed Units"
+                    onClose={() => setShowFailedModal(false)}
+                />
             )}
 
             <style>{`

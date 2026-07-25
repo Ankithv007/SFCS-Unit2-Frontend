@@ -60,6 +60,21 @@ export const SmtDowntimeModal: React.FC<SmtDowntimeModalProps> = ({ record, onCl
                         </div>
                     </div>
 
+                    {record.work_order_id && (
+                        <div style={{ marginTop: '1rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+                            <strong style={{ color: '#1e3a5f', fontSize: '0.95rem', display: 'block', marginBottom: '0.5rem' }}>📋 Linked Work Order Details</strong>
+                            <div className={styles.detailGrid} style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '6px', fontSize: '0.9rem' }}>
+                                <div><strong>Work Order ID:</strong> {record.work_order_id}</div>
+                                <div><strong>PO ID:</strong> {record.po_id || '—'}</div>
+                                <div><strong>Product Name:</strong> {record.product_name || '—'}</div>
+                                <div><strong>Number of Sides:</strong> {record.work_order_sides || '—'}</div>
+                                <div><strong>Quantity:</strong> {record.work_order_quantity || '—'}</div>
+                                <div><strong>Panel Quantity:</strong> {record.panel_quantity || '—'}</div>
+                                <div style={{ gridColumn: 'span 2' }}><strong>Product Description:</strong> {record.product_description || '—'}</div>
+                            </div>
+                        </div>
+                    )}
+
                     <div style={{ marginTop: '1rem' }}>
                         <strong>Description:</strong>
                         <p style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '6px', marginTop: '0.25rem', color: '#334155' }}>

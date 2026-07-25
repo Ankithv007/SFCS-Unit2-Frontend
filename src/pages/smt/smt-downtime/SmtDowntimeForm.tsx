@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styles from './SmtDowntimeTracker.module.css';
 import { SHIFTS, LINES, MACHINES, DOWNTIME_CATEGORIES, REASON_CODES } from './smtDowntime.constants';
 
@@ -31,12 +31,17 @@ interface SmtDowntimeFormProps {
         setRemarks: (v: string) => void;
         editingId: string | null;
         saving: boolean;
+        workOrderId: string;
+        setWorkOrderId: (v: string) => void;
+        manualWorkOrder: string;
+        setManualWorkOrder: (v: string) => void;
     };
+    eligibleWos: any[];
     onSave: (e: React.FormEvent) => void;
     onClear: () => void;
 }
 
-export const SmtDowntimeForm: React.FC<SmtDowntimeFormProps> = ({ formState, onSave, onClear }) => {
+export const SmtDowntimeForm: React.FC<SmtDowntimeFormProps> = ({ formState, eligibleWos, onSave, onClear }) => {
     const {
         shift, setShift,
         line, setLine,
@@ -50,7 +55,9 @@ export const SmtDowntimeForm: React.FC<SmtDowntimeFormProps> = ({ formState, onS
         actionTaken, setActionTaken,
         responsiblePerson, setResponsiblePerson,
         remarks, setRemarks,
-        editingId, saving
+        editingId, saving,
+        workOrderId, setWorkOrderId,
+        manualWorkOrder, setManualWorkOrder
     } = formState;
 
     return (
@@ -157,6 +164,35 @@ export const SmtDowntimeForm: React.FC<SmtDowntimeFormProps> = ({ formState, onS
                                 required
                             />
                         </div>
+
+                        {/* Searchable Autocomplete/Combobox Work Order Field */}
+                        <div className={styles.inputGroup} style={{ position: 'relative' }}>
+                            <label className={styles.inputLabel}>Work Order (Searchable / Manual Entry)</label>
+                            <input
+                                type="text"
+                                value={workOrderId || manualWorkOrder}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setManualWorkOrder(val);
+                                    setWorkOrderId(val);
+                                }}
+                                className={styles.input}
+                                placeholder="Type or select a pending Work Order..."
+                                onFocus={() => (window as any)._setWoDropdownOpen?.(true)}
+                                onBlur={() => {
+                                    // Slight delay to allow clicking on dropdown items
+                                    setTimeout(() => (window as any)._setWoDropdownOpen?.(false), 200);
+                                }}
+                            />
+                            <WoSuggestions 
+                                query={workOrderId || manualWorkOrder} 
+                                eligibleWos={eligibleWos} 
+                                onSelect={(val) => {
+                                    setWorkOrderId(val);
+                                    setManualWorkOrder(val);
+                                }} 
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -212,3 +248,72 @@ export const SmtDowntimeForm: React.FC<SmtDowntimeFormProps> = ({ formState, onS
         </div>
     );
 };
+
+interface WoSuggestionsProps {
+    query: string;
+    eligibleWos: any[];
+    onSelect: (val: string) => void;
+}
+
+const WoSuggestions: React.FC<WoSuggestionsProps> = ({ query, eligibleWos, onSelect }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    
+    // Bind state toggle handler globally so input focus/blur events can reach it
+    React.useEffect(() => {
+        (window as any)._setWoDropdownOpen = setIsOpen;
+        return () => {
+            delete (window as any)._setWoDropdownOpen;
+        };
+    }, []);
+
+    if (!isOpen) return null;
+
+    const filtered = eligibleWos.filter(wo => 
+        !query || 
+        wo.id.toLowerCase().includes(query.toLowerCase()) ||
+        (wo.product_name || '').toLowerCase().includes(query.toLowerCase())
+    );
+
+    if (filtered.length === 0) return null;
+
+    return (
+        <div 
+            style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                backgroundColor: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '6px',
+                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                maxHeight: '200px',
+                overflowY: 'auto',
+                zIndex: 9999,
+                marginTop: '4px'
+            }}
+        >
+            {filtered.map(wo => (
+                <div
+                    key={wo.id}
+                    onMouseDown={() => onSelect(wo.id)}
+                    style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem',
+                        borderBottom: '1px solid #f1f5f9',
+                        transition: 'background-color 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                >
+                    <div style={{ fontWeight: 600, color: '#1e293b' }}>{wo.id}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        {wo.product_name} &bull; Qty: {wo.quantity}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+

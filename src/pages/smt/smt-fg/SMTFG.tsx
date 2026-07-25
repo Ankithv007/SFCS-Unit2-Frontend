@@ -52,7 +52,8 @@ interface FgSession {
     id: string;
     work_order_id: string;
     stencil_lifecycle_id: string;
-    squeegee_number: string;
+    squeegee_front_number: string;
+    squeegee_rear_number: string;
     solder_paste_barcode: string;
     side: string;
     status: string; // Pending, In Progress, Completed, Paused, Cancelled, Aborted
@@ -386,7 +387,8 @@ const SMTFG: React.FC = () => {
                 body: JSON.stringify({
                     work_order_id: selectedWoId,
                     stencil_lifecycle_id: autoPopulatedDetails.stencilLifecycleId,
-                    squeegee_number: autoPopulatedDetails.squeegeeNumber,
+                    squeegee_front_number: autoPopulatedDetails.squeegeeFrontNumber,
+                    squeegee_rear_number: autoPopulatedDetails.squeegeeRearNumber,
                     solder_paste_barcode: autoPopulatedDetails.solderPasteBarcode,
                     side: autoPopulatedDetails.side
                 })
@@ -592,7 +594,8 @@ const SMTFG: React.FC = () => {
 
         // Section 3: Session Details
         addSectionHeader('3. SMT FG SESSION & INSPECTION PARAMETERS');
-        addKVRow('Squeegee Number:', data.squeegee_number);
+        addKVRow('Squeegee Front Number:', data.squeegee_front_number);
+        addKVRow('Squeegee Rear Number:', data.squeegee_rear_number);
         addKVRow('Solder Paste Barcode:', data.solder_paste_barcode);
         addKVRow('PCB Side:', data.side);
         addKVRow('SMT FG Released By:', data.created_by_name);
@@ -885,8 +888,12 @@ const SMTFG: React.FC = () => {
                         <h4>Printing Information</h4>
                         <div className={styles.infoGrid}>
                             <div className={styles.infoItem}>
-                                <span className={styles.infoLabel}>Squeegee Number</span>
-                                <span className={styles.infoValue}>{details.squeegeeNumber}</span>
+                                <span className={styles.infoLabel}>Squeegee Front Number</span>
+                                <span className={styles.infoValue}>{details.squeegeeFrontNumber}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Squeegee Rear Number</span>
+                                <span className={styles.infoValue}>{details.squeegeeRearNumber}</span>
                             </div>
                             <div className={styles.infoItem}>
                                 <span className={styles.infoLabel}>Solder Paste Barcode</span>
@@ -1025,7 +1032,7 @@ const SMTFG: React.FC = () => {
                                                 <th>Product Name</th>
                                                 <th>Target Qty</th>
                                                 <th>Stencil Name</th>
-                                                <th>Squeegee No</th>
+                                                <th>Sqg. Front No.</th><th>Sqg. Rear No.</th>
                                                 <th>Solder Paste</th>
                                                 <th>Side</th>
                                                 <th>Created By</th>
@@ -1040,7 +1047,7 @@ const SMTFG: React.FC = () => {
                                                     <td>{s.product_name || '-'}</td>
                                                     <td>{s.work_order_quantity || '-'}</td>
                                                     <td>{s.stencil_name || '-'}</td>
-                                                    <td>{s.squeegee_number || '-'}</td>
+                                                    <td>{s.squeegee_front_number || '-'}</td><td>{s.squeegee_rear_number || '-'}</td>
                                                     <td style={{ wordBreak: 'break-all', maxWidth: '150px' }}>{s.solder_paste_barcode || '-'}</td>
                                                     <td>
                                                         <span className={styles.infoValue} style={{ color: '#4f46e5' }}>{s.side}</span>

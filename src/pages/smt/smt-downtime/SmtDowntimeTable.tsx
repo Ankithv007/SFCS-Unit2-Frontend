@@ -110,13 +110,14 @@ export const SmtDowntimeTable: React.FC<SmtDowntimeTableProps> = ({
                                 <th onClick={() => onSort('responsible_person')} className={styles.sortableHeader}>
                                     Responsible {sortBy === 'responsible_person' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
+                                <th>Work Order Number</th>
                                 <th style={{ textAlign: 'center' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {records.length === 0 ? (
                                 <tr>
-                                    <td colSpan={10} className={styles.tableEmptyRow}>
+                                    <td colSpan={11} className={styles.tableEmptyRow}>
                                         No downtime logs found matching current search criteria.
                                     </td>
                                 </tr>
@@ -142,6 +143,7 @@ export const SmtDowntimeTable: React.FC<SmtDowntimeTableProps> = ({
                                                 </span>
                                             </td>
                                             <td className={styles.fontMedium}>{record.responsible_person}</td>
+                                            <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{record.work_order_id || '—'}</td>
                                             <td className={styles.actionCell}>
                                                 <button onClick={() => onView(record)} className={styles.actionBtnView} title="View Details">
                                                     👁 View

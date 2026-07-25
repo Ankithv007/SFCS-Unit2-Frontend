@@ -28,7 +28,8 @@ export const SmtDowntimeTracker: React.FC = () => {
         deleteTargetId, setDeleteTargetId,
         deleting, confirmDelete,
 
-        oeeState
+        oeeState,
+        eligibleWos
     } = useSmtDowntime();
 
     return (
@@ -61,6 +62,7 @@ export const SmtDowntimeTracker: React.FC = () => {
             {/* 4. Incident Log & Edit Form */}
             <SmtDowntimeForm
                 formState={formState}
+                eligibleWos={eligibleWos}
                 onSave={handleSave}
                 onClear={handleClear}
             />

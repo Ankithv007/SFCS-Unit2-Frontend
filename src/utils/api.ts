@@ -25,6 +25,7 @@ export async function apiFetch(
 
     const token = localStorage.getItem('auth_token');
     const backendUserId = localStorage.getItem('backend_userId');
+    const smtUserName = localStorage.getItem('X-User-Name');
 
     // Handle body type correctly (don't set Content-Type for FormData)
     const isFormData = options.body instanceof FormData;
@@ -32,6 +33,7 @@ export async function apiFetch(
     const headers: Record<string, string> = {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(backendUserId ? { 'X-Backend-User-Id': backendUserId } : {}),
+        ...(smtUserName ? { 'X-User-Name': smtUserName } : {}),
         ...((options.headers as Record<string, string>) || {}),
     };
 

@@ -8,6 +8,7 @@ import { apiFetch } from '../../../utils/api';
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
+import SMTCountDetailsModal from '../../../components/SMTCountDetailsModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { 
@@ -71,9 +72,8 @@ interface PrintingSession {
     id: string;
     work_order_id: string;
     stencil_lifecycle_id: string;
-    squeegee_number: string;
-    squeegee_front_number?: string;
-    squeegee_rear_number?: string;
+    squeegee_front_number: string;
+    squeegee_rear_number: string;
     solder_paste_barcode: string;
     side: string;
     status: string; // Pending, In Progress, Completed, Paused, Cancelled, Aborted
@@ -196,6 +196,7 @@ export const Printing: React.FC = () => {
     const [showAbortModal, setShowAbortModal] = useState(false);
     const [failRemark, setFailRemark] = useState('');
     const [selectedScanToFail, setSelectedScanToFail] = useState<ScanRecord | null>(null);
+    const [showFailedModal, setShowFailedModal] = useState(false);
     const [selectedScanToRepair, setSelectedScanToRepair] = useState<{ barcode: string } | null>(null);
     const [repairRemark, setRepairRemark] = useState('');
     const [editingScanId, setEditingScanId] = useState<string | null>(null);
@@ -230,7 +231,7 @@ export const Printing: React.FC = () => {
     }, []);
 
     // Determine if any modal/dialog is currently active
-    const isModalOpen = showAbortModal || !!selectedScanToFail || !!selectedScanToRepair || !!editingScanId || !!selectedQrBarcode || !!viewingRemarkText;
+    const isModalOpen = showAbortModal || !!selectedScanToFail || !!selectedScanToRepair || !!editingScanId || !!selectedQrBarcode || !!viewingRemarkText || showFailedModal;
 
     // Keep scanner input focused if scanning is active, no dialog is open, and search input is not focused
     useEffect(() => {
@@ -523,7 +524,6 @@ export const Printing: React.FC = () => {
             const payload = {
                 work_order_id: selectedWoId,
                 stencil_lifecycle_id: stencilDetails.stencil_lifecycle_id,
-                squeegee_number: squeegeeFrontNumber.trim(),
                 squeegee_front_number: squeegeeFrontNumber.trim(),
                 squeegee_rear_number: squeegeeRearNumber.trim(),
                 solder_paste_barcode: solderPasteBarcode.trim(),
@@ -1774,11 +1774,11 @@ export const Printing: React.FC = () => {
                             </div>
                             <div>
                                 <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Squeegee Front Number</p>
-                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.squeegee_front_number || activeSession.squeegee_number}</strong>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.squeegee_front_number || '—'}</strong>
                             </div>
                             <div>
                                 <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Squeegee Rear Number</p>
-                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.squeegee_rear_number || activeSession.squeegee_number}</strong>
+                                <strong style={{ fontSize: '1.1rem', color: '#0f172a' }}>{activeSession.squeegee_rear_number || '—'}</strong>
                             </div>
                             <div>
                                 <p style={{ margin: '0', color: '#475569', fontSize: '0.8rem', fontWeight: 600 }}>Solder Paste Barcode</p>
@@ -1811,7 +1811,12 @@ export const Printing: React.FC = () => {
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#15803d' }}>{stats.passed}</h2>
                         </div>
 
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #dc2626', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                        <div 
+                            className={styles.card} 
+                            style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #dc2626', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                            onClick={() => setShowFailedModal(true)}
+                            title="Click to view Failed units"
+                        >
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Failed</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b91c1c' }}>{stats.failed}</h2>
                         </div>
@@ -2255,6 +2260,17 @@ export const Printing: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Failed Count Modal */}
+            {showFailedModal && activeSession && (
+                <SMTCountDetailsModal
+                    workOrderId={activeSession.work_order_id}
+                    stage="Printing"
+                    type="FAILED"
+                    label="Printing Failed Units"
+                    onClose={() => setShowFailedModal(false)}
+                />
             )}
 
             <style>{`

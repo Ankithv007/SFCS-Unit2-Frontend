@@ -24,17 +24,31 @@ export const SmtAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const [smtLoading, setSmtLoading] = useState(true);
 
     useEffect(() => {
+        const storedUser = localStorage.getItem('smtUser');
+        const storedPath = localStorage.getItem('smtAuthenticatedPath');
+        if (storedUser) {
+            setSmtUser(JSON.parse(storedUser));
+        }
+        if (storedPath) {
+            setAuthenticatedPath(storedPath);
+        }
         setSmtLoading(false);
     }, []);
 
     const smtLogin = (user: SmtUser, path: string) => {
         setSmtUser(user);
         setAuthenticatedPath(path);
+        localStorage.setItem('smtUser', JSON.stringify(user));
+        localStorage.setItem('smtAuthenticatedPath', path);
+        localStorage.setItem('X-User-Name', user.name);
     };
 
     const smtLogout = () => {
         setSmtUser(null);
         setAuthenticatedPath(null);
+        localStorage.removeItem('smtUser');
+        localStorage.removeItem('smtAuthenticatedPath');
+        localStorage.removeItem('X-User-Name');
     };
 
     return (

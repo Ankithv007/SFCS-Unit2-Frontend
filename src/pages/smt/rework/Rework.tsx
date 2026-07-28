@@ -1416,7 +1416,6 @@ const Rework: React.FC = () => {
                                                 <th>Product Name</th>
                                                 <th>Target Qty</th>
                                                 <th>Stencil Name</th>
-                                                <th>Sqg. Front No.</th><th>Sqg. Rear No.</th>
                                                 <th>Solder Paste</th>
                                                 <th>Side</th>
                                                 <th>Status</th>
@@ -1430,7 +1429,6 @@ const Rework: React.FC = () => {
                                                     <td>{session.product_name || '-'}</td>
                                                     <td>{session.work_order_quantity || '-'}</td>
                                                     <td>{session.stencil_name || '-'}</td>
-                                                    <td>{session.squeegee_front_number || '-'}</td><td>{session.squeegee_rear_number || '-'}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{session.solder_paste_barcode}</td>
                                                     <td>{session.side}</td>
                                                     <td>{getStatusBadge(session.status)}</td>
@@ -1456,7 +1454,7 @@ const Rework: React.FC = () => {
                                             ))}
                                             {activeSessionsList.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                                                         No active Rework sessions found. Set up a session to begin.
                                                     </td>
                                                 </tr>
@@ -1568,7 +1566,6 @@ const Rework: React.FC = () => {
                                                 <th>Product Name</th>
                                                 <th>Target Qty</th>
                                                 <th>Stencil Name</th>
-                                                <th>Sqg. Front No.</th><th>Sqg. Rear No.</th>
                                                 <th>Solder Paste</th>
                                                 <th>Side</th>
                                                 <th>Status</th>
@@ -1583,7 +1580,6 @@ const Rework: React.FC = () => {
                                                     <td>{session.product_name || '-'}</td>
                                                     <td>{session.work_order_quantity || '-'}</td>
                                                     <td>{session.stencil_name || '-'}</td>
-                                                    <td>{session.squeegee_front_number || '-'}</td><td>{session.squeegee_rear_number || '-'}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{session.solder_paste_barcode}</td>
                                                     <td>{session.side}</td>
                                                     <td>{getStatusBadge(session.status)}</td>
@@ -1626,7 +1622,7 @@ const Rework: React.FC = () => {
                                             ))}
                                             {completedSessionsList.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                                                         No historical Rework sessions found.
                                                     </td>
                                                 </tr>

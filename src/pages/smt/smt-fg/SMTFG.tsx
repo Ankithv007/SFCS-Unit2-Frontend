@@ -126,7 +126,6 @@ const SMTFG: React.FC = () => {
     // Active Scan Dashboard State
     const [stats, setStats] = useState<{
         workOrderQuantity: number;
-        processedQuantity: number;
         passed: number;
         failed: number;
         pending: number;
@@ -135,7 +134,6 @@ const SMTFG: React.FC = () => {
         scans: ScanRecord[];
     }>({
         workOrderQuantity: 0,
-        processedQuantity: 0,
         passed: 0,
         failed: 0,
         pending: 0,
@@ -260,7 +258,6 @@ const SMTFG: React.FC = () => {
             if (data) {
                 setStats({
                     workOrderQuantity: data.workOrderQuantity || 0,
-                    processedQuantity: data.processedQuantity || 0,
                     passed: data.passed || 0,
                     failed: data.failed || 0,
                     pending: data.pending || 0,
@@ -1292,10 +1289,6 @@ const SMTFG: React.FC = () => {
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #6366f1', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>WO Quantity</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e1b4b' }}>{stats.workOrderQuantity}</h2>
-                        </div>
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #3b82f6', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Processed</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1d4ed8' }}>{stats.processedQuantity}</h2>
                         </div>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #10b981', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>

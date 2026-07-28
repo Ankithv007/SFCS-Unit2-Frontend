@@ -129,7 +129,7 @@ const Rework: React.FC = () => {
     // Active Scan Dashboard State
     const [stats, setStats] = useState<{
         workOrderQuantity: number;
-        processedQuantity: number;
+        reworkTargetQty: number;
         passed: number;
         failed: number;
         pending: number;
@@ -138,7 +138,7 @@ const Rework: React.FC = () => {
         scans: ScanRecord[];
     }>({
         workOrderQuantity: 0,
-        processedQuantity: 0,
+        reworkTargetQty: 0,
         passed: 0,
         failed: 0,
         pending: 0,
@@ -883,21 +883,18 @@ const Rework: React.FC = () => {
             // ── SECTION 4: Production Summary ─────────────────────────────────
             sectionHeader('  4.  PRODUCTION SUMMARY', 124, 58, 237);
             const prod = data.production || data.stats || {};
-            const q = prod.quantity ?? prod.reworkTargetQty ?? prod.workOrderQuantity ?? 0;
+            const woQty = data.workOrder?.quantity ?? 0;
+            const reworkTargetQty = prod.reworkTargetQty ?? 0;
             const p = prod.passed ?? 0;
             const f = prod.failed ?? 0;
             const pend = prod.pending ?? 0;
             const inv = prod.invalid ?? 0;
             const dup = prod.duplicate ?? prod.duplicate_scan_count ?? 0;
 
-            const yieldVal = (q && q > 0)
-                ? (((p || 0) / q) * 100).toFixed(2) + '%'
-                : '0.00%';
-
             [
-                ['Rework Target (Failed) Qty', val(q)],
+                ['Work Order Quantity', val(woQty)],
+                ['Rework Target (Failed) Qty', val(reworkTargetQty)],
                 ['Repaired (Passed) Qty', val(p)],
-                ['Yield (%)', yieldVal],
                 ['Failed Qty', val(f)],
                 ['Pending Qty', val(pend)],
                 ['Invalid Scan Qty', val(inv)],
@@ -1689,23 +1686,18 @@ const Rework: React.FC = () => {
                     {/* Stats Dashboard Grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #2563eb', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Rework Target Qty</p>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>WO Quantity</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e293b' }}>{stats.workOrderQuantity}</h2>
                         </div>
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #6366f1', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Processed</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e293b' }}>{stats.processedQuantity}</h2>
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #3b82f6', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Rework Target Qty</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e293b' }}>{stats.reworkTargetQty}</h2>
                         </div>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #16a34a', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Repaired (Passed)</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#15803d' }}>{stats.passed}</h2>
                         </div>
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #0d9488', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Yield (%)</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0f766e' }}>
-                                {stats.workOrderQuantity > 0 ? ((stats.passed / stats.workOrderQuantity) * 100).toFixed(2) : '0.00'}%
-                            </h2>
-                        </div>
+
                         <div 
                             className={styles.card} 
                             style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #dc2626', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', cursor: 'pointer' }}

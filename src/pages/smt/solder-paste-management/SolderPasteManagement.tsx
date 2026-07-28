@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../../utils/api';
 import styles from './SolderPasteManagement.module.css';
+import { FlaskConical, List, X, Plus, Edit2, Trash2, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock, Timer, Zap, ChevronRight, ChevronDown, Eye } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
-import { FlaskConical, List, X, Plus, Edit2, Trash2, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock, Timer, Zap, ChevronRight, ChevronDown } from 'lucide-react';
+import { useSmtAuth } from '../../../context/SmtAuthContext';
+import { useToast } from '../../../components/Toast';
+
 
 interface Can { 
   id: string; 
@@ -80,10 +83,13 @@ const api = {
   createCan: (b: any) => apiFetch('/api/smt/sp-master/cans', { method: 'POST', body: JSON.stringify(b) }),
   updateCan: (id: string, b: any) => apiFetch(`/api/smt/sp-master/cans/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   deleteCan: (id: string) => apiFetch(`/api/smt/sp-master/cans/${id}`, { method: 'DELETE' }),
+  activeSessions: (s: string, sort: string, pg: number) => apiFetch(`/api/smt/sp-master/active-sessions?search=${encodeURIComponent(s)}&sort=${sort}&page=${pg}&limit=10`),
+  activeSessionById: (id: string) => apiFetch(`/api/smt/sp-master/active-sessions/${id}`),
+  deleteActiveSession: (id: string) => apiFetch(`/api/smt/sp-master/active-sessions/${id}`, { method: 'DELETE' }),
 };
 
 // ─── Operation View ──────────────────────────────────────────────────────────
-const OperationView: React.FC<{ onMasterList: () => void }> = ({ onMasterList }) => {
+const OperationView: React.FC<{ onMasterList: () => void; onViewActive: () => void }> = ({ onMasterList, onViewActive }) => {
   const [models, setModels] = useState<{ id: string; model: string; make: string }[]>([]);
   const [selModel, setSelModel] = useState('');
   const [can, setCan] = useState<Can | null>(null);
@@ -216,9 +222,21 @@ const OperationView: React.FC<{ onMasterList: () => void }> = ({ onMasterList })
           </div>
         </div>
         <div className={styles.headerRight}>
-          <button className={`${styles.btnNav}`} onClick={onMasterList}><List size={15}/> Master List</button>
         </div>
       </div>
+
+      <div className={styles.tabsContainer}>
+        <button className={`${styles.tab} ${styles.tabActive}`}>
+          <FlaskConical size={16}/> Operation
+        </button>
+        <button className={styles.tab} onClick={onViewActive}>
+          <Clock size={16}/> Active Management
+        </button>
+        <button className={styles.tab} onClick={onMasterList}>
+          <List size={16}/> Master List
+        </button>
+      </div>
+
       <div className={styles.body}>
         {msg && (
           <div className={`${styles.alertBox} ${msg.type === 'error' ? styles.alertError : msg.type === 'success' ? styles.alertSuccess : styles.alertWarning}`}>
@@ -340,9 +358,10 @@ const OperationView: React.FC<{ onMasterList: () => void }> = ({ onMasterList })
 };
 
 // ─── Master List View ─────────────────────────────────────────────────────────
-const MasterListView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const MasterListView: React.FC<{ onBack: () => void; onViewActive: () => void }> = ({ onBack, onViewActive }) => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'Super Admin';
+
   const [cans, setCans] = useState<Can[]>([]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -553,10 +572,22 @@ const MasterListView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </div>
         </div>
         <div className={styles.headerRight}>
-          <button className={styles.btnNav} onClick={onBack}><FlaskConical size={15}/> Operation</button>
           <button className={`${styles.btnPrimary}`} onClick={openAddGlobal}><Plus size={15}/> Create New Model & Can</button>
         </div>
       </div>
+
+      <div className={styles.tabsContainer}>
+        <button className={styles.tab} onClick={onBack}>
+          <FlaskConical size={16}/> Operation
+        </button>
+        <button className={styles.tab} onClick={onViewActive}>
+          <Clock size={16}/> Active Management
+        </button>
+        <button className={`${styles.tab} ${styles.tabActive}`}>
+          <List size={16}/> Master List
+        </button>
+      </div>
+
       <div className={styles.body}>
         {msg && (
           <div className={`${styles.alertBox} ${msg.type === 'error' ? styles.alertError : styles.alertSuccess}`}>
@@ -809,12 +840,528 @@ const MasterListView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   );
 };
 
+// ─── Active Sessions View (Audit & Active Management) ───────────────────────────
+const ActiveSessionsView: React.FC<{ onBack: () => void; onMasterList: () => void }> = ({ onBack, onMasterList }) => {
+  const { smtUser } = useSmtAuth();
+  const { showToast } = useToast();
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('removed_desc');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+  
+  // Details modal
+  const [selectedSession, setSelectedSession] = useState<any | null>(null);
+  const [consumptionHistory, setConsumptionHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  
+  // Confirm Delete
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [msg, setMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+  
+  // Dynamic tick for countdowns
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const isSuperAdmin = smtUser?.role === 'Super Admin';
+
+  const loadSessions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.activeSessions(search, sort, page);
+      setRecords(data.records || []);
+      setTotalPages(data.totalPages || 1);
+      setTotalRecords(data.totalRecords || 0);
+    } catch (err: any) {
+      console.error(err);
+      setMsg({ type: 'error', text: err.message || 'Failed to fetch active sessions' });
+    }
+    setLoading(false);
+  }, [search, sort, page]);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  const handleOpenDetails = async (session: any) => {
+    setSelectedSession(session);
+    setConsumptionHistory([]);
+    setLoadingHistory(true);
+    try {
+      const data = await apiFetch(`/api/smt/sp-master/consumption?canId=${session.can_id}`);
+      setConsumptionHistory(data || []);
+    } catch (err) {
+      console.error('Failed to load consumption history:', err);
+    }
+    setLoadingHistory(false);
+  };
+
+  const handleDeleteClick = (session: any) => {
+    if (!isSuperAdmin) {
+      showToast('Unauthorized: Only Super Admin users can delete active sessions.', 'error');
+      return;
+    }
+    setConfirmDeleteId(session.id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDeleteId) return;
+    setDeleting(true);
+    try {
+      await api.deleteActiveSession(confirmDeleteId);
+      showToast('Session soft-deleted successfully.', 'success');
+      setConfirmDeleteId(null);
+      loadSessions();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete active session', 'error');
+    }
+    setDeleting(false);
+  };
+
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'THAWING': return styles.badgeBlue;
+      case 'READY': return styles.badgeGreen;
+      case 'IN_USE': return styles.badgeAmber;
+      case 'COMPLETED': return styles.badgeGray;
+      case 'EXPIRED': return styles.badgeRed;
+      case 'DISCARDED': return styles.badgeRed;
+      default: return styles.badgeGray;
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'THAWING': return 'Thawing';
+      case 'READY': return 'Ready to Use';
+      case 'IN_USE': return 'In Use';
+      case 'COMPLETED': return 'Completed';
+      case 'EXPIRED': return 'Expired';
+      case 'DISCARDED': return 'Discarded';
+      default: return status;
+    }
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div className={styles.header}>
+        <div className={styles.headerLeft}>
+          <div className={styles.headerIcon}><Clock size={22}/></div>
+          <div>
+            <p className={styles.headerTitle}>Active Solder Paste Management</p>
+            <p className={styles.headerSub}>Audit history and active session tracking</p>
+          </div>
+        </div>
+        <div className={styles.headerRight}>
+        </div>
+      </div>
+
+      <div className={styles.tabsContainer}>
+        <button className={styles.tab} onClick={onBack}>
+          <FlaskConical size={16}/> Operation
+        </button>
+        <button className={`${styles.tab} ${styles.tabActive}`}>
+          <Clock size={16}/> Active Management
+        </button>
+        <button className={styles.tab} onClick={onMasterList}>
+          <List size={16}/> Master List
+        </button>
+      </div>
+
+      <div className={styles.body}>
+        {msg && (
+          <div className={`${styles.alertBox} ${msg.type === 'error' ? styles.alertError : styles.alertSuccess}`}>
+            {msg.type === 'error' ? <XCircle size={15}/> : <CheckCircle2 size={15}/>}
+            {msg.text}
+            <button onClick={() => setMsg(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}><X size={14}/></button>
+          </div>
+        )}
+
+        {/* Toolbar */}
+        <div className={styles.toolbar}>
+          <input 
+            className={styles.searchBox} 
+            placeholder='Search model, make, can ID, operator…' 
+            value={search} 
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+          />
+          <select 
+            className={styles.filterSelect} 
+            value={sort} 
+            onChange={e => { setSort(e.target.value); setPage(1); }}
+          >
+            <option value='removed_desc'>Removal Time (Newest)</option>
+            <option value='removed_asc'>Removal Time (Oldest)</option>
+            <option value='model_asc'>Model (A-Z)</option>
+            <option value='model_desc'>Model (Z-A)</option>
+            <option value='can_asc'>Can ID (A-Z)</option>
+            <option value='can_desc'>Can ID (Z-A)</option>
+          </select>
+          <button className={styles.btnSecondary} onClick={loadSessions}><RefreshCw size={14}/> Refresh</button>
+        </div>
+
+        {/* Table */}
+        {loading ? (
+          <div className={styles.spinner}><div className={styles.spinnerRing}/></div>
+        ) : records.length === 0 ? (
+          <div className={styles.empty}>
+            <div className={styles.emptyIcon}>⏰</div>
+            <div className={styles.emptyText}>No active tracking sessions found</div>
+          </div>
+        ) : (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Can ID</th>
+                  <th>Product Info</th>
+                  <th>Operator</th>
+                  <th>Thawing Stage</th>
+                  <th>Working Stage</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {records.map(row => {
+                  const nowMs = now.getTime();
+                  const thawReadyAt = new Date(row.thawing_ready_at);
+                  const workExpAt = new Date(row.working_expires_at);
+                  const isThawDone = nowMs >= thawReadyAt.getTime();
+                  const isWorkExp = nowMs >= workExpAt.getTime();
+
+                  const thawRemMs = Math.max(0, thawReadyAt.getTime() - nowMs);
+                  const workRemMs = Math.max(0, workExpAt.getTime() - nowMs);
+
+                  // Dynamically resolve calculatedStatus
+                  const remainingWeight = Number(row.remaining_weight_g ?? row.total_weight_g);
+                  const isCanExpired = new Date(row.expiry_date) < now;
+                  
+                  let calculatedStatus = row.status || 'THAWING';
+                  if (row.is_deleted) {
+                    calculatedStatus = 'DISCARDED';
+                  } else if (remainingWeight <= 0) {
+                    calculatedStatus = 'COMPLETED';
+                  } else if (isCanExpired || isWorkExp) {
+                    calculatedStatus = 'EXPIRED';
+                  } else if (isThawDone && !isWorkExp) {
+                    if (Number(row.used_weight_g) > 0) {
+                      calculatedStatus = 'IN_USE';
+                    } else {
+                      calculatedStatus = 'READY';
+                    }
+                  } else {
+                    calculatedStatus = 'THAWING';
+                  }
+
+                  return (
+                    <tr key={row.id}>
+                      <td>
+                        <span className={`${styles.badge} ${styles.badgeBlue}`}>{row.can_barcode}</span>
+                      </td>
+                      <td>
+                        <strong>{row.model_name}</strong>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{row.make}</div>
+                      </td>
+                      <td>{row.operator}</td>
+                      <td>
+                        <div style={{ fontSize: '0.8rem' }}>
+                          <div>Start: {fmtDT(new Date(row.removed_at))}</div>
+                          <div>Target: {fmtDT(thawReadyAt)}</div>
+                          <div style={{ marginTop: '0.2rem' }}>
+                            {calculatedStatus === 'THAWING' ? (
+                              <span className={`${styles.timerBadge} ${styles.timerBadgeThawing}`}>
+                                <Clock size={11}/> Thawing: {fmtMs(thawRemMs)} remaining
+                              </span>
+                            ) : (
+                              <span className={`${styles.timerBadge} ${styles.timerBadgeDone}`}>
+                                Thawing Done
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '0.8rem' }}>
+                          <div>Max Limit: {row.max_working_hours}h</div>
+                          <div>Expiry: {fmtDT(workExpAt)}</div>
+                          <div style={{ marginTop: '0.2rem' }}>
+                            {calculatedStatus === 'THAWING' ? (
+                              <span className={styles.badgeGray} style={{ fontSize: '0.7rem', padding: '0.1rem 0.3rem' }}>
+                                Pending Thawing
+                              </span>
+                            ) : calculatedStatus === 'EXPIRED' || isWorkExp ? (
+                              <span className={`${styles.timerBadge} ${styles.timerBadgeExpired}`}>
+                                Expired
+                              </span>
+                            ) : calculatedStatus === 'COMPLETED' ? (
+                              <span className={`${styles.timerBadge} ${styles.timerBadgeDone}`}>
+                                Completed
+                              </span>
+                            ) : (
+                              <span className={`${styles.timerBadge} ${styles.timerBadgeWorking}`}>
+                                <Timer size={11}/> Expires in: {fmtMs(workRemMs)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`${styles.badge} ${getStatusBadgeClass(calculatedStatus)}`}>
+                          {getStatusLabel(calculatedStatus)}
+                        </span>
+                      </td>
+                      <td>
+                        <div className={styles.actionsCell}>
+                          <button 
+                            className={styles.btnSecondary} 
+                            onClick={() => handleOpenDetails(row)} 
+                            title='View Details'
+                          >
+                            <Eye size={13}/> View
+                          </button>
+                          <button 
+                            className={styles.btnDanger} 
+                            onClick={() => handleDeleteClick(row)} 
+                            title='Delete Session'
+                          >
+                            <Trash2 size={13}/> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {records.length > 0 && (
+          <div className={styles.paginationRow}>
+            <div className={styles.paginationInfo}>
+              Showing page <strong>{page}</strong> of <strong>{totalPages}</strong> ({totalRecords} total sessions)
+            </div>
+            <div className={styles.paginationBtns}>
+              <button 
+                className={styles.pgBtn} 
+                disabled={page <= 1} 
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                <button 
+                  key={p} 
+                  className={`${styles.pgBtn} ${p === page ? styles.pgBtnActive : ''}`} 
+                  onClick={() => setPage(p)}
+                >
+                  {p}
+                </button>
+              ))}
+              <button 
+                className={styles.pgBtn} 
+                disabled={page >= totalPages} 
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Details Modal */}
+      {selectedSession && (
+        <div className={styles.overlay} onClick={e => { if (e.target === e.currentTarget) setSelectedSession(null); }}>
+          <div className={`${styles.modal} ${styles.detailsModal}`}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Session Details — {selectedSession.can_barcode}</h3>
+              <button className={styles.modalClose} onClick={() => setSelectedSession(null)}><X size={16}/></button>
+            </div>
+            <div className={styles.modalBody}>
+              <div className={styles.detailsGrid}>
+                {/* Product Snapshot */}
+                <div className={styles.detailsSection}>
+                  <p className={styles.detailsTitle}>Product Information</p>
+                  <div className={styles.detailsRow}>
+                    <span className={styles.detailsLabel}>Model Name</span>
+                    <span className={styles.detailsValue}>{selectedSession.model_name}</span>
+                  </div>
+                  <div className={styles.detailsRow}>
+                    <span className={styles.detailsLabel}>Make</span>
+                    <span className={styles.detailsValue}>{selectedSession.make}</span>
+                  </div>
+                  <div className={styles.detailsRow}>
+                    <span className={styles.detailsLabel}>Can Barcode</span>
+                    <span className={styles.detailsValue}>{selectedSession.can_barcode}</span>
+                  </div>
+                  <div className={styles.detailsRow}>
+                    <span className={styles.detailsLabel}>Mfg Date</span>
+                    <span className={styles.detailsValue}>{fmtDate(selectedSession.manufacturing_date)}</span>
+                  </div>
+                  <div className={styles.detailsRow}>
+                    <span className={styles.detailsLabel}>Expiry Date</span>
+                    <span className={styles.detailsValue}>{fmtDate(selectedSession.expiry_date)}</span>
+                  </div>
+                </div>
+
+                {/* Weight Details */}
+                <div className={styles.detailsSection}>
+                  <p className={styles.detailsTitle}>Usage & Weight</p>
+                  <div className={styles.detailsRow}>
+                    <span className={styles.detailsLabel}>Total Weight</span>
+                    <span className={styles.detailsValue}>{Number(selectedSession.total_weight_g).toFixed(1)}g</span>
+                  </div>
+                  <div className={styles.detailsRow}>
+                    <span className={styles.detailsLabel}>Used Weight</span>
+                    <span className={styles.detailsValue}>{Number(selectedSession.used_weight_g || 0).toFixed(1)}g</span>
+                  </div>
+                  <div className={styles.detailsRow}>
+                    <span className={styles.detailsLabel}>Remaining Weight</span>
+                    <span className={styles.detailsValue} style={{ color: '#059669', fontWeight: 800 }}>
+                      {Number(selectedSession.remaining_weight_g ?? selectedSession.total_weight_g).toFixed(1)}g
+                    </span>
+                  </div>
+                </div>
+
+                {/* Timing & Lifecycle */}
+                <div className={`${styles.detailsSection} ${styles.detailsFullWidth}`}>
+                  <p className={styles.detailsTitle}>Refrigerator Removal & Thawing/Working Timestamps</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <div className={styles.detailsRow}>
+                        <span className={styles.detailsLabel}>Removed At</span>
+                        <span className={styles.detailsValue}>{fmtDT(new Date(selectedSession.removed_at))}</span>
+                      </div>
+                      <div className={styles.detailsRow}>
+                        <span className={styles.detailsLabel}>Thawing Min Time</span>
+                        <span className={styles.detailsValue}>{selectedSession.min_thawing_hours} hours</span>
+                      </div>
+                      <div className={styles.detailsRow}>
+                        <span className={styles.detailsLabel}>Thawing Target</span>
+                        <span className={styles.detailsValue}>{fmtDT(new Date(selectedSession.thawing_ready_at))}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className={styles.detailsRow}>
+                        <span className={styles.detailsLabel}>Operator</span>
+                        <span className={styles.detailsValue}>{selectedSession.operator}</span>
+                      </div>
+                      <div className={styles.detailsRow}>
+                        <span className={styles.detailsLabel}>Working Max Limit</span>
+                        <span className={styles.detailsValue}>{selectedSession.max_working_hours} hours</span>
+                      </div>
+                      <div className={styles.detailsRow}>
+                        <span className={styles.detailsLabel}>Working Expiry</span>
+                        <span className={styles.detailsValue}>{fmtDT(new Date(selectedSession.working_expires_at))}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {selectedSession.notes && (
+                    <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                      <span className={styles.detailsLabel}>Session Notes:</span>
+                      <p style={{ margin: '0.25rem 0 0 0', fontStyle: 'italic', fontSize: '0.85rem' }}>{selectedSession.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Audit & Consumption logs */}
+                <div className={`${styles.detailsSection} ${styles.detailsFullWidth}`}>
+                  <p className={styles.detailsTitle}>Can Consumption Logs (Audit Trail)</p>
+                  {loadingHistory ? (
+                    <div style={{ textAlign: 'center', padding: '1rem' }}>Loading logs...</div>
+                  ) : consumptionHistory.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '1rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                      No consumption logs recorded for this can.
+                    </div>
+                  ) : (
+                    <div className={styles.tableWrap} style={{ maxHeight: '200px' }}>
+                      <table className={styles.table}>
+                        <thead>
+                          <tr>
+                            <th>Time</th>
+                            <th>Operator</th>
+                            <th>Consumed</th>
+                            <th>Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {consumptionHistory.map((h, i) => (
+                            <tr key={i}>
+                              <td>{fmtDT(new Date(h.consumed_at))}</td>
+                              <td>{h.operator}</td>
+                              <td><strong>{Number(h.weight_used_g).toFixed(1)}g</strong></td>
+                              <td>{h.notes || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className={styles.modalFooter}>
+              <button className={styles.btnSecondary} onClick={() => setSelectedSession(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteId && (
+        <div className={styles.overlay} onClick={() => setConfirmDeleteId(null)}>
+          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle} style={{ color: '#dc2626' }}>Confirm Soft Delete</h3>
+              <button className={styles.modalClose} onClick={() => setConfirmDeleteId(null)}><X size={16}/></button>
+            </div>
+            <div className={styles.modalBody}>
+              <p style={{ fontSize: '0.9rem', color: '#374151', margin: '0 0 1rem 0' }}>
+                Are you sure you want to delete this active session? The session status will be updated to <strong>DISCARDED</strong> and soft-deleted.
+              </p>
+              <p style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 600 }}>
+                ⚠️ This is a soft-delete action: the record will be hidden from active lists but kept in history for audit compliance.
+              </p>
+            </div>
+            <div className={styles.modalFooter}>
+              <button className={styles.btnSecondary} onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+              <button 
+                className={styles.btnDanger} 
+                onClick={handleConfirmDelete} 
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting...' : 'Yes, Soft Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Main Export ──────────────────────────────────────────────────────────────
 const SolderPasteManagement: React.FC = () => {
-  const [view, setView] = useState<'operation' | 'masterList'>('operation');
-  return view === 'masterList'
-    ? <MasterListView onBack={() => setView('operation')}/>
-    : <OperationView onMasterList={() => setView('masterList')}/>;
+  const [view, setView] = useState<'operation' | 'activeSessions' | 'masterList'>('operation');
+  
+  if (view === 'masterList') {
+    return <MasterListView onBack={() => setView('operation')} onViewActive={() => setView('activeSessions')}/>;
+  }
+  if (view === 'activeSessions') {
+    return <ActiveSessionsView onBack={() => setView('operation')} onMasterList={() => setView('masterList')}/>;
+  }
+  return <OperationView onMasterList={() => setView('masterList')} onViewActive={() => setView('activeSessions')}/>;
 };
 
 export default SolderPasteManagement;

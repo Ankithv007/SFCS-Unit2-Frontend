@@ -129,7 +129,6 @@ const PostAoi: React.FC = () => {
     // Active Scan Dashboard State
     const [stats, setStats] = useState<{
         workOrderQuantity: number;
-        processedQuantity: number;
         passed: number;
         failed: number;
         pending: number;
@@ -138,7 +137,6 @@ const PostAoi: React.FC = () => {
         scans: ScanRecord[];
     }>({
         workOrderQuantity: 0,
-        processedQuantity: 0,
         passed: 0,
         failed: 0,
         pending: 0,
@@ -1699,10 +1697,6 @@ const PostAoi: React.FC = () => {
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #2563eb', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>WO Quantity</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e293b' }}>{stats.workOrderQuantity}</h2>
-                        </div>
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #6366f1', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Processed</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e293b' }}>{stats.processedQuantity}</h2>
                         </div>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #16a34a', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>

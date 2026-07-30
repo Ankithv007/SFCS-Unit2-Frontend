@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminService, type AdminUser, type AdminDepartment, type AuditLogItem } from '../services/adminService';
 import { useToast } from '../../../components/Toast';
 import { sessionPasswords } from '../components/UserModal';
-import { systemPagesConfig } from '../../../routes';
+import { systemPagesConfig } from '../../../constants/systemPages';
 
 export function useAdminPanel() {
     const { showToast } = useToast();

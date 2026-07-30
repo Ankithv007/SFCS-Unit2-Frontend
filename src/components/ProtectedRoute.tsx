@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from './Toast';
-import { systemPagesConfig } from '../routes';
+import { systemPagesConfig } from '../constants/systemPages';
 
 interface ProtectedRouteProps {
     children: React.ReactNode;

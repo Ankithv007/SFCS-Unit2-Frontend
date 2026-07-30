@@ -1,6 +1,8 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../utils/api';
 
+import { systemPagesConfig } from '../constants/systemPages';
+
 export interface User {
     email: string;
     name?: string;
@@ -74,6 +76,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (data.token) {
                     localStorage.setItem('auth_token', data.token); // token refreshed!
                 }
+                
+                // Automatically sync system pages in the background
+                apiFetch('/api/auth/admin/system-pages/sync', {
+                    method: 'POST',
+                    body: JSON.stringify({ routes: systemPagesConfig })
+                }).catch(err => console.error('Auto system pages sync failed:', err));
             } else {
                 // Clear token if invalid profile
                 localStorage.removeItem('auth_token');

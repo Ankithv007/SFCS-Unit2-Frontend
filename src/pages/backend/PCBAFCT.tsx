@@ -259,10 +259,8 @@ const PCBAFCT: React.FC = () => {
     const [totalRecords, setTotalRecords] = useState(0);
     const [editingScan, setEditingScan] = useState<ScanRecord | null>(null);
 
-    const isAdmin = 
-        ['Super Admin', 'Admin', 'User'].includes(user?.role || '') ||
-        backendUser?.userId === 'ADMIN' ||
-        ['superadmin', 'admin', 'user', 'operator'].includes((backendUser?.role || '').toLowerCase());
+    const canEdit = !!user;
+    const canDelete = user?.role === 'Super Admin';
 
     const [activeModal, setActiveModal] = useState<{
         batchId: number;
@@ -434,9 +432,16 @@ const PCBAFCT: React.FC = () => {
                 const resolvedVal = preValRes.data?.barcode || scannedVal;
                 setPendingBarcode(resolvedVal);
                 setBarcode('');
+            } else {
+                showToast(preValRes?.message || 'Validation failed', 'error');
+                setBarcode('');
+                setTimeout(() => {
+                    scanInputRef.current?.focus();
+                }, 100);
             }
         } catch (error: any) {
             showToast(formatScanError(error), 'error');
+            setBarcode('');
             setTimeout(() => {
                 scanInputRef.current?.focus();
             }, 100);
@@ -690,7 +695,7 @@ const PCBAFCT: React.FC = () => {
                                             <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
                                                 {batch.status === 'completed' ? <><Eye size={14} /> View</> : <><Search size={14} /> Start Scanning</>}
                                             </button>
-                                            {showDelete && user?.role === 'Super Admin' && (
+                                            {showDelete && canDelete && (
                                                 <button className={sharedStyles.deleteButton} onClick={() => handleDeleteBatch(batch.id)}>
                                                     <Trash2 size={14} />
                                                 </button>
@@ -872,7 +877,7 @@ const PCBAFCT: React.FC = () => {
                                                     <td>{scan.remark_debug_remarks || '-'}</td>
                                                     <td>
                                                         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                                            {isAdmin && (
+                                                            {canEdit && (
                                                                 <button
                                                                     className={sharedStyles.secondaryButton}
                                                                     onClick={() => setEditingScan(scan)}
@@ -905,26 +910,26 @@ const PCBAFCT: React.FC = () => {
                                                                     <Pencil size={14} />
                                                                 </button>
                                                             )}
-                                                            {user?.role === 'Super Admin' && (
-<button
-                                                                className={sharedStyles.deleteBtn}
-                                                                onClick={async () => {
-                                                                    if (!checkDeletePermission(user?.role, showToast)) {
-                                                                        return;
-                                                                    }
-                                                                    if (!window.confirm('Are you sure you want to delete this record?')) return;
-                                                                    try {
-                                                                        await apiFetch(`/api/backend/pcba-fct/scan/${scan.id}`, { method: 'DELETE' });
-                                                                        showToast('Record deleted successfully.', 'success');
-                                                                        fetchScans(activeBatch!.id, currentPage);
-                                                                    } catch (err: any) {
-                                                                        showToast(err?.message || 'Failed to delete record', 'error');
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <Trash2 size={14} />
-                                                            </button>
-)}
+                                                            {canDelete && (
+                                                                <button
+                                                                    className={sharedStyles.deleteBtn}
+                                                                    onClick={async () => {
+                                                                        if (!checkDeletePermission(user?.role, showToast)) {
+                                                                            return;
+                                                                        }
+                                                                        if (!window.confirm('Are you sure you want to delete this record?')) return;
+                                                                        try {
+                                                                            await apiFetch(`/api/backend/pcba-fct/scan/${scan.id}`, { method: 'DELETE' });
+                                                                            showToast('Record deleted successfully.', 'success');
+                                                                            fetchScans(activeBatch!.id, currentPage);
+                                                                        } catch (err: any) {
+                                                                            showToast(err?.message || 'Failed to delete record', 'error');
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>

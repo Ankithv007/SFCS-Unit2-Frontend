@@ -88,10 +88,8 @@ const Rework: React.FC = () => {
 
     const [editingScan, setEditingScan] = useState<ScanRecord | null>(null);
 
-    const isAdmin = 
-        ['Super Admin', 'Admin', 'User'].includes(user?.role || '') ||
-        backendUser?.userId === 'ADMIN' ||
-        ['superadmin', 'admin', 'user', 'operator'].includes((backendUser?.role || '').toLowerCase());
+    const canEdit = !!user;
+    const canDelete = user?.role === 'Super Admin';
 
     const [barcode, setBarcode] = useState('');
     const scanInputRef = useRef<HTMLInputElement>(null);
@@ -472,7 +470,7 @@ const Rework: React.FC = () => {
                                                 <td style={{ fontWeight: 600 }}>{scan.repair_remark || scan.remarks || '-'}</td>
                                                 <td>
                                                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}>
-                                                        {isAdmin && (
+                                                        {canEdit && (
                                                             <button
                                                                 className={sharedStyles.secondaryButton}
                                                                 onClick={() => setEditingScan(scan)}
@@ -495,7 +493,7 @@ const Rework: React.FC = () => {
                                                                 <Pencil size={14} />
                                                             </button>
                                                         )}
-                                                        {user?.role === 'Super Admin' && (
+                                                        {canDelete && (
 <button
                                                             className={sharedStyles.deleteBtn}
                                                             onClick={async () => {

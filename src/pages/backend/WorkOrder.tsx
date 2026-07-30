@@ -31,6 +31,8 @@ const WorkOrder: React.FC = () => {
     const { showToast } = useToast();
     const [workOrders, setWorkOrders] = useState<WorkOrderRecord[]>([]);
 
+    const canDelete = user?.role === 'Super Admin';
+
     // Form State
     const [userSequence, setUserSequence] = useState('');
     const [quantity, setQuantity] = useState('');
@@ -273,15 +275,15 @@ const WorkOrder: React.FC = () => {
                                                     <Eye size={14} /> View
                                                 </button>
 
-                                                {user?.role === 'Super Admin' && (
-<button
-                                                    type="button"
-                                                    className={styles.deleteBtn}
-                                                    onClick={() => handleDeleteClick(wo)}
-                                                >
-                                                    <Trash2 size={14} /> Delete
-                                                </button>
-)}
+                                                {canDelete && (
+                                                    <button
+                                                        type="button"
+                                                        className={styles.deleteBtn}
+                                                        onClick={() => handleDeleteClick(wo)}
+                                                    >
+                                                        <Trash2 size={14} /> Delete
+                                                    </button>
+                                                )}
 
                                             </div>
                                         </td>

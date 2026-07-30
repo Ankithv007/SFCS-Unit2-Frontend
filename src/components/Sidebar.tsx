@@ -2,6 +2,49 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from './Toast';
+import {
+    Home,
+    Shield,
+    Cpu,
+    ClipboardList,
+    FileCheck,
+    Package,
+    Droplets,
+    Layers,
+    FileText,
+    RefreshCw,
+    Thermometer,
+    Flame,
+    Activity,
+    Barcode,
+    Printer,
+    Eye,
+    Wrench,
+    PackageCheck,
+    ScanLine,
+    Clock,
+    Server,
+    Grid,
+    ShieldCheck,
+    Zap,
+    CircuitBoard,
+    Hammer,
+    PlayCircle,
+    SearchCheck,
+    Bug,
+    FlaskConical,
+    Warehouse,
+    ClipboardCheck,
+    Sliders,
+    Radio,
+    Route,
+    Split,
+    Wind,
+    Boxes,
+    ShoppingCart,
+    RotateCcw,
+    BarChart3
+} from 'lucide-react';
 import styles from './Sidebar.module.css';
 
 interface SidebarProps {
@@ -87,7 +130,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                 onClick={() => navigate('/dashboard')}
                 title="Home"
             >
-                <span className={styles.menuIcon}>🏠</span>
+                <span className={styles.menuIcon}>
+                    <Home size={20} />
+                </span>
                 <span className={styles.menuText}>Home</span>
             </div>
 
@@ -97,7 +142,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                     onClick={() => navigate('/admin-panel')}
                     title="Admin Panel"
                 >
-                    <span className={styles.menuIcon}>🛡️</span>
+                    <span className={styles.menuIcon}>
+                        <Shield size={20} />
+                    </span>
                     <span className={styles.menuText}>Admin Panel</span>
                 </div>
             )}
@@ -111,17 +158,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                         title="SMT"
                     >
                         <span className={styles.menuIcon}>
-                            <img 
-                                src="https://img.icons8.com/?size=100&id=T0drIznsJmCi&format=png&color=000000" 
-                                alt="SMT" 
-                                className={styles.imageIcon}
-                            />
+                            <Cpu size={20} />
                         </span>
                         <span className={styles.menuText}>SMT</span>
                         <span className={styles.arrow}>{expandedModule === 'smt' ? '▼' : '▶'}</span>
                     </div>
 
-                    {expandedModule === 'smt' && (
+                    {expandedModule === 'smt' && isExpanded && (
                         <div className={styles.submenu}>
                             {hasPermission('smt_work_order') && (
                                 <div
@@ -129,7 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/smt/work-order')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <ClipboardList size={18} />
                                     </span> Work Order
                                 </div>
                             )}
@@ -139,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/smt/qms')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Document Process" className={styles.imageIcon} />
+                                        <FileCheck size={18} />
                                     </span> Document Process
                                 </div>
                             )}
@@ -149,7 +192,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/smt/material-management')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Material Management" className={styles.imageIcon} />
+                                        <Package size={18} />
                                     </span> Material Mgmt
                                 </div>
                             )}
@@ -159,7 +202,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/smt/solder-paste')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Solder Paste Management" className={styles.imageIcon} />
+                                        <Droplets size={18} />
                                     </span> Solder Paste Management
                                 </div>
                             )}
@@ -169,11 +212,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => setIsStencilMgmtExpanded(!isStencilMgmtExpanded)}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Stencil Management" className={styles.imageIcon} />
+                                        <Layers size={18} />
                                     </span> Stencil Management
                                 </div>
                             )}
-                            {isStencilMgmtExpanded && (
+                            {isStencilMgmtExpanded && isExpanded && (
                                 <div className={styles.subSubmenu}>
                                     {hasPermission('smt_stencil_master') && (
                                         <div
@@ -183,7 +226,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/stencil/master');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Stencil Master Record
+                                            <span className={styles.menuIcon}>
+                                                <FileText size={16} />
+                                            </span> Stencil Master Record
                                         </div>
                                     )}
                                     {hasPermission('smt_stencil_lifecycle') && (
@@ -194,7 +239,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/stencil/lifecycle');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Life Cycle Management
+                                            <span className={styles.menuIcon}>
+                                                <RefreshCw size={16} />
+                                            </span> Life Cycle Management
                                         </div>
                                     )}
                                 </div>
@@ -205,7 +252,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/smt/msd-tracker')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="MSD Tracker" className={styles.imageIcon} />
+                                        <Thermometer size={18} />
                                     </span> MSD Tracker
                                 </div>
                             )}
@@ -215,7 +262,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/smt/baking-tracking')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Baking Tracking Record" className={styles.imageIcon} />
+                                        <Flame size={18} />
                                     </span> Baking Tracking Record
                                 </div>
                             )}
@@ -232,11 +279,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => setIsSmtLineExpanded(!isSmtLineExpanded)}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="SMT Line" className={styles.imageIcon} />
+                                        <Activity size={18} />
                                     </span> SMT Line
                                 </div>
                             )}
-                            {isSmtLineExpanded && (
+                            {isSmtLineExpanded && isExpanded && (
                                 <div className={styles.subSubmenu}>
                                     {hasPermission('smt_serial_number') && (
                                         <div
@@ -246,7 +293,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/serial-number');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Serial Generation
+                                            <span className={styles.menuIcon}>
+                                                <Barcode size={16} />
+                                            </span> Serial Generation
                                         </div>
                                     )}
                                     {hasPermission('smt_printing') && (
@@ -257,7 +306,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/printing');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Printing
+                                            <span className={styles.menuIcon}>
+                                                <Printer size={16} />
+                                            </span> Printing
                                         </div>
                                     )}
                                     {hasPermission('smt_pre_aoi') && (
@@ -268,7 +319,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/pre-aoi');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Pre AOI
+                                            <span className={styles.menuIcon}>
+                                                <Eye size={16} />
+                                            </span> Pre AOI
                                         </div>
                                     )}
                                     {hasPermission('smt_post_aoi') && (
@@ -279,7 +332,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/post-aoi');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Post AOI
+                                            <span className={styles.menuIcon}>
+                                                <Eye size={16} />
+                                            </span> Post AOI
                                         </div>
                                     )}
                                     {hasPermission('smt_rework') && (
@@ -290,7 +345,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/rework');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Rework
+                                            <span className={styles.menuIcon}>
+                                                <Wrench size={16} />
+                                            </span> Rework
                                         </div>
                                     )}
                                     {hasPermission('smt_fg') && (
@@ -301,7 +358,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/smt-fg');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> SMT FG
+                                            <span className={styles.menuIcon}>
+                                                <PackageCheck size={16} />
+                                            </span> SMT FG
                                         </div>
                                     )}
                                     {hasPermission('smt_track_items') && (
@@ -312,7 +371,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/track-items');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Track Items
+                                            <span className={styles.menuIcon}>
+                                                <ScanLine size={16} />
+                                            </span> Track Items
                                         </div>
                                     )}
                                     {hasPermission('smt_downtime') && (
@@ -323,7 +384,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                                 navigate('/smt/downtime-tracker');
                                             }}
                                         >
-                                            <span className={styles.menuIcon} style={{ fontSize: '10px', minWidth: '14px', marginRight: '8px' }}>•</span> Downtime Tracker
+                                            <span className={styles.menuIcon}>
+                                                <Clock size={16} />
+                                            </span> Downtime Tracker
                                         </div>
                                     )}
                                 </div>
@@ -342,17 +405,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                         title="Backend"
                     >
                         <span className={styles.menuIcon}>
-                            <img 
-                                src="https://img.icons8.com/?size=100&id=NPLWj1T8aEjW&format=png&color=000000" 
-                                alt="Backend" 
-                                className={styles.imageIcon}
-                            />
+                            <Server size={20} />
                         </span>
                         <span className={styles.menuText}>Backend</span>
                         <span className={styles.arrow}>{expandedModule === 'backend' ? '▼' : '▶'}</span>
                     </div>
 
-                    {expandedModule === 'backend' && (
+                    {expandedModule === 'backend' && isExpanded && (
                         <div className={styles.submenu}>
                             {hasPermission('backend_work_order') && (
                                 <div
@@ -360,7 +419,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/work-order')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Work Order" className={styles.imageIcon} />
+                                        <ClipboardList size={18} />
                                     </span> Work Order
                                 </div>
                             )}
@@ -370,7 +429,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/pth')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="PTH" className={styles.imageIcon} />
+                                        <Grid size={18} />
                                     </span> PTH
                                 </div>
                             )}
@@ -380,7 +439,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/vi')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="VI" className={styles.imageIcon} />
+                                        <Eye size={18} />
                                     </span> VI
                                 </div>
                             )}
@@ -390,7 +449,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/qa')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="QA" className={styles.imageIcon} />
+                                        <ShieldCheck size={18} />
                                     </span> QA
                                 </div>
                             )}
@@ -400,7 +459,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/flashing')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Flashing" className={styles.imageIcon} />
+                                        <Zap size={18} />
                                     </span> Flashing
                                 </div>
                             )}
@@ -410,7 +469,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/pcba-fct')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="PCBA-FCT" className={styles.imageIcon} />
+                                        <CircuitBoard size={18} />
                                     </span> PCBA-FCT
                                 </div>
                             )}
@@ -420,7 +479,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/assembly')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Assembly" className={styles.imageIcon} />
+                                        <Hammer size={18} />
                                     </span> Assembly
                                 </div>
                             )}
@@ -430,7 +489,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/unit-testing')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Unit Testing" className={styles.imageIcon} />
+                                        <PlayCircle size={18} />
                                     </span> Unit Testing
                                 </div>
                             )}
@@ -440,7 +499,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/qi')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="QI" className={styles.imageIcon} />
+                                        <SearchCheck size={18} />
                                     </span> QI
                                 </div>
                             )}
@@ -450,7 +509,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/packing')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Packing" className={styles.imageIcon} />
+                                        <PackageCheck size={18} />
                                     </span> Packing
                                 </div>
                             )}
@@ -460,7 +519,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/rework')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Rework" className={styles.imageIcon} />
+                                        <Wrench size={18} />
                                     </span> Rework
                                 </div>
                             )}
@@ -470,7 +529,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/debug')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Debug" className={styles.imageIcon} />
+                                        <Bug size={18} />
                                     </span> Debug
                                 </div>
                             )}
@@ -480,7 +539,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/backend/track-items')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="Track Items" className={styles.imageIcon} />
+                                        <ScanLine size={18} />
                                     </span> Track Items
                                 </div>
                             )}
@@ -497,12 +556,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                         onClick={() => toggleModule('pre-testing')}
                         title="Pre testing (E2E)"
                     >
-                        <span className={styles.menuIcon}>🧪</span>
+                        <span className={styles.menuIcon}>
+                            <FlaskConical size={20} />
+                        </span>
                         <span className={styles.menuText}>Pre testing (E2E)</span>
                         <span className={styles.arrow}>{expandedModule === 'pre-testing' ? '▼' : '▶'}</span>
                     </div>
 
-                    {expandedModule === 'pre-testing' && (
+                    {expandedModule === 'pre-testing' && isExpanded && (
                         <div className={styles.submenu}>
                             {hasPermission('pre_warehouse') && (
                                 <div
@@ -510,7 +571,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/pre-testing/warehouse')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <Warehouse size={18} />
                                     </span> Warehouse
                                 </div>
                             )}
@@ -520,7 +581,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/pre-testing/iqc')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <ClipboardCheck size={18} />
                                     </span> Pre-IQC
                                 </div>
                             )}
@@ -530,7 +591,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/pre-testing/impedance')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <Activity size={18} />
                                     </span> Pre-Impedance
                                 </div>
                             )}
@@ -540,7 +601,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/pre-testing/calibration')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <Sliders size={18} />
                                     </span> Pre-Calibration
                                 </div>
                             )}
@@ -550,7 +611,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/pre-testing/pre-aclr')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <Radio size={18} />
                                     </span> Pre-ACLR
                                 </div>
                             )}
@@ -560,12 +621,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/pre-testing/trace')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <Route size={18} />
                                     </span> Trace
                                 </div>
                             )}
                         </div>
                     )}
+                </div>
+            )}
+            
+            {hasPermission('bom_split') && (
+                <div
+                    className={`${styles.menuItem} ${isActive('/bom-split') ? styles.active : ''}`}
+                    onClick={() => navigate('/bom-split')}
+                    title="BOM Split"
+                >
+                    <span className={styles.menuIcon}>
+                        <Split size={20} />
+                    </span>
+                    <span className={styles.menuText}>BOM Split</span>
                 </div>
             )}
             
@@ -575,7 +649,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                     onClick={() => navigate('/qc-inspection')}
                     title="QC Inspection"
                 >
-                    <span className={styles.menuIcon}>📋</span>
+                    <span className={styles.menuIcon}>
+                        <ClipboardCheck size={20} />
+                    </span>
                     <span className={styles.menuText}>QC Inspection</span>
                 </div>
             )}
@@ -586,7 +662,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                     onClick={() => navigate('/vacuum-leak-test')}
                     title="Vacuum Leak Test"
                 >
-                    <span className={styles.menuIcon}>🔬</span>
+                    <span className={styles.menuIcon}>
+                        <Wind size={20} />
+                    </span>
                     <span className={styles.menuText}>Vacuum Leak Test</span>
                 </div>
             )}
@@ -599,12 +677,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                         onClick={() => toggleModule('inventory-report')}
                         title="Inventory & Report"
                     >
-                        <span className={styles.menuIcon}>📦</span>
+                        <span className={styles.menuIcon}>
+                            <Boxes size={20} />
+                        </span>
                         <span className={styles.menuText}>Inventory & Report</span>
                         <span className={styles.arrow}>{expandedModule === 'inventory-report' ? '▼' : '▶'}</span>
                     </div>
 
-                    {expandedModule === 'inventory-report' && (
+                    {expandedModule === 'inventory-report' && isExpanded && (
                         <div className={styles.submenu}>
                             {hasPermission('inv_purchase_order') && (
                                 <div
@@ -612,7 +692,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/purchase-order')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <ShoppingCart size={18} />
                                     </span> Purchase Order (PO)
                                 </div>
                             )}
@@ -622,7 +702,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/wip-stack')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <Layers size={18} />
                                     </span> WIP Stack [Prod]
                                 </div>
                             )}
@@ -632,7 +712,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/return-wip')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <RotateCcw size={18} />
                                     </span> Return From WIP
                                 </div>
                             )}
@@ -642,7 +722,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     onClick={() => navigate('/report')}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <img src="https://img.icons8.com/?size=100&id=cjZ5daEtmKUc&format=png&color=000000" alt="icon" className={styles.imageIcon} />
+                                        <BarChart3 size={18} />
                                     </span> Report
                                 </div>
                             )}

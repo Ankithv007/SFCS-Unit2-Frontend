@@ -37,6 +37,7 @@ import MsdBomView from './pages/smt/msd-bom-view/MsdBomView';
 import StencilMasterRecord from './pages/smt/stencil-master-record/StencilMasterRecord';
 import StencilLifecycleManagement from './pages/smt/stencil-lifecycle-management/StencilLifecycleManagement';
 import BakingTrackingRecord from './pages/smt/baking-tracking-record/BakingTrackingRecord';
+import { BomSplit } from './pages/bom-split/BomSplit';
 
 import WorkOrderBackend from './pages/backend/WorkOrder';
 import PTH from './pages/backend/PTH';
@@ -93,6 +94,9 @@ export const systemPagesConfig: SystemPageRoute[] = [
 
     // Vacuum Leak Test
     { permission_key: 'vacuum_leak_test', module_name: 'Vacuum Leak Test', page_name: 'Vacuum Leak Test', route_path: '/vacuum-leak-test', display_order: 40, page_type: 'PAGE', icon: 'Wind' },
+
+    // BOM Split
+    { permission_key: 'bom_split', module_name: 'BOM Split', page_name: 'BOM Split', route_path: '/bom-split', display_order: 45, page_type: 'PAGE', icon: 'Split' },
 
     // SMT Module
     { permission_key: 'smt_dashboard', module_name: 'SMT', page_name: 'SMT Dashboard', route_path: '/smt', display_order: 50, page_type: 'PAGE', icon: 'Cpu', parent_module: 'SMT' },
@@ -193,6 +197,14 @@ export const router = createBrowserRouter([
                 element: (
                     <ProtectedRoute>
                         <QCInspection />
+                    </ProtectedRoute>
+                ),
+            },
+            {
+                path: '/bom-split',
+                element: (
+                    <ProtectedRoute>
+                        <BomSplit />
                     </ProtectedRoute>
                 ),
             },

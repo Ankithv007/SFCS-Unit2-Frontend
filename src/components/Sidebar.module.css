@@ -4,14 +4,14 @@
     height: calc(100vh - 96px);
     display: flex;
     flex-direction: column;
-    padding: 20px 0;
+    padding: 20px 8px;
     box-sizing: border-box;
     position: fixed;
     left: 8px;
     top: 88px;
     overflow-y: auto;
     overflow-x: hidden;
-    transition: width 0.3s ease, background-color 0.3s;
+    transition: width 0.3s ease, background-color 0.3s, padding 0.3s ease;
     z-index: 900;
     border-radius: 12px;
     box-shadow: 0 2px 4px var(--shadow-color);
@@ -43,11 +43,15 @@
 .menuItem {
     display: flex;
     align-items: center;
-    padding: 12px 15px;
+    justify-content: flex-start;
+    padding: 0 10px;
+    height: 44px;
+    width: 100%;
+    box-sizing: border-box;
     cursor: pointer;
     border-radius: 8px;
-    transition: background-color 0.2s;
-    margin-bottom: 5px;
+    transition: background-color 0.2s, color 0.2s;
+    margin-bottom: 6px;
     color: var(--text-primary);
     font-weight: 500;
     white-space: nowrap;
@@ -65,12 +69,15 @@
 }
 
 .menuIcon {
-    min-width: 24px;
-    margin-right: 15px;
-    font-size: 18px;
-    text-align: center;
+    width: 24px;
+    height: 24px;
     display: flex;
     justify-content: center;
+    align-items: center;
+    margin-right: 12px;
+    font-size: 18px;
+    flex-shrink: 0;
+    transition: margin 0.3s ease;
 }
 
 .menuText {
@@ -276,4 +283,22 @@
     color: var(--primary-color) !important;
     font-weight: 600;
     background-color: var(--hover-bg);
+}
+
+/* Centered icons when sidebar is collapsed */
+.sidebar:not(.expanded) .menuItem {
+    justify-content: center;
+    padding: 0;
+}
+
+.sidebar:not(.expanded) .menuIcon {
+    margin-right: 0;
+}
+
+.sidebar:not(.expanded) .menuText {
+    display: none;
+}
+
+.sidebar:not(.expanded) .arrow {
+    display: none;
 }

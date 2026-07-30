@@ -77,11 +77,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     localStorage.setItem('auth_token', data.token); // token refreshed!
                 }
                 
-                // Automatically sync system pages in the background
-                apiFetch('/api/auth/admin/system-pages/sync', {
-                    method: 'POST',
-                    body: JSON.stringify({ routes: systemPagesConfig })
-                }).catch(err => console.error('Auto system pages sync failed:', err));
+                // Automatically sync system pages in the background ONLY for Super Admins
+                if (data.user.role === 'Super Admin') {
+                    apiFetch('/api/auth/admin/system-pages/sync', {
+                        method: 'POST',
+                        body: JSON.stringify({ routes: systemPagesConfig })
+                    }).catch(err => console.error('Auto system pages sync failed:', err));
+                }
             } else {
                 // Clear token if invalid profile
                 localStorage.removeItem('auth_token');

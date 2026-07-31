@@ -129,6 +129,7 @@ const VI: React.FC = () => {
         }
     };
 
+    const scanInProgressRef = useRef(false);
     const scanInputRef = useRef<HTMLInputElement>(null);
     const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
 
@@ -149,12 +150,6 @@ const VI: React.FC = () => {
             scanInputRef.current.focus();
         }
     });
-
-    useEffect(() => {
-        if (barcode.trim().length >= 14 && !isScanning && activeBatch) {
-            handleScan();
-        }
-    }, [barcode, isScanning, activeBatch]);
 
     const fetchPendingBatches = async (page = 1, search = searchTermPending) => {
         try {
@@ -225,8 +220,9 @@ const VI: React.FC = () => {
     const handleScan = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         const scannedVal = barcode.trim().toUpperCase();
-        if (!scannedVal || isScanning || !activeBatch) return;
+        if (!scannedVal || scanInProgressRef.current || isScanning || !activeBatch) return;
 
+        scanInProgressRef.current = true;
         setIsScanning(true);
         try {
             const preValRes = await apiFetch('/api/backend/track/validate', {
@@ -259,6 +255,7 @@ const VI: React.FC = () => {
             }, 100);
         } finally {
             setIsScanning(false);
+            scanInProgressRef.current = false;
         }
     };
 
@@ -614,6 +611,7 @@ const VI: React.FC = () => {
                                             placeholder="Scan Item Barcode..."
                                             value={barcode}
                                             onChange={(e) => setBarcode(e.target.value)}
+                                            readOnly={isScanning || !!pendingBarcode}
                                             autoFocus
                                         />
                                         <button type="submit" className={styles.largeScanBtn} disabled={isScanning}>

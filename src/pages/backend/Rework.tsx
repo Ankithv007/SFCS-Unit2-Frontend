@@ -108,17 +108,13 @@ const Rework: React.FC = () => {
         return () => clearInterval(interval);
     }, [page, searchTerm, activeBatch]);
 
+    const scanInProgressRef = useRef(false);
+
     useEffect(() => {
         if (activeBatch && scanInputRef.current && !pendingBarcode) {
             scanInputRef.current.focus();
         }
     });
-
-    useEffect(() => {
-        if (barcode.trim().length >= 14 && !isScanning && activeBatch) {
-            handleScan();
-        }
-    }, [barcode, isScanning, activeBatch]);
 
     const fetchActiveBatches = async () => {
         try {
@@ -163,8 +159,9 @@ const Rework: React.FC = () => {
     const handleScan = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         const scannedVal = barcode.trim().toUpperCase();
-        if (!scannedVal || isScanning || !activeBatch) return;
+        if (!scannedVal || scanInProgressRef.current || isScanning || !activeBatch) return;
 
+        scanInProgressRef.current = true;
         setIsScanning(true);
         try {
             const preValRes = await apiFetch('/api/backend/track/validate', {
@@ -190,6 +187,7 @@ const Rework: React.FC = () => {
             }, 100);
         } finally {
             setIsScanning(false);
+            scanInProgressRef.current = false;
         }
     };
 
@@ -420,6 +418,7 @@ const Rework: React.FC = () => {
                                     placeholder="Scan Barcode or Unit Serial Number..."
                                     value={barcode}
                                     onChange={(e) => setBarcode(e.target.value)}
+                                    readOnly={isScanning || !!pendingBarcode}
                                     autoFocus
                                 />
                                 <button type="submit" className={styles.largeScanBtn} disabled={isScanning}>

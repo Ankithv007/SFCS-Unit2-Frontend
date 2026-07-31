@@ -315,6 +315,7 @@ const PCBAFCT: React.FC = () => {
         }
     };
 
+    const scanInProgressRef = useRef(false);
     const scanInputRef = useRef<HTMLInputElement>(null);
     const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
     // State for mandatory second-scan (Unit Serial Number) after PCBA-FCT PASS
@@ -337,12 +338,6 @@ const PCBAFCT: React.FC = () => {
             scanInputRef.current.focus();
         }
     });
-
-    useEffect(() => {
-        if (barcode.trim().length >= 14 && !isScanning && activeBatch) {
-            handleScan();
-        }
-    }, [barcode, isScanning, activeBatch]);
 
     const fetchPendingBatches = async (page = 1, search = searchTermPending) => {
         try {
@@ -413,8 +408,9 @@ const PCBAFCT: React.FC = () => {
     const handleScan = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         const scannedVal = barcode.trim().toUpperCase();
-        if (!scannedVal || isScanning || !activeBatch) return;
+        if (!scannedVal || scanInProgressRef.current || isScanning || !activeBatch) return;
 
+        scanInProgressRef.current = true;
         setIsScanning(true);
         try {
             const preValRes = await apiFetch('/api/backend/track/validate', {
@@ -447,6 +443,7 @@ const PCBAFCT: React.FC = () => {
             }, 100);
         } finally {
             setIsScanning(false);
+            scanInProgressRef.current = false;
         }
     };
 
@@ -818,6 +815,7 @@ const PCBAFCT: React.FC = () => {
                                             placeholder="Scan Item Barcode..."
                                             value={barcode}
                                             onChange={(e) => setBarcode(e.target.value)}
+                                            readOnly={isScanning || !!pendingBarcode || !!pendingUsnBarcode}
                                             autoFocus
                                         />
                                         <button type="submit" className={styles.largeScanBtn} disabled={isScanning}>

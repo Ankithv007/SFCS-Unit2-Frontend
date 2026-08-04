@@ -471,7 +471,7 @@ const SMTFG: React.FC = () => {
         try {
             const response = await fetch(`/api/smt/smt-fg/sessions/${id}/export/excel`, {
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
                 }
             });
             if (!response.ok) {
@@ -498,7 +498,7 @@ const SMTFG: React.FC = () => {
         try {
             const res = await fetch(`/api/smt/smt-fg/sessions/${id}/export/pdf-data`, {
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
                 }
             });
             if (!res.ok) {
@@ -598,6 +598,17 @@ const SMTFG: React.FC = () => {
         addKVRow('SMT FG Released By:', data.created_by_name);
         addKVRow('SMT FG Started Date & Time:', formatTimestamp(data.created_at));
         addKVRow('Session Status:', data.status);
+
+        currentY += 4;
+
+        // Section 4: Production Summary
+        addSectionHeader('4. PRODUCTION SUMMARY');
+        addKVRow('Work Order Quantity:', (data.work_order_quantity ?? data.production?.quantity ?? 0).toString());
+        addKVRow('Passed Quantity:', (data.passed ?? data.production?.passed ?? 0).toString());
+        addKVRow('Failed Quantity:', (data.failed ?? data.production?.failed ?? 0).toString());
+        addKVRow('Pending Quantity:', (data.pending ?? data.production?.pending ?? 0).toString());
+        addKVRow('Invalid Scan Quantity:', (data.invalid ?? data.production?.invalid ?? 0).toString());
+        addKVRow('Duplicate Scan Quantity:', (data.duplicate ?? data.duplicate_scan_count ?? data.production?.duplicate ?? 0).toString());
 
         // Page Break for Scan Logs Table
         doc.addPage();

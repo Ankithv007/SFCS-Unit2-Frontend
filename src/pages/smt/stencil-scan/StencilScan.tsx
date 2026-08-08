@@ -100,17 +100,43 @@ const StencilScan: React.FC = () => {
 
     const fetchWorkOrders = async () => {
         try {
-            const res = await apiFetch('/api/smt/stencil-lifecycle/work-orders');
-            if (res.success && Array.isArray(res.workOrders)) {
-                setWorkOrders(res.workOrders);
+            let res = await apiFetch('/api/smt/work-orders');
+            let rawList: any[] = [];
+            
+            if (Array.isArray(res)) {
+                rawList = res;
+            } else if (res && res.success && Array.isArray(res.data)) {
+                rawList = res.data;
+            } else if (res && Array.isArray(res.workOrders)) {
+                rawList = res.workOrders;
+            } else {
+                // Fallback to stencil-lifecycle work-orders endpoint
+                const fallbackRes = await apiFetch('/api/smt/stencil-lifecycle/work-orders');
+                if (Array.isArray(fallbackRes)) {
+                    rawList = fallbackRes;
+                } else if (fallbackRes && Array.isArray(fallbackRes.workOrders)) {
+                    rawList = fallbackRes.workOrders;
+                }
             }
+
+            const normalizedList = rawList
+                .filter((wo: any) => wo && wo.status !== 'Cancelled' && wo.status !== 'Deleted')
+                .map((wo: any) => ({
+                    ...wo,
+                    work_order_id: String(wo.work_order_id || wo.id || ''),
+                    id: String(wo.id || wo.work_order_id || ''),
+                    sides: wo.sides || wo.side || '',
+                    side: wo.sides || wo.side || '',
+                }));
+
+            setWorkOrders(normalizedList);
         } catch (err: any) {
             console.error('Failed to fetch work orders for stencil scan:', err);
         }
     };
 
     const selectedWO = useMemo(() => {
-        return workOrders.find(wo => wo.work_order_id === selectedWoId);
+        return workOrders.find(wo => String(wo.work_order_id || wo.id) === String(selectedWoId));
     }, [workOrders, selectedWoId]);
 
     const normalizeSideStr = (s?: string | null) => (s || '').trim().toUpperCase().replace(/\s*\/\s*/g, '/');
@@ -126,7 +152,7 @@ const StencilScan: React.FC = () => {
         if (!isSideMismatch || !stencil || !selectedWO) return '';
         const rawWoSide = selectedWO.sides || selectedWO.side || 'N/A';
         const rawStencilSide = stencil.side || 'N/A';
-        return `Side mismatch: This Work Order requires ${rawWoSide}, but the selected stencil is configured for ${rawStencilSide}.`;
+        return `Work Order side does not match the stencil side. Work Order: ${rawWoSide}, Stencil: ${rawStencilSide}`;
     }, [isSideMismatch, stencil, selectedWO]);
 
     const focusInput = () => {

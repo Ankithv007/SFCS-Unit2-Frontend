@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import styles from './StencilScan.module.css';
 import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
+import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
 import { 
     Barcode, ScanLine, Clock, User, ClipboardList, Info, ArrowRightLeft, CheckCircle2, RotateCcw
 } from 'lucide-react';
@@ -30,6 +31,11 @@ interface StencilDetails {
         role: string;
         received_at: string;
         elapsed_time: string | null;
+        work_order_id?: string | null;
+        work_order_number?: string | null;
+        machine?: string | null;
+        production_line?: string | null;
+        remarks?: string | null;
     } | null;
 }
 
@@ -54,6 +60,8 @@ interface MovementHistory {
     reason: string | null;
     condition: string | null;
     created_at: string;
+    work_order_id?: string | null;
+    work_order_number?: string | null;
 }
 
 const StencilScan: React.FC = () => {
@@ -65,6 +73,10 @@ const StencilScan: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [stencil, setStencil] = useState<StencilDetails | null>(null);
     const [history, setHistory] = useState<MovementHistory[]>([]);
+
+    // Work Order options state
+    const [workOrders, setWorkOrders] = useState<any[]>([]);
+    const [selectedWoId, setSelectedWoId] = useState('');
 
     // Transaction form states
     const [machine, setMachine] = useState('');
@@ -80,7 +92,21 @@ const StencilScan: React.FC = () => {
 
     useEffect(() => {
         focusInput();
+        fetchWorkOrders();
     }, []);
+
+    const fetchWorkOrders = async () => {
+        try {
+            const res = await apiFetch('/api/smt/stencil-lifecycle/work-orders');
+            if (res.success && Array.isArray(res.workOrders)) {
+                setWorkOrders(res.workOrders);
+            }
+        } catch (err: any) {
+            console.error('Failed to fetch work orders for stencil scan:', err);
+        }
+    };
+
+    const selectedWO = workOrders.find(wo => wo.work_order_id === selectedWoId);
 
     const focusInput = () => {
         if (barcodeInputRef.current) {
@@ -105,6 +131,7 @@ const StencilScan: React.FC = () => {
                 setHistory(res.history);
                 
                 // Clear fields
+                setSelectedWoId('');
                 setMachine('');
                 setProductionLine('');
                 setTxRemarks('');
@@ -149,12 +176,19 @@ const StencilScan: React.FC = () => {
         e.preventDefault();
         if (!stencil) return;
 
+        if (!selectedWoId) {
+            showToast('Please select a valid Work Order before checking out the stencil.', 'error');
+            return;
+        }
+
         setLoading(true);
         try {
             const res = await apiFetch('/api/smt/stencil-rack/scan/receive', {
                 method: 'POST',
                 body: JSON.stringify({
                     job_number: stencil.stencil_rack_number || stencil.job_number,
+                    work_order_id: selectedWoId,
+                    work_order_number: selectedWoId,
                     machine: machine.trim(),
                     production_line: productionLine.trim(),
                     remarks: txRemarks.trim()
@@ -163,6 +197,10 @@ const StencilScan: React.FC = () => {
 
             if (res.success) {
                 showToast(res.message, 'success');
+                setSelectedWoId('');
+                setMachine('');
+                setProductionLine('');
+                setTxRemarks('');
                 // Reload details
                 const infoRes = await apiFetch(`/api/smt/stencil-rack/stencil-info/${stencil.stencil_rack_number || stencil.job_number}`);
                 if (infoRes.success) {
@@ -372,23 +410,35 @@ const StencilScan: React.FC = () => {
                                     borderRadius: '8px' 
                                 }}>
                                     <h4 style={{ margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#b45309' }}>
-                                        <User size={16} /> Active Holder Information
+                                        <User size={16} /> Active Holder & Checkout Details
                                     </h4>
                                     <div className={styles.dataGrid} style={{ gap: '0.75rem' }}>
                                         <div className={styles.dataItem}>
-                                            <span className={styles.dataLabel}>Operator</span>
+                                            <span className={styles.dataLabel}>Checked Out By</span>
                                             <span className={styles.dataValue} style={{ fontSize: '0.9rem' }}>
                                                 {stencil.holder.employee_name} ({stencil.holder.employee_code})
                                             </span>
                                         </div>
                                         <div className={styles.dataItem}>
-                                            <span className={styles.dataLabel}>Department / Role</span>
-                                            <span className={styles.dataValue} style={{ fontSize: '0.9rem' }}>
-                                                {stencil.holder.department} / {stencil.holder.role}
+                                            <span className={styles.dataLabel}>Work Order</span>
+                                            <span className={styles.dataValue} style={{ fontSize: '0.9rem', color: '#2563eb', fontWeight: 600 }}>
+                                                {stencil.holder.work_order_number || stencil.holder.work_order_id || 'N/A'}
                                             </span>
                                         </div>
                                         <div className={styles.dataItem}>
-                                            <span className={styles.dataLabel}>Received At</span>
+                                            <span className={styles.dataLabel}>Target SMT Machine</span>
+                                            <span className={styles.dataValue} style={{ fontSize: '0.9rem' }}>
+                                                {stencil.holder.machine || 'N/A'}
+                                            </span>
+                                        </div>
+                                        <div className={styles.dataItem}>
+                                            <span className={styles.dataLabel}>Target Production Line</span>
+                                            <span className={styles.dataValue} style={{ fontSize: '0.9rem' }}>
+                                                {stencil.holder.production_line || 'N/A'}
+                                            </span>
+                                        </div>
+                                        <div className={styles.dataItem}>
+                                            <span className={styles.dataLabel}>Checked Out Date/Time</span>
                                             <span className={styles.dataValue} style={{ fontSize: '0.9rem' }}>
                                                 {new Date(stencil.holder.received_at).toLocaleString()}
                                             </span>
@@ -397,6 +447,12 @@ const StencilScan: React.FC = () => {
                                             <span className={styles.dataLabel}>Elapsed Checkout Duration</span>
                                             <span className={styles.dataValue} style={{ fontSize: '0.9rem', color: '#b45309' }}>
                                                 {stencil.holder.elapsed_time || 'Less than 1 minute'}
+                                            </span>
+                                        </div>
+                                        <div className={styles.dataItem} style={{ gridColumn: 'span 2' }}>
+                                            <span className={styles.dataLabel}>Checkout Remarks</span>
+                                            <span className={styles.dataValue} style={{ fontSize: '0.9rem' }}>
+                                                {stencil.holder.remarks || 'N/A'}
                                             </span>
                                         </div>
                                     </div>
@@ -410,6 +466,28 @@ const StencilScan: React.FC = () => {
                                 <div className={`${styles.actionCard} ${styles.actionReceive}`}>
                                     <h4 className={styles.actionHeader}><CheckCircle2 size={20} /> Check Out Stencil (Receive to SMT Line)</h4>
                                     <form onSubmit={handleReceive}>
+                                        <div className={styles.inputGroup} style={{ marginBottom: '1rem' }}>
+                                            <label>Work Order <span>*</span></label>
+                                            <WorkOrderSelector
+                                                options={workOrders}
+                                                value={selectedWoId}
+                                                onChange={(val) => setSelectedWoId(val)}
+                                                placeholder="Select or search Work Order Number..."
+                                                valueKey="work_order_id"
+                                                labelKey="work_order_id"
+                                                productNameKey="product_name"
+                                                quantityKey="quantity"
+                                                required
+                                            />
+                                            {selectedWO && (
+                                                <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', backgroundColor: '#eff6ff', borderRadius: '6px', fontSize: '0.82rem', color: '#1e40af', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                                    <span><strong>WO:</strong> {selectedWO.work_order_id}</span>
+                                                    <span><strong>Model:</strong> {selectedWO.product_name || 'N/A'}</span>
+                                                    <span><strong>Qty:</strong> {selectedWO.quantity || 'N/A'}</span>
+                                                    <span><strong>Side:</strong> {selectedWO.sides || 'N/A'}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                         <div className={styles.formGrid}>
                                             <div className={styles.inputGroup}>
                                                 <label>Target SMT Machine <span>*</span></label>
@@ -444,7 +522,7 @@ const StencilScan: React.FC = () => {
                                                 placeholder="Remarks..."
                                             />
                                         </div>
-                                        <button type="submit" className={`${styles.btnAction} ${styles.btnReceive}`}>
+                                        <button type="submit" className={`${styles.btnAction} ${styles.btnReceive}`} disabled={!selectedWoId || !machine || !productionLine || loading}>
                                             Confirm Check-Out
                                         </button>
                                     </form>
@@ -567,9 +645,16 @@ const StencilScan: React.FC = () => {
                                             </span>
                                             
                                             {item.action === 'RECEIVED' && (
-                                                <span className={styles.timelineText}>
-                                                    Assigned SMT line/machine: {item.production_line || 'N/A'} / {item.machine || 'N/A'}
-                                                </span>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.25rem' }}>
+                                                    {(item.work_order_number || item.work_order_id) && (
+                                                        <span className={styles.timelineText} style={{ color: '#2563eb', fontWeight: 600 }}>
+                                                            Work Order: {item.work_order_number || item.work_order_id}
+                                                        </span>
+                                                    )}
+                                                    <span className={styles.timelineText}>
+                                                        Assigned SMT line/machine: {item.production_line || 'N/A'} / {item.machine || 'N/A'}
+                                                    </span>
+                                                </div>
                                             )}
 
                                             {item.action === 'RELOCATED' && (

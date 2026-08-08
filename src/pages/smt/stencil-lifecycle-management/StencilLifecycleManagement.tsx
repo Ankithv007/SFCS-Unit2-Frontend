@@ -19,6 +19,18 @@ interface Stencil {
     remarks: string | null;
     print_count: number;
     target_life_cycle: number;
+    current_cycle_capacity?: number;
+    cycle_number?: number;
+    total_lifetime_prints?: number;
+    current_cycle_used?: number;
+    stencil_id?: string;
+    stencil_rack_number?: string;
+    lifecycle_status?: string;
+    remaining_life?: number;
+    remaining_percentage?: string;
+    health_indicator?: string;
+    maintenance_count?: number;
+    last_maintenance_date?: string;
 }
 
 interface WorkOrder {
@@ -50,7 +62,13 @@ interface LifecycleRecord {
     qty_life_cycle: number;
     balance_life_cycle: number;
     current_used_life_cycle: number;
-    status: 'Available' | 'Running' | 'Completed' | 'Expired';
+    cycle_number?: number;
+    previous_used_prints?: number;
+    quantity_added?: number;
+    new_used_prints?: number;
+    previous_remaining_prints?: number;
+    new_remaining_prints?: number;
+    status: string;
     remarks: string | null;
     created_by_name: string;
     created_at: string;
@@ -84,8 +102,21 @@ const StencilLifecycleManagement: React.FC = () => {
     // Searchable Dropdowns search inputs
     const [stencilSearch, setStencilSearch] = useState('');
     const [stencilDropdownOpen, setStencilDropdownOpen] = useState(false);
-    // Dropdown references for clicking outside
     const stencilRef = useRef<HTMLDivElement>(null);
+
+    // Maintenance States
+    const [maintSelectedStencil, setMaintSelectedStencil] = useState<Stencil | null>(null);
+    const [maintenanceReason, setMaintenanceReason] = useState('');
+    const [additionalLifeCycle, setAdditionalLifeCycle] = useState<number | string>(30000);
+    const [scrapReason, setScrapReason] = useState('');
+    const [maintRemarks, setMaintRemarks] = useState('');
+    const [maintHistory, setMaintHistory] = useState<any[]>([]);
+    const [statusHistory, setStatusHistory] = useState<any[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState<'maintenance' | 'status'>('maintenance');
+    const [maintStencilSearch, setMaintStencilSearch] = useState('');
+    const [maintStencilDropdownOpen, setMaintStencilDropdownOpen] = useState(false);
+    const maintStencilRef = useRef<HTMLDivElement>(null);
 
     // Table state
     const [searchText, setSearchText] = useState('');
@@ -111,8 +142,8 @@ const StencilLifecycleManagement: React.FC = () => {
                 level: 3,
                 icon: '🚨',
                 title: 'Final Warning',
-                message: 'This stencil is very close to reaching its maximum life cycle.',
-                suggestion: 'Replace this stencil as soon as possible.',
+                message: 'This stencil is very close to reaching its current cycle capacity.',
+                suggestion: 'Schedule stencil maintenance or replacement soon.',
                 toastType: 'error' as const,
                 bannerColor: 'red'
             };
@@ -121,8 +152,8 @@ const StencilLifecycleManagement: React.FC = () => {
                 level: 2,
                 icon: '⚠️',
                 title: 'Critical Warning',
-                message: 'This stencil has very few prints remaining.',
-                suggestion: 'Please schedule a stencil replacement.',
+                message: 'This stencil has very few prints remaining in the current cycle.',
+                suggestion: 'Please prepare for maintenance.',
                 toastType: 'info' as const,
                 bannerColor: 'orange'
             };
@@ -131,8 +162,8 @@ const StencilLifecycleManagement: React.FC = () => {
                 level: 1,
                 icon: '⚠️',
                 title: 'Warning',
-                message: 'This stencil is approaching its maximum life cycle.',
-                suggestion: 'Please prepare a replacement stencil soon.',
+                message: 'This stencil is approaching its cycle capacity.',
+                suggestion: 'Please prepare for upcoming maintenance.',
                 toastType: 'info' as const,
                 bannerColor: 'yellow'
             };
@@ -147,12 +178,12 @@ const StencilLifecycleManagement: React.FC = () => {
         return 0;
     };
 
-    // Auto-refresh selectedStencil when stencils list changes (e.g. after create, delete, reload)
+    // Auto-refresh selectedStencil when stencils list changes
     useEffect(() => {
         if (selectedStencil && stencils.length > 0) {
             const updated = stencils.find(s => s.id === selectedStencil.id);
             if (updated) {
-                if (updated.print_count !== selectedStencil.print_count || updated.status !== selectedStencil.status) {
+                if (updated.print_count !== selectedStencil.print_count || updated.status !== selectedStencil.status || updated.lifecycle_status !== selectedStencil.lifecycle_status) {
                     setSelectedStencil(updated);
                 }
             } else {
@@ -161,10 +192,21 @@ const StencilLifecycleManagement: React.FC = () => {
         }
     }, [stencils, selectedStencil]);
 
-    // Evaluate selectedStencil warning toasts to prevent duplicates during re-renders
+    // Auto-refresh maintSelectedStencil when stencils list changes
+    useEffect(() => {
+        if (maintSelectedStencil && stencils.length > 0) {
+            const updated = stencils.find(s => s.id === maintSelectedStencil.id);
+            if (updated) {
+                setMaintSelectedStencil(updated);
+            }
+        }
+    }, [stencils]);
+
+    // Evaluate selectedStencil warning toasts
     useEffect(() => {
         if (selectedStencil) {
-            const remaining = selectedStencil.target_life_cycle - selectedStencil.print_count;
+            const capacity = selectedStencil.current_cycle_capacity || selectedStencil.target_life_cycle || 60000;
+            const remaining = Math.max(0, capacity - selectedStencil.print_count);
             const level = getWarningLevel(remaining);
             const lastWarned = lastWarnedRef.current;
 
@@ -186,6 +228,7 @@ const StencilLifecycleManagement: React.FC = () => {
             lastWarnedRef.current = null;
         }
     }, [selectedStencil, showToast]);
+
     useEffect(() => {
         fetchActiveStencils();
         fetchWorkOrders();
@@ -198,10 +241,140 @@ const StencilLifecycleManagement: React.FC = () => {
             if (stencilRef.current && !stencilRef.current.contains(event.target as Node)) {
                 setStencilDropdownOpen(false);
             }
+            if (maintStencilRef.current && !maintStencilRef.current.contains(event.target as Node)) {
+                setMaintStencilDropdownOpen(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    // Side effect to fetch history when maintSelectedStencil changes
+    useEffect(() => {
+        if (maintSelectedStencil) {
+            const rackNo = maintSelectedStencil.stencil_id || maintSelectedStencil.stencil_rack_number || maintSelectedStencil.id;
+            fetchStencilHistory(rackNo);
+        } else {
+            setMaintHistory([]);
+            setStatusHistory([]);
+        }
+    }, [maintSelectedStencil]);
+
+    const fetchStencilHistory = async (rackNumber: string) => {
+        setHistoryLoading(true);
+        try {
+            const [maintData, statusData] = await Promise.all([
+                apiFetch(`/api/smt/stencil-lifecycle/maintenance/history/${encodeURIComponent(rackNumber)}`),
+                apiFetch(`/api/smt/stencil-lifecycle/status-history/${encodeURIComponent(rackNumber)}`)
+            ]);
+            setMaintHistory(maintData);
+            setStatusHistory(statusData);
+        } catch (err) {
+            console.error('Failed to fetch stencil history:', err);
+            showToast('Failed to load history logs for the selected stencil.', 'error');
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    const handleCompleteMaintenance = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!maintSelectedStencil) return;
+        const rackNo = maintSelectedStencil.stencil_id || maintSelectedStencil.stencil_rack_number || maintSelectedStencil.id;
+
+        if (!maintenanceReason) {
+            showToast('Please select a Maintenance Reason.', 'error');
+            return;
+        }
+
+        const addCap = parseInt(String(additionalLifeCycle), 10);
+        if (isNaN(addCap) || addCap <= 0) {
+            showToast('Additional Life Cycle capacity must be a positive integer.', 'error');
+            return;
+        }
+
+        if (!maintRemarks.trim()) {
+            showToast('Remarks are mandatory for completing maintenance.', 'error');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const res = await apiFetch('/api/smt/stencil-lifecycle/maintenance/complete', {
+                method: 'POST',
+                body: JSON.stringify({
+                    stencil_rack_number: rackNo,
+                    maintenance_reason: maintenanceReason,
+                    additional_life_cycle: addCap,
+                    remarks: maintRemarks.trim()
+                })
+            });
+
+            showToast(res.message || `Maintenance completed successfully for Stencil ${rackNo}.`, 'success');
+            setMaintRemarks('');
+            setMaintenanceReason('');
+            setAdditionalLifeCycle(30000);
+            setMaintSelectedStencil(null);
+            setMaintStencilSearch('');
+            
+            await Promise.all([
+                fetchActiveStencils(),
+                fetchRecords()
+            ]);
+        } catch (err: any) {
+            console.error('Complete maintenance error:', err);
+            showToast(err.message || 'Failed to complete maintenance.', 'error');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleScrapStencil = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!maintSelectedStencil) return;
+        const rackNo = maintSelectedStencil.stencil_id || maintSelectedStencil.stencil_rack_number || maintSelectedStencil.id;
+
+        if (!scrapReason) {
+            showToast('Please select a Scrap Reason.', 'error');
+            return;
+        }
+        if (!maintRemarks.trim()) {
+            showToast('Remarks are mandatory for scrapping.', 'error');
+            return;
+        }
+
+        if (!window.confirm(`Are you sure you want to permanently SCRAP Stencil ${rackNo}? This action is irreversible.`)) {
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            await apiFetch('/api/smt/stencil-lifecycle/maintenance/scrap', {
+                method: 'POST',
+                body: JSON.stringify({
+                    stencil_rack_number: rackNo,
+                    scrap_reason: scrapReason,
+                    remarks: maintRemarks.trim()
+                })
+            });
+
+            showToast(`Stencil ${rackNo} has been permanently scrapped.`, 'success');
+            setMaintRemarks('');
+            setScrapReason('');
+            setMaintSelectedStencil(null);
+            setMaintStencilSearch('');
+            
+            await Promise.all([
+                fetchActiveStencils(),
+                fetchRecords()
+            ]);
+        } catch (err: any) {
+            console.error('Scrap stencil error:', err);
+            showToast(err.message || 'Failed to scrap stencil.', 'error');
+        } finally {
+            setSubmitting(false);
+        }
+    };
 
     const fetchActiveStencils = async () => {
         try {
@@ -251,12 +424,11 @@ const StencilLifecycleManagement: React.FC = () => {
         fetchRecords();
     };
 
-    // Sorting bubbles matching values to the top
     const getFilteredStencils = () => {
         const q = stencilSearch.trim().toLowerCase();
         if (!q) return stencils;
         return [...stencils]
-            .filter(s => s.stencil_name.toLowerCase().includes(q))
+            .filter(s => s.stencil_name.toLowerCase().includes(q) || (s.stencil_id && s.stencil_id.toLowerCase().includes(q)))
             .sort((a, b) => {
                 const aNameMatch = a.stencil_name.toLowerCase().startsWith(q);
                 const bNameMatch = b.stencil_name.toLowerCase().startsWith(q);
@@ -266,12 +438,34 @@ const StencilLifecycleManagement: React.FC = () => {
             });
     };
 
-
+    const getFilteredMaintStencils = () => {
+        const q = maintStencilSearch.trim().toLowerCase();
+        if (!q) return stencils;
+        return [...stencils]
+            .filter(s => s.stencil_name.toLowerCase().includes(q) || (s.stencil_id && s.stencil_id.toLowerCase().includes(q)))
+            .sort((a, b) => {
+                const aNameMatch = a.stencil_name.toLowerCase().startsWith(q) || (a.stencil_id && a.stencil_id.toLowerCase().startsWith(q));
+                const bNameMatch = b.stencil_name.toLowerCase().startsWith(q) || (b.stencil_id && b.stencil_id.toLowerCase().startsWith(q));
+                if (aNameMatch && !bNameMatch) return -1;
+                if (!aNameMatch && bNameMatch) return 1;
+                return 0;
+            });
+    };
 
     const handleCreateLifecycle = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedStencil || !selectedWorkOrder) {
             showToast('Please select both a Stencil and a Work Order.', 'error');
+            return;
+        }
+
+        const capacity = selectedStencil.current_cycle_capacity || selectedStencil.target_life_cycle || 60000;
+        const used = selectedStencil.print_count || 0;
+        const woQty = selectedWorkOrder.quantity || 0;
+        const projected = used + woQty;
+
+        if (projected > capacity) {
+            showToast(`The selected Work Order quantity (${woQty}) exceeds the stencil's remaining lifecycle capacity (${capacity - used} prints). Assignment blocked.`, 'error');
             return;
         }
 
@@ -292,7 +486,6 @@ const StencilLifecycleManagement: React.FC = () => {
             setStencilSearch('');
             setRemarks('');
 
-            // Reload data before triggering toast so that the tables and states update first
             fetchActiveStencils();
             fetchWorkOrders();
             fetchRecords();
@@ -344,7 +537,6 @@ const StencilLifecycleManagement: React.FC = () => {
             showToast('Lifecycle record deleted and stencil print count updated successfully.', 'success');
             setConfirmDeleteId(null);
 
-            // Reload all
             fetchActiveStencils();
             fetchRecords();
         } catch (err: any) {
@@ -363,14 +555,51 @@ const StencilLifecycleManagement: React.FC = () => {
         setCurrentPage(1);
     };
 
+    // Calculate real-time capacity and side compatibility metrics when both stencil and work order are selected
+    const getCapacityCalculation = () => {
+        if (!selectedStencil) return null;
+        const cycleCap = selectedStencil.current_cycle_capacity || selectedStencil.target_life_cycle || 60000;
+        const currentUsed = selectedStencil.print_count || 0;
+        const remainingPrints = Math.max(0, cycleCap - currentUsed);
+        const woQty = selectedWorkOrder ? (selectedWorkOrder.quantity || 0) : 0;
+        const projectedUsed = currentUsed + woQty;
+        const isExceeded = projectedUsed > cycleCap;
+        const isExactLimit = projectedUsed === cycleCap;
+        const isBlockedStatus = selectedStencil.lifecycle_status === 'MAINTENANCE' || selectedStencil.lifecycle_status === 'SCRAPPED';
+
+        // Side compatibility calculation - Strict 1:1 equality after case & whitespace normalization
+        const woSide = selectedWorkOrder ? selectedWorkOrder.sides : '';
+        const stencilSide = selectedStencil.side || '';
+        const normWOSide = (woSide || '').trim().toUpperCase().replace(/\s*\/\s*/g, '/');
+        const normStencilSide = (stencilSide || '').trim().toUpperCase().replace(/\s*\/\s*/g, '/');
+
+        const isSideCompatible = (!selectedWorkOrder || !selectedStencil) ? true : (normWOSide === normStencilSide);
+
+        return {
+            cycleCap,
+            currentUsed,
+            remainingPrints,
+            woQty,
+            projectedUsed,
+            isExceeded,
+            isExactLimit,
+            isBlockedStatus,
+            isSideCompatible,
+            woSide,
+            stencilSide,
+            excessPrints: isExceeded ? projectedUsed - cycleCap : 0
+        };
+    };
+
+    const calc = getCapacityCalculation();
 
     return (
         <div className={styles.container}>
             {/* Header row */}
             <div className={styles.headerRow}>
                 <div className={styles.headerContent}>
-                    <h2> Stencil Life Cycle Management</h2>
-                    <p>Track stencil print limit consumption and assign work orders safely.</p>
+                    <h2>Stencil Life Cycle Management</h2>
+                    <p>Track multi-work-order stencil usage, cycle capacity limits, and maintenance history.</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <span style={{ fontSize: '0.9rem', color: '#64748b', background: '#e2e8f0', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 'bold' }}>
@@ -401,7 +630,7 @@ const StencilLifecycleManagement: React.FC = () => {
                                             type="text"
                                             className={styles.input}
                                             placeholder="Select Stencil / Model Name"
-                                            value={selectedStencil ? selectedStencil.stencil_name : stencilSearch}
+                                            value={selectedStencil ? `${selectedStencil.stencil_name} (${selectedStencil.stencil_id})` : stencilSearch}
                                             onChange={(e) => {
                                                 setStencilSearch(e.target.value);
                                                 setSelectedStencil(null);
@@ -416,22 +645,39 @@ const StencilLifecycleManagement: React.FC = () => {
                                             {getFilteredStencils().length === 0 ? (
                                                 <li className={styles.noOptions}>No active stencils found</li>
                                             ) : (
-                                                getFilteredStencils().map((s) => (
-                                                    <li
-                                                        key={s.id}
-                                                        className={styles.dropdownOption}
-                                                        onClick={() => {
-                                                            setSelectedStencil(s);
-                                                            setStencilSearch(s.stencil_name);
-                                                            setStencilDropdownOpen(false);
-                                                        }}
-                                                    >
-                                                        <span className={styles.dropdownOptionMain}>{s.stencil_name}</span>
-                                                        <span className={styles.dropdownOptionSub}>
-                                                            Rev: {s.revision} | Prints: {s.print_count}
-                                                        </span>
-                                                    </li>
-                                                ))
+                                                getFilteredStencils().map((s) => {
+                                                    const cap = s.current_cycle_capacity || s.target_life_cycle || 60000;
+                                                    const rem = s.remaining_life ?? (cap - s.print_count);
+                                                    return (
+                                                        <li
+                                                            key={s.id}
+                                                            className={styles.dropdownOption}
+                                                            onClick={() => {
+                                                                setSelectedStencil(s);
+                                                                setStencilSearch(`${s.stencil_name} (${s.stencil_id})`);
+                                                                setStencilDropdownOpen(false);
+                                                            }}
+                                                        >
+                                                            <span className={styles.dropdownOptionMain}>
+                                                                {s.stencil_name} <span style={{ fontSize: '0.8rem', color: '#64748b' }}>({s.stencil_id})</span>
+                                                            </span>
+                                                            <span className={styles.dropdownOptionSub}>
+                                                                Cycle #{s.cycle_number || 1} | Prints: {s.print_count} / {cap} | Rem: {rem} ({s.remaining_percentage ?? '100.00'}%)
+                                                                <span 
+                                                                    style={{ 
+                                                                        display: 'inline-block', 
+                                                                        width: '8px', 
+                                                                        height: '8px', 
+                                                                        borderRadius: '50%', 
+                                                                        marginLeft: '6px',
+                                                                        backgroundColor: s.health_indicator === 'Red' ? '#ef4444' : s.health_indicator === 'Orange' ? '#f97316' : s.health_indicator === 'Yellow' ? '#eab308' : '#22c55e'
+                                                                    }} 
+                                                                    title={`Health: ${s.health_indicator}`}
+                                                                />
+                                                            </span>
+                                                        </li>
+                                                    );
+                                                })
                                             )}
                                         </ul>
                                     )}
@@ -443,6 +689,10 @@ const StencilLifecycleManagement: React.FC = () => {
                                 <h4>Selected Stencil Details</h4>
                                 {selectedStencil ? (
                                     <div className={styles.detailsGrid}>
+                                        <div className={styles.detailField}>
+                                            <span className={styles.detailLabel}>Stencil Rack Number</span>
+                                            <span className={styles.detailValue}>{selectedStencil.stencil_id || selectedStencil.stencil_rack_number}</span>
+                                        </div>
                                         <div className={styles.detailField}>
                                             <span className={styles.detailLabel}>Stencil / Model Name</span>
                                             <span className={styles.detailValue}>{selectedStencil.stencil_name}</span>
@@ -463,28 +713,51 @@ const StencilLifecycleManagement: React.FC = () => {
                                             <span className={styles.detailLabel}>Sides</span>
                                             <span className={styles.detailValue}>{selectedStencil.side || '-'}</span>
                                         </div>
-                                        <div className={styles.detailField}>
-                                            <span className={styles.detailLabel}>Remark</span>
-                                            <span className={styles.detailValue}>{selectedStencil.remarks || '-'}</span>
-                                        </div>
 
                                         <hr className={styles.divider} />
 
                                         <div className={styles.detailField}>
-                                            <span className={styles.detailLabel}>Target Life Cycle</span>
-                                            <span className={styles.detailValue}>{selectedStencil.target_life_cycle}</span>
+                                            <span className={styles.detailLabel}>Current Lifecycle Cycle</span>
+                                            <span className={styles.detailValue} style={{ fontWeight: 'bold', color: '#2563eb' }}>Cycle {selectedStencil.cycle_number || 1}</span>
                                         </div>
                                         <div className={styles.detailField}>
-                                            <span className={styles.detailLabel}>Current Used Prints</span>
+                                            <span className={styles.detailLabel}>Current Cycle Capacity</span>
+                                            <span className={styles.detailValue}>{selectedStencil.current_cycle_capacity || selectedStencil.target_life_cycle || 60000}</span>
+                                        </div>
+                                        <div className={styles.detailField}>
+                                            <span className={styles.detailLabel}>Current Cycle Used Prints</span>
                                             <span className={styles.detailValue}>{selectedStencil.print_count}</span>
                                         </div>
                                         <div className={styles.detailField}>
-                                            <span className={styles.detailLabel}>Remaining Prints</span>
-                                            <span className={styles.detailValue}>{selectedStencil.target_life_cycle - selectedStencil.print_count}</span>
+                                            <span className={styles.detailLabel}>Current Cycle Remaining</span>
+                                            <span className={styles.detailValue}>
+                                                {selectedStencil.remaining_life ?? ((selectedStencil.current_cycle_capacity || selectedStencil.target_life_cycle || 60000) - selectedStencil.print_count)} ({selectedStencil.remaining_percentage ?? '100.00'}%)
+                                            </span>
+                                        </div>
+                                        <div className={styles.detailField}>
+                                            <span className={styles.detailLabel}>Total Lifetime Prints</span>
+                                            <span className={styles.detailValue} style={{ fontWeight: 'bold' }}>{(selectedStencil.total_lifetime_prints || 0).toLocaleString()}</span>
+                                        </div>
+                                        <div className={styles.detailField}>
+                                            <span className={styles.detailLabel}>Total Maintenance Runs</span>
+                                            <span className={styles.detailValue}>{selectedStencil.maintenance_count || 0}</span>
+                                        </div>
+                                        <div className={styles.detailField} style={{ gridColumn: 'span 2' }}>
+                                            <span className={styles.detailLabel}>Lifecycle Status</span>
+                                            <span 
+                                                className={styles.detailValue} 
+                                                style={{ 
+                                                    fontWeight: 'bold',
+                                                    color: selectedStencil.lifecycle_status === 'MAINTENANCE' ? '#d97706' : selectedStencil.lifecycle_status === 'SCRAPPED' ? '#ef4444' : '#166534'
+                                                }}
+                                            >
+                                                {selectedStencil.lifecycle_status || 'ACTIVE'}
+                                            </span>
                                         </div>
 
                                         {(() => {
-                                            const remaining = selectedStencil.target_life_cycle - selectedStencil.print_count;
+                                            const cap = selectedStencil.current_cycle_capacity || selectedStencil.target_life_cycle || 60000;
+                                            const remaining = Math.max(0, cap - selectedStencil.print_count);
                                             const warning = getWarningDetails(remaining);
                                             if (!warning) return null;
 
@@ -581,14 +854,6 @@ const StencilLifecycleManagement: React.FC = () => {
                                             <span className={styles.detailLabel}>Line</span>
                                             <span className={styles.detailValue}>{selectedWorkOrder.line_id || '-'}</span>
                                         </div>
-                                        <div className={styles.detailField}>
-                                            <span className={styles.detailLabel}>Created By</span>
-                                            <span className={styles.detailValue}>{selectedWorkOrder.created_by}</span>
-                                        </div>
-                                        <div className={styles.detailField}>
-                                            <span className={styles.detailLabel}>Created Date</span>
-                                            <span className={styles.detailValue}>{new Date(selectedWorkOrder.created_at).toLocaleDateString()}</span>
-                                        </div>
                                     </div>
                                 ) : (
                                     <div className={styles.emptyState}>Select a work order to view details</div>
@@ -596,6 +861,80 @@ const StencilLifecycleManagement: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Real-time Capacity & Side Calculation Breakdown Panel */}
+                    {calc && selectedWorkOrder && (
+                        <div style={{ 
+                            background: (!calc.isSideCompatible || calc.isExceeded) ? '#fef2f2' : calc.isExactLimit ? '#fefce8' : '#f0fdf4',
+                            border: `1px solid ${(!calc.isSideCompatible || calc.isExceeded) ? '#fca5a5' : calc.isExactLimit ? '#fde047' : '#86efac'}`,
+                            borderRadius: '8px',
+                            padding: '1.25rem',
+                            marginBottom: '1.5rem'
+                        }}>
+                            <h4 style={{ margin: '0 0 0.75rem 0', color: (!calc.isSideCompatible || calc.isExceeded) ? '#991b1b' : calc.isExactLimit ? '#854d0e' : '#166534', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span>{(!calc.isSideCompatible || calc.isExceeded) ? '🚫' : calc.isExactLimit ? '⚠️' : '✅'}</span>
+                                <span>Assignment & Capacity Validation Breakdown</span>
+                            </h4>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', fontSize: '0.875rem' }}>
+                                <div><strong>Work Order Quantity:</strong> {calc.woQty.toLocaleString()}</div>
+                                <div><strong>Work Order Side:</strong> <span style={{ fontWeight: 650 }}>{calc.woSide}</span></div>
+                                <div><strong>Stencil Rack Number:</strong> <span style={{ fontWeight: 650 }}>{selectedStencil?.stencil_id || selectedStencil?.stencil_rack_number}</span></div>
+                                <div><strong>Stencil Side:</strong> <span style={{ fontWeight: 650 }}>{calc.stencilSide || 'N/A'}</span></div>
+                                <div><strong>Current Used Prints:</strong> {calc.currentUsed.toLocaleString()}</div>
+                                <div><strong>Current Cycle Capacity:</strong> {calc.cycleCap.toLocaleString()}</div>
+                                <div><strong>Remaining Prints:</strong> {calc.remainingPrints.toLocaleString()}</div>
+                                <div>
+                                    <strong>Projected Used Prints:</strong>{' '}
+                                    <span style={{ fontWeight: 'bold', color: calc.isExceeded ? '#ef4444' : '#166534' }}>
+                                        {calc.projectedUsed.toLocaleString()} / {calc.cycleCap.toLocaleString()}
+                                    </span>
+                                </div>
+                                <div>
+                                    <strong>Quantity Validation:</strong>{' '}
+                                    <span style={{ fontWeight: 'bold', color: calc.isExceeded ? '#ef4444' : '#166534' }}>
+                                        {calc.isExceeded ? 'EXCEEDS CAPACITY' : 'PASS'}
+                                    </span>
+                                </div>
+                                <div>
+                                    <strong>Side Validation:</strong>{' '}
+                                    <span style={{ fontWeight: 'bold', color: !calc.isSideCompatible ? '#ef4444' : '#166534' }}>
+                                        {!calc.isSideCompatible ? 'MISMATCH' : 'MATCH'}
+                                    </span>
+                                </div>
+                                <div>
+                                    <strong>Assignment:</strong>{' '}
+                                    <span style={{ fontWeight: 'bold', color: (calc.isExceeded || !calc.isSideCompatible || calc.isBlockedStatus) ? '#ef4444' : '#166534' }}>
+                                        {(calc.isExceeded || !calc.isSideCompatible || calc.isBlockedStatus) ? 'BLOCKED' : 'ALLOWED'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {!calc.isSideCompatible && (
+                                <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fca5a5', color: '#991b1b', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                    Stencil side {calc.stencilSide || 'N/A'} does not match Work Order side {calc.woSide}. A {calc.stencilSide || 'N/A'} stencil can only be used for a {calc.stencilSide || 'N/A'} Work Order.
+                                </div>
+                            )}
+
+                            {calc.isExceeded && calc.isSideCompatible && (
+                                <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fca5a5', color: '#991b1b', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                    The selected Work Order quantity exceeds the stencil's remaining lifecycle capacity.
+                                    <div style={{ fontSize: '0.825rem', fontWeight: 'normal', marginTop: '0.25rem' }}>
+                                        Remaining Capacity: <strong>{calc.remainingPrints.toLocaleString()}</strong> prints | Required: <strong>{calc.woQty.toLocaleString()}</strong> prints | Excess: <strong>{calc.excessPrints.toLocaleString()}</strong> prints
+                                    </div>
+                                </div>
+                            )}
+
+                            {calc.isExactLimit && !calc.isExceeded && calc.isSideCompatible && (
+                                <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fde047', color: '#854d0e', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                    This Work Order will use the remaining lifecycle capacity exactly ({calc.projectedUsed.toLocaleString()} / {calc.cycleCap.toLocaleString()}).
+                                    <div style={{ fontSize: '0.825rem', fontWeight: 'normal', marginTop: '0.25rem' }}>
+                                        Upon assignment completion, remaining prints will be 0 and the stencil will require Maintenance before it can be assigned again.
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Remarks input and Submit row */}
                     <div className={styles.inputGroup} style={{ marginBottom: '1.5rem' }}>
@@ -626,12 +965,359 @@ const StencilLifecycleManagement: React.FC = () => {
                         <button
                             type="submit"
                             className={styles.button}
-                            disabled={!selectedStencil || !selectedWorkOrder || submitting}
+                            disabled={!selectedStencil || !selectedWorkOrder || submitting || !!calc?.isExceeded || !calc?.isSideCompatible || !!calc?.isBlockedStatus}
                         >
                             {submitting ? 'Creating Assignment...' : 'Create Assignment'}
                         </button>
                     </div>
                 </form>
+            </div>
+
+            {/* Stencil Maintenance & Scrapping Card */}
+            <div className={styles.card}>
+                <h3>Stencil Maintenance & Scrapping</h3>
+                <div className={styles.maintLayout}>
+                    {/* Left Panel: Form operations */}
+                    <div>
+                        <div className={styles.inputGroup} ref={maintStencilRef} style={{ marginBottom: '1.5rem' }}>
+                            <label>Select Stencil to Manage <span>*</span></label>
+                            <div className={styles.dropdownWrapper}>
+                                <div className={styles.dropdownInputWrapper}>
+                                    <input
+                                        type="text"
+                                        className={styles.input}
+                                        placeholder="Type to search stencil by name or rack number..."
+                                        value={maintSelectedStencil ? `${maintSelectedStencil.stencil_name} (${maintSelectedStencil.stencil_id || maintSelectedStencil.stencil_rack_number})` : maintStencilSearch}
+                                        onChange={(e) => {
+                                            setMaintStencilSearch(e.target.value);
+                                            setMaintSelectedStencil(null);
+                                            setMaintStencilDropdownOpen(true);
+                                        }}
+                                        onFocus={() => setMaintStencilDropdownOpen(true)}
+                                    />
+                                    <span className={styles.dropdownArrow}>▼</span>
+                                </div>
+                                {maintStencilDropdownOpen && (
+                                    <ul className={styles.dropdownList}>
+                                        {getFilteredMaintStencils().length === 0 ? (
+                                            <li className={styles.noOptions}>No stencils found</li>
+                                        ) : (
+                                            getFilteredMaintStencils().map((s) => {
+                                                const isMaint = s.lifecycle_status === 'MAINTENANCE';
+                                                const isScrapped = s.lifecycle_status === 'SCRAPPED';
+                                                
+                                                let badgeClass = styles.badgeGreen;
+                                                if (isMaint) badgeClass = styles.badgeYellow;
+                                                else if (isScrapped) badgeClass = styles.badgeRed;
+
+                                                const cap = s.current_cycle_capacity || s.target_life_cycle || 60000;
+                                                const rem = s.remaining_life ?? (cap - s.print_count);
+
+                                                return (
+                                                    <li
+                                                        key={s.id}
+                                                        className={styles.dropdownOption}
+                                                        onClick={() => {
+                                                            setMaintSelectedStencil(s);
+                                                            setMaintStencilSearch(`${s.stencil_name} (${s.stencil_id || s.stencil_rack_number})`);
+                                                            setMaintStencilDropdownOpen(false);
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <span className={styles.dropdownOptionMain}>
+                                                                {s.stencil_name} <span style={{ fontSize: '0.8rem', color: '#64748b' }}>({s.stencil_id || s.stencil_rack_number})</span>
+                                                            </span>
+                                                            <span className={`${styles.badge} ${badgeClass}`} style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem' }}>
+                                                                {s.lifecycle_status || 'ACTIVE'}
+                                                            </span>
+                                                        </div>
+                                                        <span className={styles.dropdownOptionSub}>
+                                                            Cycle #{s.cycle_number || 1} | Prints: {s.print_count} / {cap} | Rem: {rem}
+                                                        </span>
+                                                    </li>
+                                                );
+                                            })
+                                        )}
+                                    </ul>
+                                )}
+                            </div>
+                        </div>
+
+                        {maintSelectedStencil ? (
+                            <div>
+                                <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.85rem' }}>
+                                        <div><strong>Stencil Rack Number:</strong> {maintSelectedStencil.stencil_id || maintSelectedStencil.stencil_rack_number}</div>
+                                        <div>
+                                            <strong>Status: </strong>
+                                            <span className={`${styles.badge} ${
+                                                maintSelectedStencil.lifecycle_status === 'MAINTENANCE' ? styles.badgeYellow :
+                                                maintSelectedStencil.lifecycle_status === 'SCRAPPED' ? styles.badgeRed : styles.badgeGreen
+                                            }`} style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem' }}>
+                                                {maintSelectedStencil.lifecycle_status || 'ACTIVE'}
+                                            </span>
+                                        </div>
+                                        <div><strong>Current Lifecycle Cycle:</strong> Cycle {maintSelectedStencil.cycle_number || 1}</div>
+                                        <div><strong>Current Cycle Capacity:</strong> {maintSelectedStencil.current_cycle_capacity || maintSelectedStencil.target_life_cycle || 60000}</div>
+                                        <div><strong>Current Cycle Used:</strong> {maintSelectedStencil.print_count}</div>
+                                        <div><strong>Remaining Prints:</strong> {maintSelectedStencil.remaining_life ?? ((maintSelectedStencil.current_cycle_capacity || 60000) - maintSelectedStencil.print_count)} ({maintSelectedStencil.remaining_percentage}%)</div>
+                                        <div><strong>Total Lifetime Prints:</strong> {(maintSelectedStencil.total_lifetime_prints || 0).toLocaleString()}</div>
+                                        <div><strong>Total Maintenance Runs:</strong> {maintSelectedStencil.maintenance_count ?? 0}</div>
+                                    </div>
+                                </div>
+
+                                {maintSelectedStencil.lifecycle_status === 'SCRAPPED' ? (
+                                    <div style={{ padding: '1.25rem', backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#991b1b', fontSize: '0.9rem', fontWeight: 550, textAlign: 'center' }}>
+                                        🚫 This stencil has been permanently scrapped and cannot undergo any further operations.
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                        {maintSelectedStencil.lifecycle_status === 'MAINTENANCE' ? (
+                                            <form onSubmit={handleCompleteMaintenance} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                                <div className={styles.inputGroup}>
+                                                    <label>Maintenance Reason <span>*</span></label>
+                                                    <select
+                                                        className={styles.select}
+                                                        value={maintenanceReason}
+                                                        onChange={(e) => setMaintenanceReason(e.target.value)}
+                                                        required
+                                                    >
+                                                        <option value="">-- Select Maintenance Reason --</option>
+                                                        <option value="Cleaning">Cleaning</option>
+                                                        <option value="Repair">Repair</option>
+                                                        <option value="Inspection Passed">Inspection Passed</option>
+                                                        <option value="Mesh Replacement">Mesh Replacement</option>
+                                                        <option value="Other">Other</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className={styles.inputGroup}>
+                                                    <label>Additional Life Cycle Capacity (Prints) <span>*</span></label>
+                                                    <input
+                                                        type="number"
+                                                        className={styles.input}
+                                                        min="1"
+                                                        placeholder="Enter additional capacity (e.g. 30000)"
+                                                        value={additionalLifeCycle}
+                                                        onChange={(e) => setAdditionalLifeCycle(e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+
+                                                <div className={styles.inputGroup}>
+                                                    <label>Maintenance Remarks <span>*</span></label>
+                                                    <textarea
+                                                        className={styles.textarea}
+                                                        rows={3}
+                                                        placeholder="Enter detailed maintenance remarks (e.g. tension check results, cleaning quality)..."
+                                                        value={maintRemarks}
+                                                        onChange={(e) => setMaintRemarks(e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+
+                                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                                                    <button
+                                                        type="button"
+                                                        className={styles.secondaryButton}
+                                                        onClick={() => {
+                                                            setMaintRemarks('');
+                                                            setMaintenanceReason('');
+                                                            setAdditionalLifeCycle(30000);
+                                                            setScrapReason('');
+                                                        }}
+                                                        disabled={submitting}
+                                                    >
+                                                        Reset
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={styles.button}
+                                                        style={{ background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)', boxShadow: '0 2px 4px rgba(249, 115, 22, 0.2)' }}
+                                                        onClick={() => {
+                                                            if (!scrapReason) {
+                                                                setScrapReason('Inspection Failed');
+                                                            }
+                                                            const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                                                            handleScrapStencil(fakeEvent);
+                                                        }}
+                                                        disabled={submitting}
+                                                    >
+                                                        Scrap Stencil
+                                                    </button>
+                                                    <button
+                                                        type="submit"
+                                                        className={styles.button}
+                                                        disabled={submitting}
+                                                    >
+                                                        {submitting ? 'Completing...' : 'Complete Maintenance'}
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        ) : (
+                                            <form onSubmit={handleScrapStencil} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                                <div className={styles.inputGroup}>
+                                                    <label>Scrap Reason <span>*</span></label>
+                                                    <select
+                                                        className={styles.select}
+                                                        value={scrapReason}
+                                                        onChange={(e) => setScrapReason(e.target.value)}
+                                                        required
+                                                    >
+                                                        <option value="">-- Select Scrap Reason --</option>
+                                                        <option value="Damaged">Damaged</option>
+                                                        <option value="Warped">Warped</option>
+                                                        <option value="Aperture Damage">Aperture Damage</option>
+                                                        <option value="Excessive Wear">Excessive Wear</option>
+                                                        <option value="Failed Inspection">Failed Inspection</option>
+                                                        <option value="Other">Other</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className={styles.inputGroup}>
+                                                    <label>Remarks <span>*</span></label>
+                                                    <textarea
+                                                        className={styles.textarea}
+                                                        rows={3}
+                                                        placeholder="Enter detailed reason for scrapping this stencil..."
+                                                        value={maintRemarks}
+                                                        onChange={(e) => setMaintRemarks(e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+
+                                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                                                    <button
+                                                        type="button"
+                                                        className={styles.secondaryButton}
+                                                        onClick={() => {
+                                                            setMaintRemarks('');
+                                                            setScrapReason('');
+                                                        }}
+                                                        disabled={submitting}
+                                                    >
+                                                        Reset
+                                                    </button>
+                                                    <button
+                                                        type="submit"
+                                                        className={styles.button}
+                                                        style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', boxShadow: '0 2px 4px rgba(239, 68, 68, 0.2)' }}
+                                                        disabled={submitting}
+                                                    >
+                                                        {submitting ? 'Scrapping...' : 'Scrap Stencil'}
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className={styles.emptyState} style={{ height: '200px' }}>
+                                Select a stencil to view management actions and history logs
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right Panel: History Logs */}
+                    <div style={{ borderLeft: '1px solid #cbd5e1', paddingLeft: '2rem' }}>
+                        <div className={styles.maintTabs}>
+                            <button
+                                type="button"
+                                className={`${styles.maintTab} ${activeTab === 'maintenance' ? styles.maintTabActive : ''}`}
+                                onClick={() => setActiveTab('maintenance')}
+                            >
+                                Maintenance Logs ({maintHistory.length})
+                            </button>
+                            <button
+                                type="button"
+                                className={`${styles.maintTab} ${activeTab === 'status' ? styles.maintTabActive : ''}`}
+                                onClick={() => setActiveTab('status')}
+                            >
+                                Status Change Logs ({statusHistory.length})
+                            </button>
+                        </div>
+
+                        <div className={styles.historyContainer}>
+                            {historyLoading ? (
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px', color: '#64748b' }}>
+                                    Loading history logs...
+                                </div>
+                            ) : activeTab === 'maintenance' ? (
+                                maintHistory.length === 0 ? (
+                                    <div className={styles.emptyState} style={{ height: '200px' }}>
+                                        No maintenance logs found for this stencil
+                                    </div>
+                                ) : (
+                                    <table className={styles.historyTable}>
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Cycle #</th>
+                                                <th>Reason</th>
+                                                <th>Added Capacity</th>
+                                                <th>Remarks</th>
+                                                <th>Technician</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {maintHistory.map((h, i) => (
+                                                <tr key={h.id || i}>
+                                                    <td>{new Date(h.maintenance_date).toLocaleDateString()}</td>
+                                                    <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{h.maintenance_cycle_number || h.maintenance_count}</td>
+                                                    <td style={{ fontWeight: 600 }}>{h.maintenance_reason || h.action}</td>
+                                                    <td style={{ textAlign: 'center', color: '#2563eb', fontWeight: 'bold' }}>
+                                                        {h.additional_lifecycle_capacity ? `+${h.additional_lifecycle_capacity}` : '-'}
+                                                    </td>
+                                                    <td>{h.remarks}</td>
+                                                    <td>{h.performed_by_name} ({h.performed_by_code})</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )
+                            ) : (
+                                statusHistory.length === 0 ? (
+                                    <div className={styles.emptyState} style={{ height: '200px' }}>
+                                        No status transition logs found for this stencil
+                                    </div>
+                                ) : (
+                                    <table className={styles.historyTable}>
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Transition</th>
+                                                <th>Reason / Remarks</th>
+                                                <th>Operator</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {statusHistory.map((h, i) => (
+                                                <tr key={h.id || i}>
+                                                    <td>{new Date(h.changed_date).toLocaleDateString()}</td>
+                                                    <td>
+                                                        <span style={{ textDecoration: 'line-through', opacity: 0.6, marginRight: '4px' }}>
+                                                            {h.previous_status || 'N/A'}
+                                                        </span>
+                                                        <span>➔</span>
+                                                        <span style={{ fontWeight: 650, marginLeft: '4px', color: h.new_status === 'MAINTENANCE' ? '#d97706' : h.new_status === 'SCRAPPED' ? '#ef4444' : '#166534' }}>
+                                                            {h.new_status}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 600 }}>{h.reason || 'N/A'}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{h.remarks}</div>
+                                                    </td>
+                                                    <td>{h.changed_by_name} ({h.changed_by_code})</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Completed Batches Table */}
@@ -656,6 +1342,9 @@ const StencilLifecycleManagement: React.FC = () => {
                     <table className={styles.table}>
                         <thead>
                             <tr>
+                                <th onClick={() => handleSort('cycle_number')} className={styles.sortable}>
+                                    Cycle # {sortBy === 'cycle_number' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                                </th>
                                 <th onClick={() => handleSort('stencil_name')} className={styles.sortable}>
                                     Stencil / Model Name {sortBy === 'stencil_name' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
@@ -669,13 +1358,13 @@ const StencilLifecycleManagement: React.FC = () => {
                                     Product Name {sortBy === 'product_name' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
                                 <th onClick={() => handleSort('target_life_cycle')} className={styles.sortable}>
-                                    Target Life Cycle {sortBy === 'target_life_cycle' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                                    Cycle Capacity {sortBy === 'target_life_cycle' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
                                 <th onClick={() => handleSort('qty_life_cycle')} className={styles.sortable}>
-                                    Qty Life Cycle {sortBy === 'qty_life_cycle' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                                    WO Quantity {sortBy === 'qty_life_cycle' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
                                 <th onClick={() => handleSort('balance_life_cycle')} className={styles.sortable}>
-                                    Balance Life Cycle {sortBy === 'balance_life_cycle' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
+                                    Balance Remaining {sortBy === 'balance_life_cycle' ? (sortOrder === 'ASC' ? '▲' : '▼') : ''}
                                 </th>
                                 <th>Action</th>
                             </tr>
@@ -683,19 +1372,22 @@ const StencilLifecycleManagement: React.FC = () => {
                         <tbody>
                             {loadingTable ? (
                                 <tr>
-                                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
+                                    <td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}>
                                         Loading lifecycle records...
                                     </td>
                                 </tr>
                             ) : records.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                    <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                                         No lifecycle records found.
                                     </td>
                                 </tr>
                             ) : (
                                 records.map((rec) => (
                                     <tr key={rec.id}>
+                                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#2563eb' }}>
+                                            Cycle {rec.cycle_number || 1}
+                                        </td>
                                         <td style={{ fontWeight: 650 }}>{rec.stencil_name}</td>
                                         <td>{rec.work_order_number}</td>
                                         <td>{rec.sides}</td>
@@ -882,6 +1574,10 @@ const StencilLifecycleManagement: React.FC = () => {
                             <div>
                                 <div className={styles.modalSectionTitle}>Life Cycle Information</div>
                                 <div className={styles.modalGrid}>
+                                    <div className={styles.modalField}>
+                                        <span className={styles.modalLabel}>Lifecycle Cycle</span>
+                                        <span className={styles.modalValue} style={{ fontWeight: 'bold', color: '#2563eb' }}>Cycle {viewDetailData.record.cycle_number || 1}</span>
+                                    </div>
                                     <div className={styles.modalField}>
                                         <span className={styles.modalLabel}>Target Life Cycle limit</span>
                                         <span className={styles.modalValue}>{viewDetailData.record.target_life_cycle}</span>

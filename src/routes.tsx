@@ -34,9 +34,10 @@ import MaterialManagement from './pages/smt/material-management/MaterialManageme
 import MaterialBomView from './pages/smt/material-bom-view/MaterialBomView';
 import MsdTracker from './pages/smt/msd-tracker/MsdTracker';
 import MsdBomView from './pages/smt/msd-bom-view/MsdBomView';
-import StencilMasterRecord from './pages/smt/stencil-master-record/StencilMasterRecord';
 import StencilLifecycleManagement from './pages/smt/stencil-lifecycle-management/StencilLifecycleManagement';
 import BakingTrackingRecord from './pages/smt/baking-tracking-record/BakingTrackingRecord';
+import StencilRackManagement from './pages/smt/stencil-rack-management/StencilRackManagement';
+import StencilScan from './pages/smt/stencil-scan/StencilScan';
 import { BomSplit } from './pages/bom-split/BomSplit';
 
 import WorkOrderBackend from './pages/backend/WorkOrder';
@@ -383,12 +384,16 @@ export const router = createBrowserRouter([
                         element: <MsdBomView />,
                     },
                     {
-                        path: 'stencil/master',
-                        element: <StencilMasterRecord />,
-                    },
-                    {
                         path: 'stencil/lifecycle',
                         element: <StencilLifecycleManagement />,
+                    },
+                    {
+                        path: 'stencil/rack',
+                        element: <StencilRackManagement />,
+                    },
+                    {
+                        path: 'stencil/scan',
+                        element: <StencilScan />,
                     },
                     {
                         path: 'baking-tracking',

@@ -1,0 +1,355 @@
+.container {
+    padding: 2rem;
+    font-family: 'Inter', sans-serif;
+    color: #1e293b;
+    background-color: #f8fafc;
+    min-height: 100vh;
+}
+
+.headerRow {
+    margin-bottom: 2rem;
+}
+
+.headerRow h2 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0 0 0.5rem 0;
+}
+
+.headerRow p {
+    color: #64748b;
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+/* Scan Bar */
+.scanSection {
+    background: white;
+    padding: 2rem;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+}
+
+.scanSection h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.scanInputWrapper {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+}
+
+.scanInput {
+    width: 100%;
+    padding: 1rem 1.5rem 1rem 3.5rem;
+    font-size: 1.25rem;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    outline: none;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    background-color: #f8fafc;
+}
+
+.scanInput:focus {
+    border-color: #2563eb;
+    background-color: white;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+}
+
+.scanIcon {
+    position: absolute;
+    left: 1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+}
+
+.scanPrompt {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0;
+    font-style: italic;
+}
+
+/* Split Info Grid */
+.infoGrid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 2rem;
+}
+
+@media (max-width: 968px) {
+    .infoGrid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.card {
+    background: white;
+    padding: 2rem;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    margin-bottom: 2rem;
+}
+
+.card h3 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 1.5rem 0;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dataGrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+.dataItem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.dataLabel {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.dataValue {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.fullWidth {
+    grid-column: span 2;
+}
+
+/* Status Indicator */
+.statusBadge {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    text-transform: uppercase;
+    width: fit-content;
+}
+
+.statusAvailable {
+    background-color: #dcfce7;
+    color: #15803d;
+}
+
+.statusCheckedOut {
+    background-color: #fef3c7;
+    color: #b45309;
+}
+
+/* Form Action Cards */
+.actionCard {
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.actionReceive {
+    background-color: #f0f9ff;
+    border: 1px solid #bae6fd;
+}
+
+.actionReturn {
+    background-color: #fdf2f8;
+    border: 1px solid #fbcfe8;
+}
+
+.actionHeader {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #0369a1;
+    margin: 0 0 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.formGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.inputGroup label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #475569;
+}
+
+.input, .select, .textarea {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    outline: none;
+    background-color: white;
+}
+
+.input:focus, .select:focus, .textarea:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.btnAction {
+    padding: 0.625rem 1.25rem;
+    font-weight: 700;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: white;
+    width: fit-content;
+    margin-top: 1rem;
+    transition: all 0.2s ease;
+}
+
+.btnReceive {
+    background-color: #0284c7;
+}
+
+.btnReceive:hover {
+    background-color: #0369a1;
+}
+
+.btnReturn {
+    background-color: #db2777;
+}
+
+.btnReturn:hover {
+    background-color: #be185d;
+}
+
+/* Timeline/History */
+.timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    position: relative;
+    padding-left: 1.5rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 0.375rem;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 2px;
+    background-color: #e2e8f0;
+}
+
+.timelineItem {
+    position: relative;
+}
+
+.timelineDot {
+    position: absolute;
+    left: -1.45rem;
+    top: 0.25rem;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #cbd5e1;
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px #e2e8f0;
+}
+
+.dotAssigned { background-color: #3b82f6; }
+.dotReceived { background-color: #f59e0b; }
+.dotReturned { background-color: #10b981; }
+.dotRelocated { background-color: #8b5cf6; }
+
+.timelineContent {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.timelineHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.timelineTitle {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.timelineTime {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.timelineText {
+    font-size: 0.825rem;
+    color: #64748b;
+}
+
+.timelineMeta {
+    font-size: 0.775rem;
+    color: #475569;
+    font-weight: 600;
+}
+
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    padding: 4rem 2rem;
+    text-align: center;
+    gap: 1rem;
+}

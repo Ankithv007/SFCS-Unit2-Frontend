@@ -11,7 +11,6 @@ import {
     Package,
     Droplets,
     Layers,
-    FileText,
     RefreshCw,
     Thermometer,
     Flame,
@@ -206,7 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     </span> Solder Paste Management
                                 </div>
                             )}
-                            {(hasPermission('smt_stencil_master') || hasPermission('smt_stencil_lifecycle')) && (
+                            {(hasPermission('smt_stencil_lifecycle') || hasPermission('smt_stencil_rack') || hasPermission('smt_stencil_scan')) && (
                                 <div
                                     className={`${styles.submenuItem} ${isStencilMgmtExpanded ? styles.activeSubmenuParent : ''}`}
                                     onClick={() => setIsStencilMgmtExpanded(!isStencilMgmtExpanded)}
@@ -218,19 +217,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             )}
                             {isStencilMgmtExpanded && isExpanded && (
                                 <div className={styles.subSubmenu}>
-                                    {hasPermission('smt_stencil_master') && (
-                                        <div
-                                            className={`${styles.subSubmenuItem} ${isActive('/smt/stencil/master') ? styles.activeSubSubmenu : ''}`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigate('/smt/stencil/master');
-                                            }}
-                                        >
-                                            <span className={styles.menuIcon}>
-                                                <FileText size={16} />
-                                            </span> Stencil Master Record
-                                        </div>
-                                    )}
                                     {hasPermission('smt_stencil_lifecycle') && (
                                         <div
                                             className={`${styles.subSubmenuItem} ${isActive('/smt/stencil/lifecycle') ? styles.activeSubSubmenu : ''}`}
@@ -242,6 +228,32 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                             <span className={styles.menuIcon}>
                                                 <RefreshCw size={16} />
                                             </span> Life Cycle Management
+                                        </div>
+                                    )}
+                                    {hasPermission('smt_stencil_rack') && (
+                                        <div
+                                            className={`${styles.subSubmenuItem} ${isActive('/smt/stencil/rack') ? styles.activeSubSubmenu : ''}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate('/smt/stencil/rack');
+                                            }}
+                                        >
+                                            <span className={styles.menuIcon}>
+                                                <Grid size={16} />
+                                            </span> Stencil Rack Management
+                                        </div>
+                                    )}
+                                    {hasPermission('smt_stencil_scan') && (
+                                        <div
+                                            className={`${styles.subSubmenuItem} ${isActive('/smt/stencil/scan') ? styles.activeSubSubmenu : ''}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate('/smt/stencil/scan');
+                                            }}
+                                        >
+                                            <span className={styles.menuIcon}>
+                                                <ScanLine size={16} />
+                                            </span> Stencil Scan
                                         </div>
                                     )}
                                 </div>

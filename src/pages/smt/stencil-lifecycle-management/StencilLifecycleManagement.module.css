@@ -671,3 +671,93 @@
     color: #15803d;
 }
 
+.maintLayout {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 968px) {
+    .maintLayout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.maintTabs {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 1rem;
+}
+
+.maintTab {
+    padding: 0.5rem 1rem;
+    background: none;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.maintTab:hover {
+    color: var(--text-primary);
+}
+
+.maintTabActive {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.badgeMaint {
+    background-color: #fef3c7;
+    color: #d97706;
+}
+
+.badgeScrap {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.historyContainer {
+    max-height: 350px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--bg-light);
+}
+
+.historyTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.825rem;
+}
+
+.historyTable th {
+    background-color: #e2e8f0;
+    color: #475569;
+    font-weight: 700;
+    font-size: 0.725rem;
+    text-transform: uppercase;
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    text-align: left;
+}
+
+.historyTable td {
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    vertical-align: top;
+}
+
+.historyTable tr:hover {
+    background-color: #f1f5f9;
+}
+

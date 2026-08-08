@@ -54,9 +54,10 @@ export const systemPagesConfig: SystemPageRoute[] = [
     { permission_key: 'smt_qms', module_name: 'SMT', page_name: 'Document Process', route_path: '/smt/qms', display_order: 62, page_type: 'PAGE', icon: 'File', parent_module: 'SMT' },
     { permission_key: 'smt_material_mgmt', module_name: 'SMT', page_name: 'Material Management', route_path: '/smt/material-management', display_order: 63, page_type: 'PAGE', icon: 'Box', parent_module: 'SMT' },
     { permission_key: 'smt_msd_tracker', module_name: 'SMT', page_name: 'MSD Tracker', route_path: '/smt/msd-tracker', display_order: 64, page_type: 'PAGE', icon: 'Thermometer', parent_module: 'SMT' },
-    { permission_key: 'smt_stencil_master', module_name: 'SMT', page_name: 'Stencil Master Record', route_path: '/smt/stencil/master', display_order: 65, page_type: 'PAGE', icon: 'Layers', parent_module: 'SMT' },
     { permission_key: 'smt_stencil_lifecycle', module_name: 'SMT', page_name: 'Stencil Lifecycle', route_path: '/smt/stencil/lifecycle', display_order: 66, page_type: 'PAGE', icon: 'RefreshCw', parent_module: 'SMT' },
     { permission_key: 'smt_baking_tracking', module_name: 'SMT', page_name: 'Baking Tracking Record', route_path: '/smt/baking-tracking', display_order: 67, page_type: 'PAGE', icon: 'Flame', parent_module: 'SMT' },
+    { permission_key: 'smt_stencil_rack', module_name: 'SMT', page_name: 'Stencil Rack Management', route_path: '/smt/stencil/rack', display_order: 68, page_type: 'PAGE', icon: 'Grid', parent_module: 'SMT' },
+    { permission_key: 'smt_stencil_scan', module_name: 'SMT', page_name: 'Stencil Scan', route_path: '/smt/stencil/scan', display_order: 69, page_type: 'PAGE', icon: 'Scan', parent_module: 'SMT' },
 
     // Backend Module
     { permission_key: 'backend_dashboard', module_name: 'Backend', page_name: 'Backend Dashboard', route_path: '/backend', display_order: 80, page_type: 'PAGE', icon: 'Cpu', parent_module: 'Backend' },

@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import styles from './StencilScan.module.css';
 import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
 import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
 import { 
-    Barcode, ScanLine, Clock, User, ClipboardList, Info, ArrowRightLeft, CheckCircle2, RotateCcw
+    Barcode, ScanLine, Clock, User, Info, ArrowRightLeft, CheckCircle2, RotateCcw, AlertTriangle
 } from 'lucide-react';
 
 interface StencilDetails {
@@ -33,6 +33,7 @@ interface StencilDetails {
         elapsed_time: string | null;
         work_order_id?: string | null;
         work_order_number?: string | null;
+        work_order_side?: string | null;
         machine?: string | null;
         production_line?: string | null;
         remarks?: string | null;
@@ -42,6 +43,7 @@ interface StencilDetails {
 interface MovementHistory {
     id: string;
     stencil_rack_number: string | null;
+    side?: string | null;
     action: 'CREATED' | 'ASSIGNED' | 'RECEIVED' | 'RETURNED' | 'RELOCATED' | 'UPDATED';
     employee_code: string;
     employee_name: string;
@@ -62,6 +64,7 @@ interface MovementHistory {
     created_at: string;
     work_order_id?: string | null;
     work_order_number?: string | null;
+    work_order_side?: string | null;
 }
 
 const StencilScan: React.FC = () => {
@@ -106,7 +109,25 @@ const StencilScan: React.FC = () => {
         }
     };
 
-    const selectedWO = workOrders.find(wo => wo.work_order_id === selectedWoId);
+    const selectedWO = useMemo(() => {
+        return workOrders.find(wo => wo.work_order_id === selectedWoId);
+    }, [workOrders, selectedWoId]);
+
+    const normalizeSideStr = (s?: string | null) => (s || '').trim().toUpperCase().replace(/\s*\/\s*/g, '/');
+
+    const isSideMismatch = useMemo(() => {
+        if (!stencil || !selectedWO) return false;
+        const woSideNorm = normalizeSideStr(selectedWO.sides || selectedWO.side);
+        const stencilSideNorm = normalizeSideStr(stencil.side);
+        return woSideNorm !== stencilSideNorm;
+    }, [stencil, selectedWO]);
+
+    const sideMismatchErrorMsg = useMemo(() => {
+        if (!isSideMismatch || !stencil || !selectedWO) return '';
+        const rawWoSide = selectedWO.sides || selectedWO.side || 'N/A';
+        const rawStencilSide = stencil.side || 'N/A';
+        return `Side mismatch: This Work Order requires ${rawWoSide}, but the selected stencil is configured for ${rawStencilSide}.`;
+    }, [isSideMismatch, stencil, selectedWO]);
 
     const focusInput = () => {
         if (barcodeInputRef.current) {
@@ -137,12 +158,11 @@ const StencilScan: React.FC = () => {
                 setTxRemarks('');
                 setRelocateReason('');
                 setCondition('Normal');
-
-                showToast('Stencil barcode scanned successfully.', 'success');
+            } else {
+                showToast(res.message || 'Stencil scan failed.', 'error');
             }
         } catch (err: any) {
-            showToast(err.message || 'Stencil record not found in active racks.', 'error');
-            setScannedJobNumber('');
+            showToast(err.message || 'Error fetching stencil information.', 'error');
         } finally {
             setLoading(false);
             focusInput();
@@ -178,6 +198,11 @@ const StencilScan: React.FC = () => {
 
         if (!selectedWoId) {
             showToast('Please select a valid Work Order before checking out the stencil.', 'error');
+            return;
+        }
+
+        if (isSideMismatch) {
+            showToast(sideMismatchErrorMsg, 'error');
             return;
         }
 
@@ -262,59 +287,62 @@ const StencilScan: React.FC = () => {
 
     const getDotClass = (action: string) => {
         switch (action) {
+            case 'CREATED': return styles.dotCreated;
             case 'ASSIGNED': return styles.dotAssigned;
             case 'RECEIVED': return styles.dotReceived;
             case 'RETURNED': return styles.dotReturned;
             case 'RELOCATED': return styles.dotRelocated;
-            default: return '';
+            default: return styles.dotDefault;
         }
     };
 
     return (
         <div className={styles.container}>
-            {/* Header */}
-            <div className={styles.headerRow}>
-                <h2><ScanLine size={24} /> Stencil Scan Workflow</h2>
-                <p>Operator checkpoint for scan-based stencil check-out (Receive) and check-in (Return).</p>
+            <div className={styles.header}>
+                <div>
+                    <h2><Barcode size={24} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} /> Stencil Scan (Receive / Return)</h2>
+                    <p style={{ color: '#64748b', margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>
+                        Scan physical stencil barcode or Job Number to check out (receive to SMT line) or check in (return to rack).
+                    </p>
+                </div>
             </div>
 
-            {/* Scan section */}
-            <form className={styles.scanSection} onSubmit={handleScanSubmit}>
-                <h3><Barcode size={20} /> Scan Stencil Identifier (Rack # / Job #)</h3>
-                <div className={styles.scanInputWrapper}>
-                    <input 
-                        type="text" 
-                        ref={barcodeInputRef}
-                        className={styles.scanInput}
-                        value={scannedJobNumber}
-                        onChange={e => setScannedJobNumber(e.target.value)}
-                        placeholder="Scan Stencil Rack Number or Job Number..."
-                        disabled={loading}
-                        autoFocus
-                    />
-                    <ScanLine className={styles.scanIcon} size={24} />
-                </div>
-                <p className={styles.scanPrompt}>Scan physical barcode to fetch location and verify status.</p>
-            </form>
+            {/* Scan Card */}
+            <div className={styles.card} style={{ marginBottom: '1.5rem' }}>
+                <form onSubmit={handleScanSubmit} className={styles.scanForm}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                        <ScanLine className={styles.scanIcon} size={20} />
+                        <input
+                            ref={barcodeInputRef}
+                            type="text"
+                            className={styles.scanInput}
+                            placeholder="Scan Stencil Barcode or Job Number..."
+                            value={scannedJobNumber}
+                            onChange={(e) => setScannedJobNumber(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                    <button type="submit" className={styles.btnScan} disabled={loading || !scannedJobNumber.trim()}>
+                        {loading ? 'Searching...' : 'Scan / Search'}
+                    </button>
+                </form>
+            </div>
 
-            {/* Detail display */}
-            {loading && !stencil ? (
-                <div style={{ textAlign: 'center', padding: '3rem' }}>
-                    <p style={{ color: '#64748b', fontWeight: 600 }}>Loading stencil details...</p>
-                </div>
-            ) : !stencil ? (
-                <div className={styles.emptyState}>
-                    <Info size={48} strokeWidth={1.5} />
-                    <h3>No Stencil Scanned</h3>
-                    <p>Scan a job barcode above to retrieve coordinates and initialize checkout/return.</p>
-                </div>
-            ) : (
-                <div className={styles.infoGrid}>
-                    {/* Left side: Information and Actions */}
-                    <div>
-                        {/* Stencil Information Card */}
+            {/* Stencil Details & Actions */}
+            {stencil && (
+                <div className={styles.gridContainer}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {/* Stencil Card */}
                         <div className={styles.card}>
-                            <h3><ClipboardList size={20} /> Stencil Status</h3>
+                            <div className={styles.cardHeader}>
+                                <h3><Info size={20} /> Stencil Details</h3>
+                                <span className={`${styles.statusBadge} ${
+                                    stencil.location_status === 'STORED' ? styles.statusAvailable : styles.statusCheckedOut
+                                }`}>
+                                    {stencil.location_status === 'STORED' ? 'STORED' : 'CHECKED OUT'}
+                                </span>
+                            </div>
+
                             <div className={styles.dataGrid}>
                                 <div className={styles.dataItem}>
                                     <span className={styles.dataLabel}>1. Stencil Rack Number</span>
@@ -344,7 +372,7 @@ const StencilScan: React.FC = () => {
                                 </div>
                                 <div className={styles.dataItem}>
                                     <span className={styles.dataLabel}>7. Sides</span>
-                                    <span className={styles.dataValue}>{stencil.side || 'N/A'}</span>
+                                    <span className={styles.dataValue} style={{ fontWeight: 600, color: '#0369a1' }}>{stencil.side || 'N/A'}</span>
                                 </div>
                                 <div className={styles.dataItem}>
                                     <span className={styles.dataLabel}>8. Current Rack</span>
@@ -426,6 +454,12 @@ const StencilScan: React.FC = () => {
                                             </span>
                                         </div>
                                         <div className={styles.dataItem}>
+                                            <span className={styles.dataLabel}>Work Order Side</span>
+                                            <span className={styles.dataValue} style={{ fontSize: '0.9rem', color: '#2563eb', fontWeight: 600 }}>
+                                                {stencil.holder.work_order_side || 'N/A'}
+                                            </span>
+                                        </div>
+                                        <div className={styles.dataItem}>
                                             <span className={styles.dataLabel}>Target SMT Machine</span>
                                             <span className={styles.dataValue} style={{ fontSize: '0.9rem' }}>
                                                 {stencil.holder.machine || 'N/A'}
@@ -484,7 +518,26 @@ const StencilScan: React.FC = () => {
                                                     <span><strong>WO:</strong> {selectedWO.work_order_id}</span>
                                                     <span><strong>Model:</strong> {selectedWO.product_name || 'N/A'}</span>
                                                     <span><strong>Qty:</strong> {selectedWO.quantity || 'N/A'}</span>
-                                                    <span><strong>Side:</strong> {selectedWO.sides || 'N/A'}</span>
+                                                    <span><strong>WO Side:</strong> {selectedWO.sides || selectedWO.side || 'N/A'}</span>
+                                                    <span><strong>Stencil Side:</strong> {stencil.side || 'N/A'}</span>
+                                                </div>
+                                            )}
+                                            {isSideMismatch && (
+                                                <div style={{
+                                                    marginTop: '0.75rem',
+                                                    padding: '0.75rem 1rem',
+                                                    backgroundColor: '#fef2f2',
+                                                    border: '1px solid #fecaca',
+                                                    borderRadius: '6px',
+                                                    color: '#dc2626',
+                                                    fontSize: '0.85rem',
+                                                    fontWeight: 600,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem'
+                                                }}>
+                                                    <AlertTriangle size={18} />
+                                                    <span>{sideMismatchErrorMsg}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -522,7 +575,11 @@ const StencilScan: React.FC = () => {
                                                 placeholder="Remarks..."
                                             />
                                         </div>
-                                        <button type="submit" className={`${styles.btnAction} ${styles.btnReceive}`} disabled={!selectedWoId || !machine || !productionLine || loading}>
+                                        <button 
+                                            type="submit" 
+                                            className={`${styles.btnAction} ${styles.btnReceive}`} 
+                                            disabled={!selectedWoId || isSideMismatch || !machine || !productionLine || loading}
+                                        >
                                             Confirm Check-Out
                                         </button>
                                     </form>
@@ -648,7 +705,12 @@ const StencilScan: React.FC = () => {
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.25rem' }}>
                                                     {(item.work_order_number || item.work_order_id) && (
                                                         <span className={styles.timelineText} style={{ color: '#2563eb', fontWeight: 600 }}>
-                                                            Work Order: {item.work_order_number || item.work_order_id}
+                                                            Work Order: {item.work_order_number || item.work_order_id} {item.work_order_side ? `(WO Side: ${item.work_order_side})` : ''}
+                                                        </span>
+                                                    )}
+                                                    {item.side && (
+                                                        <span className={styles.timelineText} style={{ color: '#0369a1', fontWeight: 500 }}>
+                                                            Stencil Side: {item.side}
                                                         </span>
                                                     )}
                                                     <span className={styles.timelineText}>

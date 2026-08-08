@@ -16,6 +16,7 @@ interface Stencil {
     side: string;
     storage_location: string | null;
     status: string;
+    physical_status?: string;
     remarks: string | null;
     print_count: number;
     target_life_cycle: number;
@@ -426,12 +427,13 @@ const StencilLifecycleManagement: React.FC = () => {
 
     const getFilteredStencils = () => {
         const q = stencilSearch.trim().toLowerCase();
-        if (!q) return stencils;
-        return [...stencils]
-            .filter(s => s.stencil_name.toLowerCase().includes(q) || (s.stencil_id && s.stencil_id.toLowerCase().includes(q)))
+        const availableOnly = stencils.filter(s => (s.physical_status || s.status) === 'CHECKED_OUT');
+        if (!q) return availableOnly;
+        return [...availableOnly]
+            .filter(s => s.stencil_name.toLowerCase().includes(q) || (s.stencil_id && s.stencil_id.toLowerCase().includes(q)) || (s.job_number && s.job_number.toLowerCase().includes(q)))
             .sort((a, b) => {
-                const aNameMatch = a.stencil_name.toLowerCase().startsWith(q);
-                const bNameMatch = b.stencil_name.toLowerCase().startsWith(q);
+                const aNameMatch = a.stencil_name.toLowerCase().startsWith(q) || (a.stencil_id && a.stencil_id.toLowerCase().startsWith(q));
+                const bNameMatch = b.stencil_name.toLowerCase().startsWith(q) || (b.stencil_id && b.stencil_id.toLowerCase().startsWith(q));
                 if (aNameMatch && !bNameMatch) return -1;
                 if (!aNameMatch && bNameMatch) return 1;
                 return 0;
@@ -442,7 +444,7 @@ const StencilLifecycleManagement: React.FC = () => {
         const q = maintStencilSearch.trim().toLowerCase();
         if (!q) return stencils;
         return [...stencils]
-            .filter(s => s.stencil_name.toLowerCase().includes(q) || (s.stencil_id && s.stencil_id.toLowerCase().includes(q)))
+            .filter(s => s.stencil_name.toLowerCase().includes(q) || (s.stencil_id && s.stencil_id.toLowerCase().includes(q)) || (s.job_number && s.job_number.toLowerCase().includes(q)))
             .sort((a, b) => {
                 const aNameMatch = a.stencil_name.toLowerCase().startsWith(q) || (a.stencil_id && a.stencil_id.toLowerCase().startsWith(q));
                 const bNameMatch = b.stencil_name.toLowerCase().startsWith(q) || (b.stencil_id && b.stencil_id.toLowerCase().startsWith(q));
@@ -456,6 +458,12 @@ const StencilLifecycleManagement: React.FC = () => {
         e.preventDefault();
         if (!selectedStencil || !selectedWorkOrder) {
             showToast('Please select both a Stencil and a Work Order.', 'error');
+            return;
+        }
+
+        const isCheckedOut = (selectedStencil.physical_status || selectedStencil.status) === 'CHECKED_OUT';
+        if (!isCheckedOut) {
+            showToast('The selected stencil is currently available in the rack. Please check out the stencil from Stencil Rack Management before assigning it to a Work Order.', 'error');
             return;
         }
 
@@ -566,6 +574,7 @@ const StencilLifecycleManagement: React.FC = () => {
         const isExceeded = projectedUsed > cycleCap;
         const isExactLimit = projectedUsed === cycleCap;
         const isBlockedStatus = selectedStencil.lifecycle_status === 'MAINTENANCE' || selectedStencil.lifecycle_status === 'SCRAPPED';
+        const isNotCheckedOut = (selectedStencil.physical_status || selectedStencil.status) !== 'CHECKED_OUT';
 
         // Side compatibility calculation - Strict 1:1 equality after case & whitespace normalization
         const woSide = selectedWorkOrder ? selectedWorkOrder.sides : '';
@@ -584,6 +593,7 @@ const StencilLifecycleManagement: React.FC = () => {
             isExceeded,
             isExactLimit,
             isBlockedStatus,
+            isNotCheckedOut,
             isSideCompatible,
             woSide,
             stencilSide,
@@ -643,7 +653,7 @@ const StencilLifecycleManagement: React.FC = () => {
                                     {stencilDropdownOpen && (
                                         <ul className={styles.dropdownList}>
                                             {getFilteredStencils().length === 0 ? (
-                                                <li className={styles.noOptions}>No active stencils found</li>
+                                                <li className={styles.noOptions}>No checked out stencils available</li>
                                             ) : (
                                                 getFilteredStencils().map((s) => {
                                                     const cap = s.current_cycle_capacity || s.target_life_cycle || 60000;
@@ -865,14 +875,14 @@ const StencilLifecycleManagement: React.FC = () => {
                     {/* Real-time Capacity & Side Calculation Breakdown Panel */}
                     {calc && selectedWorkOrder && (
                         <div style={{ 
-                            background: (!calc.isSideCompatible || calc.isExceeded) ? '#fef2f2' : calc.isExactLimit ? '#fefce8' : '#f0fdf4',
-                            border: `1px solid ${(!calc.isSideCompatible || calc.isExceeded) ? '#fca5a5' : calc.isExactLimit ? '#fde047' : '#86efac'}`,
+                            background: (!calc.isSideCompatible || calc.isExceeded || calc.isNotCheckedOut) ? '#fef2f2' : calc.isExactLimit ? '#fefce8' : '#f0fdf4',
+                            border: `1px solid ${(!calc.isSideCompatible || calc.isExceeded || calc.isNotCheckedOut) ? '#fca5a5' : calc.isExactLimit ? '#fde047' : '#86efac'}`,
                             borderRadius: '8px',
                             padding: '1.25rem',
                             marginBottom: '1.5rem'
                         }}>
-                            <h4 style={{ margin: '0 0 0.75rem 0', color: (!calc.isSideCompatible || calc.isExceeded) ? '#991b1b' : calc.isExactLimit ? '#854d0e' : '#166534', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <span>{(!calc.isSideCompatible || calc.isExceeded) ? '🚫' : calc.isExactLimit ? '⚠️' : '✅'}</span>
+                            <h4 style={{ margin: '0 0 0.75rem 0', color: (!calc.isSideCompatible || calc.isExceeded || calc.isNotCheckedOut) ? '#991b1b' : calc.isExactLimit ? '#854d0e' : '#166534', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span>{(!calc.isSideCompatible || calc.isExceeded || calc.isNotCheckedOut) ? '🚫' : calc.isExactLimit ? '⚠️' : '✅'}</span>
                                 <span>Assignment & Capacity Validation Breakdown</span>
                             </h4>
 
@@ -904,13 +914,19 @@ const StencilLifecycleManagement: React.FC = () => {
                                 </div>
                                 <div>
                                     <strong>Assignment:</strong>{' '}
-                                    <span style={{ fontWeight: 'bold', color: (calc.isExceeded || !calc.isSideCompatible || calc.isBlockedStatus) ? '#ef4444' : '#166534' }}>
-                                        {(calc.isExceeded || !calc.isSideCompatible || calc.isBlockedStatus) ? 'BLOCKED' : 'ALLOWED'}
+                                    <span style={{ fontWeight: 'bold', color: (calc.isExceeded || !calc.isSideCompatible || calc.isBlockedStatus || calc.isNotCheckedOut) ? '#ef4444' : '#166534' }}>
+                                        {(calc.isExceeded || !calc.isSideCompatible || calc.isBlockedStatus || calc.isNotCheckedOut) ? 'BLOCKED' : 'ALLOWED'}
                                     </span>
                                 </div>
                             </div>
 
-                            {!calc.isSideCompatible && (
+                            {calc.isNotCheckedOut && (
+                                <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fca5a5', color: '#991b1b', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                    The selected stencil is currently available in the rack. Please check out the stencil from Stencil Rack Management before assigning it to a Work Order.
+                                </div>
+                            )}
+
+                            {!calc.isNotCheckedOut && !calc.isSideCompatible && (
                                 <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fca5a5', color: '#991b1b', fontWeight: 'bold', fontSize: '0.9rem' }}>
                                     Stencil side {calc.stencilSide || 'N/A'} does not match Work Order side {calc.woSide}. A {calc.stencilSide || 'N/A'} stencil can only be used for a {calc.stencilSide || 'N/A'} Work Order.
                                 </div>
@@ -965,7 +981,7 @@ const StencilLifecycleManagement: React.FC = () => {
                         <button
                             type="submit"
                             className={styles.button}
-                            disabled={!selectedStencil || !selectedWorkOrder || submitting || !!calc?.isExceeded || !calc?.isSideCompatible || !!calc?.isBlockedStatus}
+                            disabled={!selectedStencil || !selectedWorkOrder || submitting || !!calc?.isExceeded || !calc?.isSideCompatible || !!calc?.isBlockedStatus || !!calc?.isNotCheckedOut}
                         >
                             {submitting ? 'Creating Assignment...' : 'Create Assignment'}
                         </button>

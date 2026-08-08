@@ -4,7 +4,7 @@ import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
 import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
 import { 
-    Barcode, ScanLine, Clock, User, Info, ArrowRightLeft, CheckCircle2, RotateCcw, AlertTriangle
+    Barcode, ScanLine, Search, Clock, User, Info, ArrowRightLeft, CheckCircle2, RotateCcw, AlertTriangle
 } from 'lucide-react';
 
 interface StencilDetails {
@@ -308,22 +308,37 @@ const StencilScan: React.FC = () => {
             </div>
 
             {/* Scan Card */}
-            <div className={styles.card} style={{ marginBottom: '1.5rem' }}>
+            <div className={styles.scanCard}>
+                <div className={styles.scanCardHeader}>
+                    <div className={styles.scanCardTitle}>
+                        <ScanLine size={20} className={styles.titleIcon} />
+                        <h3>Scan / Search Stencil</h3>
+                    </div>
+                    <span className={styles.scanCardSubtitle}>
+                        Scan barcode, enter Stencil Rack Number, or enter Job Number
+                    </span>
+                </div>
                 <form onSubmit={handleScanSubmit} className={styles.scanForm}>
-                    <div style={{ position: 'relative', flex: 1 }}>
-                        <ScanLine className={styles.scanIcon} size={20} />
+                    <div className={styles.scanInputWrapper}>
+                        <Barcode className={styles.scanInputIcon} size={18} />
                         <input
                             ref={barcodeInputRef}
                             type="text"
                             className={styles.scanInput}
-                            placeholder="Scan Stencil Barcode or Job Number..."
+                            placeholder="Scan Stencil Barcode, Rack Number, or Job Number..."
                             value={scannedJobNumber}
                             onChange={(e) => setScannedJobNumber(e.target.value)}
+                            disabled={loading}
                             autoFocus
                         />
                     </div>
-                    <button type="submit" className={styles.btnScan} disabled={loading || !scannedJobNumber.trim()}>
-                        {loading ? 'Searching...' : 'Scan / Search'}
+                    <button 
+                        type="submit" 
+                        className={styles.btnScan} 
+                        disabled={loading || !scannedJobNumber.trim()}
+                    >
+                        <Search size={18} />
+                        <span>{loading ? 'Searching...' : 'Scan / Search'}</span>
                     </button>
                 </form>
             </div>

@@ -336,10 +336,14 @@ export const Printing: React.FC = () => {
     const fetchEligibleWorkOrders = async () => {
         try {
             const data = await apiFetch('/api/smt/printing/eligible-wos');
-            setEligibleWos(data || []);
+            const list = Array.isArray(data) ? data : (data?.data || data?.workOrders || []);
+            setEligibleWos(list);
+            if (list.length === 0) {
+                addToast('No Work Orders are currently available for Printing.', 'info');
+            }
         } catch (err: any) {
             console.error('Error fetching eligible work orders:', err);
-            addToast('Failed to load eligible work orders.', 'error');
+            addToast('Unable to load Work Orders. Please try again.', 'error');
         }
     };
 

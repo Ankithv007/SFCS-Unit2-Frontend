@@ -114,12 +114,7 @@ export const SerialNumber: React.FC = () => {
         fileCount: number;
     } | null>(null);
 
-    // Continue Scanning Modal State
-    const [continueScanRecord, setContinueScanRecord] = useState<SerialGenerationRecord | null>(null);
-    const [continueScannedSerials, setContinueScannedSerials] = useState<string[]>([]);
-    const [continueScannedCount, setContinueScannedCount] = useState(0);
-    const [continueScanInput, setContinueScanInput] = useState('');
-    const [isSubmittingContinueScan, setIsSubmittingContinueScan] = useState(false);
+
 
     // Records log state
     const [records, setRecords] = useState<SerialGenerationRecord[]>([]);
@@ -334,77 +329,7 @@ export const SerialNumber: React.FC = () => {
         addToast('Scanned barcode removed.', 'info');
     };
 
-    // --- Continue Scanning Modal Handlers ---
-    const handleStartContinueScanning = async (record: SerialGenerationRecord) => {
-        setContinueScanRecord(record);
-        setContinueScannedCount(record.generated_quantity);
-        setContinueScanInput('');
-        
-        try {
-            const queryParams = new URLSearchParams({
-                page: '1',
-                limit: '50',
-                search: ''
-            });
-            const data = await apiFetch(`/api/smt/v1/smt/serial-generation-records/${record.id}/serials?${queryParams.toString()}`);
-            if (data?.success) {
-                setContinueScannedSerials(data.serials.map((s: any) => s.serial_number));
-            } else {
-                setContinueScannedSerials([]);
-            }
-        } catch (err) {
-            console.error('Error loading resume serials list:', err);
-            setContinueScannedSerials([]);
-        }
-    };
 
-    const handleContinueScanSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!continueScanRecord) return;
-
-        const code = continueScanInput.trim();
-        if (!code) return;
-
-        if (continueScannedSerials.includes(code)) {
-            addToast('This barcode has already been scanned. Duplicate barcode is not allowed.', 'error');
-            setContinueScanInput('');
-            return;
-        }
-
-        try {
-            setIsSubmittingContinueScan(true);
-            
-            const checkRes = await apiFetch(`/api/smt/v1/smt/serial-generation-records/check-serial/${encodeURIComponent(code)}`);
-            if (checkRes?.exists) {
-                addToast('This barcode has already been scanned. Duplicate barcode is not allowed.', 'error');
-                setContinueScanInput('');
-                return;
-            }
-
-            const res = await apiFetch(`/api/smt/v1/smt/serial-generation-records/${continueScanRecord.id}/scans`, {
-                method: 'POST',
-                body: JSON.stringify({ barcode: code })
-            });
-
-            if (res?.success) {
-                addToast(`Barcode "${code}" saved successfully.`, 'success');
-                setContinueScannedSerials(prev => [code, ...prev]);
-                setContinueScannedCount(res.scannedCount);
-                setRecords(prev => prev.map(rec => rec.id === continueScanRecord.id ? { ...rec, generated_quantity: res.scannedCount } : rec));
-            }
-        } catch (err: any) {
-            addToast(err.message || 'Failed to add scanned barcode.', 'error');
-        } finally {
-            setIsSubmittingContinueScan(false);
-            setContinueScanInput('');
-        }
-    };
-
-    const handleCloseContinueScan = () => {
-        setContinueScanRecord(null);
-        fetchWorkOrders();
-        fetchRecords();
-    };
 
     // --- Drag and Drop File Handlers ---
     const handleDragOver = (e: React.DragEvent) => {
@@ -1703,16 +1628,7 @@ export const SerialNumber: React.FC = () => {
                                         <td style={{ fontWeight: 650 }}>{rec.generated_quantity}</td>
                                         <td>
                                             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                                {rec.barcode_source === 'CUSTOMER' && rec.generated_quantity < rec.work_order_quantity && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleStartContinueScanning(rec)}
-                                                        className={styles.button}
-                                                        style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem', backgroundColor: '#10b981', backgroundImage: 'none' }}
-                                                    >
-                                                        Continue Scanning
-                                                    </button>
-                                                )}
+
                                                 <button
                                                     type="button"
                                                     onClick={() => fetchRecordDetails(rec.id)}
@@ -2269,94 +2185,7 @@ export const SerialNumber: React.FC = () => {
                 </div>
             )}
 
-            {/* --- CONTINUE SCANNING RESUME MODAL --- */}
-            {continueScanRecord && (
-                <div className={styles.modalOverlay} onClick={handleCloseContinueScan} style={{ zIndex: 1150 }}>
-                    <div className={styles.modalContent} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px', width: '95%', borderRadius: '1.25rem' }}>
-                        <div className={styles.modalHeader}>
-                            <h3 className={styles.modalTitle}>
-                                👤 Continue Scanning: {continueScanRecord.work_order_number}
-                            </h3>
-                            <button type="button" className={styles.modalCloseBtn} onClick={handleCloseContinueScan}>✕</button>
-                        </div>
-                        <div className={styles.modalBody} style={{ padding: '1.5rem 2rem' }}>
-                            <div className={styles.snapshotGrid} style={{ marginTop: 0, marginBottom: '1.5rem', backgroundColor: '#f8fafc', padding: '1rem' }}>
-                                <div className={styles.snapshotItem}>
-                                    <span className={styles.snapshotLabel}>Product Name</span>
-                                    <span className={styles.snapshotVal}>{continueScanRecord.product_name}</span>
-                                </div>
-                                <div className={styles.snapshotItem}>
-                                    <span className={styles.snapshotLabel}>WO Quantity</span>
-                                    <span className={styles.snapshotVal}>{continueScanRecord.work_order_quantity}</span>
-                                </div>
-                            </div>
 
-                            <div className={styles.scanStats} style={{ marginBottom: '1.5rem' }}>
-                                <div className={styles.scanStatItem}>
-                                    <span className={styles.scanStatLabel}>Scanned Count</span>
-                                    <span className={styles.scanStatVal} style={{ color: '#059669' }}>
-                                        {continueScannedCount}
-                                    </span>
-                                </div>
-                                <div className={styles.scanStatItem}>
-                                    <span className={styles.scanStatLabel}>Pending Count</span>
-                                    <span className={styles.scanStatVal} style={{ color: '#4f46e5' }}>
-                                        {continueScanRecord.work_order_quantity - continueScannedCount}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <form onSubmit={handleContinueScanSubmit} style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                                <input
-                                    type="text"
-                                    className={styles.input}
-                                    placeholder="Scan customer serial and press Enter..."
-                                    value={continueScanInput}
-                                    onChange={(e) => setContinueScanInput(e.target.value)}
-                                    autoFocus
-                                    disabled={continueScannedCount >= continueScanRecord.work_order_quantity}
-                                />
-                                <button 
-                                    type="submit" 
-                                    className={styles.button} 
-                                    style={{ backgroundColor: '#10b981' }}
-                                    disabled={continueScannedCount >= continueScanRecord.work_order_quantity || isSubmittingContinueScan}
-                                >
-                                    Add
-                                </button>
-                            </form>
-
-                            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#475569' }}>Recently Scanned Barcodes:</h4>
-                            <div className={styles.scanListContainer} style={{ maxHeight: '180px' }}>
-                                {continueScannedSerials.map((bar, idx) => (
-                                    <div key={idx} className={styles.scanListItem}>
-                                        <div>
-                                            <span className={styles.scanListIndex}>#{continueScannedSerials.length - idx}</span>
-                                            <span className={styles.scanListBarcode}>{bar}</span>
-                                        </div>
-                                        <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>Saved</span>
-                                    </div>
-                                ))}
-                                {continueScannedSerials.length === 0 && (
-                                    <div style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '2rem' }}>
-                                        No scans found for this record yet. Start scanning above!
-                                    </div>
-                                )}
-                            </div>
-
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                                <button
-                                    type="button"
-                                    onClick={handleCloseContinueScan}
-                                    className={`${styles.button} ${styles.buttonSecondary}`}
-                                >
-                                    Done
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* --- EDIT CUSTOMER BARCODE MODAL --- */}
             {editingSerial && (

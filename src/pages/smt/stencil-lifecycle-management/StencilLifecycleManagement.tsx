@@ -5,6 +5,7 @@ import { useSmtAuth } from '../../../context/SmtAuthContext';
 import { useAuth } from '../../../hooks/useAuth';
 import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
+import { isStencilSideCompatible, calculateRequiredLifecyclePrints } from '../../../utils/smtHelper';
 
 interface Stencil {
     id: string;
@@ -77,6 +78,7 @@ interface LifecycleRecord {
     updated_at?: string | null;
     deleted_by_name?: string | null;
     deleted_at?: string | null;
+    is_deleted?: boolean;
 }
 
 interface DetailModalData {
@@ -425,9 +427,48 @@ const StencilLifecycleManagement: React.FC = () => {
         fetchRecords();
     };
 
+    const getWorkOrderExistingStrategy = (woId: string) => {
+        const woRecords = records.filter(r => r.work_order_id === woId && !r.is_deleted);
+        if (woRecords.length === 0) return { strategy: 'NONE', requiredSide: 'Bottom' };
+        const hasCombined = woRecords.some(r => {
+            const s = (r.sides || '').trim().toLowerCase();
+            return (s.includes('top') && s.includes('bottom')) || s.includes('/');
+        });
+        if (hasCombined) return { strategy: 'COMBINED', requiredSide: null };
+
+        const hasTop = woRecords.some(r => (r.sides || '').trim().toLowerCase() === 'top');
+        const hasBottom = woRecords.some(r => (r.sides || '').trim().toLowerCase() === 'bottom');
+
+        if (hasTop && hasBottom) return { strategy: 'COMPLETE', requiredSide: null };
+        if (hasBottom && !hasTop) return { strategy: 'SEPARATE', requiredSide: 'Top' };
+        if (hasTop && !hasBottom) return { strategy: 'SEPARATE', requiredSide: 'Bottom' };
+
+        return { strategy: 'NONE', requiredSide: 'Bottom' };
+    };
+
     const getFilteredStencils = () => {
         const q = stencilSearch.trim().toLowerCase();
-        const availableOnly = stencils.filter(s => (s.physical_status || s.status) === 'CHECKED_OUT');
+        let availableOnly = stencils.filter(s => (s.physical_status || s.status) === 'CHECKED_OUT');
+        if (selectedWorkOrder) {
+            const woSides = (selectedWorkOrder.sides || '').trim().toLowerCase();
+            if (woSides.includes('/') || woSides === 'top / bottom' || woSides === 'top/bottom') {
+                const { strategy, requiredSide } = getWorkOrderExistingStrategy(selectedWorkOrder.id);
+                if (strategy === 'COMBINED' || strategy === 'COMPLETE') {
+                    availableOnly = [];
+                } else if (strategy === 'SEPARATE' && requiredSide) {
+                    availableOnly = availableOnly.filter(s => (s.side || '').trim().toUpperCase() === requiredSide.toUpperCase());
+                } else if (strategy === 'NONE') {
+                    availableOnly = availableOnly.filter(s => {
+                        const sSide = (s.side || '').trim().toUpperCase();
+                        return sSide === 'BOTTOM' || sSide === 'TOP/BOTTOM' || (sSide.includes('TOP') && sSide.includes('BOTTOM'));
+                    });
+                } else {
+                    availableOnly = availableOnly.filter(s => isStencilSideCompatible(selectedWorkOrder.sides, s.side));
+                }
+            } else {
+                availableOnly = availableOnly.filter(s => isStencilSideCompatible(selectedWorkOrder.sides, s.side));
+            }
+        }
         if (!q) return availableOnly;
         return [...availableOnly]
             .filter(s => s.stencil_name.toLowerCase().includes(q) || (s.stencil_id && s.stencil_id.toLowerCase().includes(q)) || (s.job_number && s.job_number.toLowerCase().includes(q)))
@@ -467,13 +508,19 @@ const StencilLifecycleManagement: React.FC = () => {
             return;
         }
 
+        if (calc && !calc.isSequenceValid) {
+            showToast(calc.sequenceErrorMsg || 'Please register the BOTTOM stencil first for this TOP/BOTTOM Work Order.', 'error');
+            return;
+        }
+
         const capacity = selectedStencil.current_cycle_capacity || selectedStencil.target_life_cycle || 60000;
         const used = selectedStencil.print_count || 0;
-        const woQty = selectedWorkOrder.quantity || 0;
-        const projected = used + woQty;
+        const panelQty = Number(selectedWorkOrder.panel_quantity || selectedWorkOrder.quantity || 0);
+        const requiredPrints = calculateRequiredLifecyclePrints(selectedWorkOrder.sides, selectedStencil.side, panelQty);
+        const projected = used + requiredPrints;
 
         if (projected > capacity) {
-            showToast(`The selected Work Order quantity (${woQty}) exceeds the stencil's remaining lifecycle capacity (${capacity - used} prints). Assignment blocked.`, 'error');
+            showToast(`The required lifecycle prints (${requiredPrints}) exceed the stencil's remaining lifecycle capacity (${capacity - used} prints). Assignment blocked.`, 'error');
             return;
         }
 
@@ -569,34 +616,82 @@ const StencilLifecycleManagement: React.FC = () => {
         const cycleCap = selectedStencil.current_cycle_capacity || selectedStencil.target_life_cycle || 60000;
         const currentUsed = selectedStencil.print_count || 0;
         const remainingPrints = Math.max(0, cycleCap - currentUsed);
+        
+        const panelQty = selectedWorkOrder ? Number(selectedWorkOrder.panel_quantity || selectedWorkOrder.quantity || 0) : 0;
         const woQty = selectedWorkOrder ? (selectedWorkOrder.quantity || 0) : 0;
-        const projectedUsed = currentUsed + woQty;
-        const isExceeded = projectedUsed > cycleCap;
-        const isExactLimit = projectedUsed === cycleCap;
-        const isBlockedStatus = selectedStencil.lifecycle_status === 'MAINTENANCE' || selectedStencil.lifecycle_status === 'SCRAPPED';
-        const isNotCheckedOut = (selectedStencil.physical_status || selectedStencil.status) !== 'CHECKED_OUT';
-
-        // Side compatibility calculation - Strict 1:1 equality after case & whitespace normalization
         const woSide = selectedWorkOrder ? selectedWorkOrder.sides : '';
         const stencilSide = selectedStencil.side || '';
-        const normWOSide = (woSide || '').trim().toUpperCase().replace(/\s*\/\s*/g, '/');
-        const normStencilSide = (stencilSide || '').trim().toUpperCase().replace(/\s*\/\s*/g, '/');
 
-        const isSideCompatible = (!selectedWorkOrder || !selectedStencil) ? true : (normWOSide === normStencilSide);
+        const requiredPrints = (selectedWorkOrder && selectedStencil) ? calculateRequiredLifecyclePrints(woSide, stencilSide, panelQty) : 0;
+        const projectedUsed = currentUsed + requiredPrints;
+        const remainingAfter = cycleCap - projectedUsed;
+        const isExceeded = projectedUsed > cycleCap;
+        const isExactLimit = projectedUsed === cycleCap;
+        let isBlockedStatus = selectedStencil.lifecycle_status === 'MAINTENANCE' || selectedStencil.lifecycle_status === 'SCRAPPED';
+        const isNotCheckedOut = (selectedStencil.physical_status || selectedStencil.status) !== 'CHECKED_OUT';
+
+        // Side compatibility calculation - Flexible matrix check
+        const isSideCompatible = (!selectedWorkOrder || !selectedStencil) ? true : isStencilSideCompatible(woSide, stencilSide);
+
+        // Determine Stencil Configuration description
+        let stencilConfig = 'Single-Sided';
+        const normWO = (woSide || '').trim().toUpperCase();
+        const normStencil = (stencilSide || '').trim().toUpperCase();
+
+        if (normWO.includes('/')) {
+            if (normStencil.includes('/')) {
+                stencilConfig = 'Combined (TOP/BOTTOM)';
+            } else if (normStencil === 'TOP') {
+                stencilConfig = 'Separate - TOP';
+            } else if (normStencil === 'BOTTOM') {
+                stencilConfig = 'Separate - BOTTOM';
+            } else {
+                stencilConfig = 'Separate';
+            }
+        } else {
+            stencilConfig = `Single-Sided (${normWO})`;
+        }
+
+        // Check sequence order for TOP/BOTTOM Work Orders
+        let isSequenceValid = true;
+        let sequenceErrorMsg = '';
+        if (selectedWorkOrder && selectedStencil && (normWO.includes('/') || normWO === 'TOP / BOTTOM')) {
+            const { strategy, requiredSide } = getWorkOrderExistingStrategy(selectedWorkOrder.id);
+            if (strategy === 'NONE' && normStencil === 'TOP') {
+                isSequenceValid = false;
+                sequenceErrorMsg = 'Please register the BOTTOM stencil first for this TOP/BOTTOM Work Order.';
+            } else if (strategy === 'SEPARATE' && requiredSide && normStencil !== requiredSide.toUpperCase()) {
+                isSequenceValid = false;
+                sequenceErrorMsg = `Sequence error: Work Order requires ${requiredSide} stencil assignment next.`;
+            } else if (strategy === 'COMBINED' || strategy === 'COMPLETE') {
+                isSequenceValid = false;
+                sequenceErrorMsg = 'This Work Order has already completed stencil assignments.';
+            }
+        }
+
+        if (!isSequenceValid) {
+            isBlockedStatus = true;
+        }
 
         return {
             cycleCap,
             currentUsed,
             remainingPrints,
+            panelQty,
             woQty,
+            requiredPrints,
             projectedUsed,
+            remainingAfter,
             isExceeded,
             isExactLimit,
             isBlockedStatus,
             isNotCheckedOut,
             isSideCompatible,
+            isSequenceValid,
+            sequenceErrorMsg,
             woSide,
             stencilSide,
+            stencilConfig,
             excessPrints: isExceeded ? projectedUsed - cycleCap : 0
         };
     };
@@ -886,22 +981,30 @@ const StencilLifecycleManagement: React.FC = () => {
                                 <span>Assignment & Capacity Validation Breakdown</span>
                             </h4>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', fontSize: '0.875rem' }}>
-                                <div><strong>Work Order Quantity:</strong> {calc.woQty.toLocaleString()}</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem', fontSize: '0.875rem' }}>
+                                <div><strong>Panel Quantity:</strong> {calc.panelQty.toLocaleString()}</div>
                                 <div><strong>Work Order Side:</strong> <span style={{ fontWeight: 650 }}>{calc.woSide}</span></div>
                                 <div><strong>Stencil Rack Number:</strong> <span style={{ fontWeight: 650 }}>{selectedStencil?.stencil_id || selectedStencil?.stencil_rack_number}</span></div>
                                 <div><strong>Stencil Side:</strong> <span style={{ fontWeight: 650 }}>{calc.stencilSide || 'N/A'}</span></div>
-                                <div><strong>Current Used Prints:</strong> {calc.currentUsed.toLocaleString()}</div>
+                                <div><strong>Stencil Configuration:</strong> <span style={{ fontWeight: 650, color: '#0369a1' }}>{calc.stencilConfig}</span></div>
                                 <div><strong>Current Cycle Capacity:</strong> {calc.cycleCap.toLocaleString()}</div>
-                                <div><strong>Remaining Prints:</strong> {calc.remainingPrints.toLocaleString()}</div>
+                                <div><strong>Current Cycle Used:</strong> {calc.currentUsed.toLocaleString()}</div>
+                                <div><strong>Current Cycle Remaining:</strong> {calc.remainingPrints.toLocaleString()}</div>
+                                <div><strong>Required Lifecycle Prints:</strong> <span style={{ fontWeight: 'bold', color: '#2563eb' }}>{calc.requiredPrints.toLocaleString()}</span></div>
                                 <div>
-                                    <strong>Projected Used Prints:</strong>{' '}
+                                    <strong>Projected Cycle Usage:</strong>{' '}
                                     <span style={{ fontWeight: 'bold', color: calc.isExceeded ? '#ef4444' : '#166534' }}>
                                         {calc.projectedUsed.toLocaleString()} / {calc.cycleCap.toLocaleString()}
                                     </span>
                                 </div>
                                 <div>
-                                    <strong>Quantity Validation:</strong>{' '}
+                                    <strong>Remaining After Assignment:</strong>{' '}
+                                    <span style={{ fontWeight: 'bold', color: calc.remainingAfter < 0 ? '#ef4444' : '#166534' }}>
+                                        {calc.remainingAfter.toLocaleString()}
+                                    </span>
+                                </div>
+                                <div>
+                                    <strong>Capacity Validation:</strong>{' '}
                                     <span style={{ fontWeight: 'bold', color: calc.isExceeded ? '#ef4444' : '#166534' }}>
                                         {calc.isExceeded ? 'EXCEEDS CAPACITY' : 'PASS'}
                                     </span>
@@ -926,17 +1029,23 @@ const StencilLifecycleManagement: React.FC = () => {
                                 </div>
                             )}
 
+                            {!calc.isSequenceValid && (
+                                <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fca5a5', color: '#991b1b', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                    {calc.sequenceErrorMsg || 'Please register the BOTTOM stencil first for this TOP/BOTTOM Work Order.'}
+                                </div>
+                            )}
+
                             {!calc.isNotCheckedOut && !calc.isSideCompatible && (
                                 <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fca5a5', color: '#991b1b', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                    Stencil side {calc.stencilSide || 'N/A'} does not match Work Order side {calc.woSide}. A {calc.stencilSide || 'N/A'} stencil can only be used for a {calc.stencilSide || 'N/A'} Work Order.
+                                    Stencil side {calc.stencilSide || 'N/A'} is not compatible with Work Order side {calc.woSide}.
                                 </div>
                             )}
 
                             {calc.isExceeded && calc.isSideCompatible && (
                                 <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fca5a5', color: '#991b1b', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                    The selected Work Order quantity exceeds the stencil's remaining lifecycle capacity.
+                                    The required lifecycle prints exceed the stencil's remaining capacity.
                                     <div style={{ fontSize: '0.825rem', fontWeight: 'normal', marginTop: '0.25rem' }}>
-                                        Remaining Capacity: <strong>{calc.remainingPrints.toLocaleString()}</strong> prints | Required: <strong>{calc.woQty.toLocaleString()}</strong> prints | Excess: <strong>{calc.excessPrints.toLocaleString()}</strong> prints
+                                        Current Cycle Remaining: <strong>{calc.remainingPrints.toLocaleString()}</strong> prints | Panel Quantity: <strong>{calc.panelQty.toLocaleString()}</strong> | Work Order Side: <strong>{calc.woSide}</strong> | Stencil Side: <strong>{calc.stencilSide}</strong> | Required Lifecycle Prints: <strong>{calc.requiredPrints.toLocaleString()}</strong> prints | Excess: <strong>{calc.excessPrints.toLocaleString()}</strong> prints
                                     </div>
                                 </div>
                             )}

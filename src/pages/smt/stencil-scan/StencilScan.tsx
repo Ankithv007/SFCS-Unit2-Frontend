@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import styles from './StencilScan.module.css';
 import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
+import { isStencilSideCompatible } from '../../../utils/smtHelper';
 import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
 import { 
     Barcode, ScanLine, Search, Clock, User, Info, ArrowRightLeft, CheckCircle2, RotateCcw, AlertTriangle
@@ -93,14 +94,17 @@ const StencilScan: React.FC = () => {
     const [relocateReason, setRelocateReason] = useState('');
     const [isChangingLocation, setIsChangingLocation] = useState(false);
 
+    const [lifecycleRecords, setLifecycleRecords] = useState<any[]>([]);
+
     useEffect(() => {
         focusInput();
         fetchWorkOrders();
+        fetchLifecycleRecords();
     }, []);
 
     const fetchWorkOrders = async () => {
         try {
-            let res = await apiFetch('/api/smt/work-orders');
+            let res = await apiFetch('/api/smt/stencil-lifecycle/work-orders');
             let rawList: any[] = [];
             
             if (Array.isArray(res)) {
@@ -110,10 +114,12 @@ const StencilScan: React.FC = () => {
             } else if (res && Array.isArray(res.workOrders)) {
                 rawList = res.workOrders;
             } else {
-                // Fallback to stencil-lifecycle work-orders endpoint
-                const fallbackRes = await apiFetch('/api/smt/stencil-lifecycle/work-orders');
+                // Fallback to work-orders endpoint
+                const fallbackRes = await apiFetch('/api/smt/work-orders');
                 if (Array.isArray(fallbackRes)) {
                     rawList = fallbackRes;
+                } else if (fallbackRes && Array.isArray(fallbackRes.data)) {
+                    rawList = fallbackRes.data;
                 } else if (fallbackRes && Array.isArray(fallbackRes.workOrders)) {
                     rawList = fallbackRes.workOrders;
                 }
@@ -135,25 +141,50 @@ const StencilScan: React.FC = () => {
         }
     };
 
+    const fetchLifecycleRecords = async () => {
+        try {
+            const res = await apiFetch('/api/smt/stencil-lifecycle/records');
+            if (Array.isArray(res)) setLifecycleRecords(res);
+            else if (res && Array.isArray(res.records)) setLifecycleRecords(res.records);
+        } catch (err) {
+            console.error('Failed to fetch lifecycle records in StencilScan:', err);
+        }
+    };
+
     const selectedWO = useMemo(() => {
         return workOrders.find(wo => String(wo.work_order_id || wo.id) === String(selectedWoId));
     }, [workOrders, selectedWoId]);
 
-    const normalizeSideStr = (s?: string | null) => (s || '').trim().toUpperCase().replace(/\s*\/\s*/g, '/');
-
     const isSideMismatch = useMemo(() => {
         if (!stencil || !selectedWO) return false;
-        const woSideNorm = normalizeSideStr(selectedWO.sides || selectedWO.side);
-        const stencilSideNorm = normalizeSideStr(stencil.side);
-        return woSideNorm !== stencilSideNorm;
+        return !isStencilSideCompatible(selectedWO.sides || selectedWO.side, stencil.side);
     }, [stencil, selectedWO]);
 
     const sideMismatchErrorMsg = useMemo(() => {
         if (!isSideMismatch || !stencil || !selectedWO) return '';
         const rawWoSide = selectedWO.sides || selectedWO.side || 'N/A';
         const rawStencilSide = stencil.side || 'N/A';
-        return `Work Order side does not match the stencil side. Work Order: ${rawWoSide}, Stencil: ${rawStencilSide}`;
+        return `Work Order side is not compatible with the stencil side. Work Order: ${rawWoSide}, Stencil: ${rawStencilSide}`;
     }, [isSideMismatch, stencil, selectedWO]);
+
+    const isSequenceMismatch = useMemo(() => {
+        if (!stencil || !selectedWO) return false;
+        const woSideNorm = (selectedWO.sides || selectedWO.side || '').trim().toLowerCase();
+        const stencilSideNorm = (stencil.side || '').trim().toLowerCase();
+
+        if (woSideNorm.includes('/') || woSideNorm === 'top / bottom' || woSideNorm === 'top/bottom') {
+            const woId = String(selectedWO.work_order_id || selectedWO.id);
+            const woRecords = lifecycleRecords.filter(r => String(r.work_order_id) === woId && !r.is_deleted);
+            const hasBottom = woRecords.some(r => (r.sides || '').trim().toLowerCase() === 'bottom');
+
+            if (stencilSideNorm.includes('top') && !stencilSideNorm.includes('bottom') && !hasBottom) {
+                return true;
+            }
+        }
+        return false;
+    }, [stencil, selectedWO, lifecycleRecords]);
+
+    const sequenceErrorMsg = 'Please register the BOTTOM stencil first for this TOP/BOTTOM Work Order.';
 
     const focusInput = () => {
         if (barcodeInputRef.current) {
@@ -232,6 +263,11 @@ const StencilScan: React.FC = () => {
             return;
         }
 
+        if (isSequenceMismatch) {
+            showToast(sequenceErrorMsg, 'error');
+            return;
+        }
+
         setLoading(true);
         try {
             const res = await apiFetch('/api/smt/stencil-rack/scan/receive', {
@@ -252,15 +288,21 @@ const StencilScan: React.FC = () => {
                 setMachine('');
                 setProductionLine('');
                 setTxRemarks('');
-                // Reload details
-                const infoRes = await apiFetch(`/api/smt/stencil-rack/stencil-info/${stencil.stencil_rack_number || stencil.job_number}`);
-                if (infoRes.success) {
-                    setStencil(infoRes.stencil);
-                    setHistory(infoRes.history);
+                fetchWorkOrders();
+                fetchLifecycleRecords();
+                if (stencil.stencil_rack_number || stencil.job_number) {
+                    const infoRes = await apiFetch(`/api/smt/stencil-rack/stencil-info/${stencil.stencil_rack_number || stencil.job_number}`);
+                    if (infoRes.success) {
+                        setStencil(infoRes.stencil);
+                        setHistory(infoRes.history);
+                    }
                 }
+            } else {
+                showToast(res.message || 'Failed to checkout stencil.', 'error');
             }
         } catch (err: any) {
-            showToast(err.message || 'Receive transaction failed.', 'error');
+            console.error('Checkout stencil error:', err);
+            showToast(err.message || 'Failed to checkout stencil.', 'error');
         } finally {
             setLoading(false);
             focusInput();
@@ -581,6 +623,24 @@ const StencilScan: React.FC = () => {
                                                     <span>{sideMismatchErrorMsg}</span>
                                                 </div>
                                             )}
+                                            {isSequenceMismatch && (
+                                                <div style={{
+                                                    marginTop: '0.75rem',
+                                                    padding: '0.75rem 1rem',
+                                                    backgroundColor: '#fef2f2',
+                                                    border: '1px solid #fecaca',
+                                                    borderRadius: '6px',
+                                                    color: '#dc2626',
+                                                    fontSize: '0.85rem',
+                                                    fontWeight: 600,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem'
+                                                }}>
+                                                    <AlertTriangle size={18} />
+                                                    <span>{sequenceErrorMsg}</span>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className={styles.formGrid}>
                                             <div className={styles.inputGroup}>
@@ -619,7 +679,7 @@ const StencilScan: React.FC = () => {
                                         <button 
                                             type="submit" 
                                             className={`${styles.btnAction} ${styles.btnReceive}`} 
-                                            disabled={!selectedWoId || isSideMismatch || !machine || !productionLine || loading}
+                                            disabled={!selectedWoId || isSideMismatch || isSequenceMismatch || !machine || !productionLine || loading}
                                         >
                                             Confirm Check-Out
                                         </button>

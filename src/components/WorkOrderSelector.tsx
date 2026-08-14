@@ -12,6 +12,7 @@ interface WorkOrderSelectorProps {
     quantityKey?: string;
     disabled?: boolean;
     required?: boolean;
+    onOpen?: () => void;
 }
 
 export const WorkOrderSelector: React.FC<WorkOrderSelectorProps> = ({
@@ -25,6 +26,7 @@ export const WorkOrderSelector: React.FC<WorkOrderSelectorProps> = ({
     quantityKey,
     disabled = false,
     required = false,
+    onOpen,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -66,6 +68,7 @@ export const WorkOrderSelector: React.FC<WorkOrderSelectorProps> = ({
     const handleInputClick = () => {
         if (disabled) return;
         setIsOpen(true);
+        if (onOpen) onOpen();
     };
 
     // Handle selecting an option

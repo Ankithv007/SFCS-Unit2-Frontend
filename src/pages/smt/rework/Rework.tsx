@@ -1311,6 +1311,7 @@ const Rework: React.FC = () => {
                                 labelKey="work_order_id"
                                 productNameKey="product_name"
                                 quantityKey="work_order_quantity"
+                                onOpen={fetchEligibleWorkOrders}
                                 required
                             />
                         </div>

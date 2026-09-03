@@ -44,7 +44,10 @@ const StencilRackManagement: React.FC = () => {
     const { showToast } = useToast();
     const { user, permissions } = useAuth();
 
-    const isSuperAdmin = user?.role === 'Super Admin';
+    const userRole = user?.role || '';
+    const isSuperAdmin = userRole === 'Super Admin';
+    const allowedCreateRoles = ['Super Admin', 'Admin', 'Manager'];
+    const canCreateRack = allowedCreateRoles.some(r => r.toLowerCase() === userRole.toLowerCase().trim()) || permissions.some(p => p.permission_key === 'smt_stencil_rack' && p.can_create);
     const canEditLocations = isSuperAdmin || permissions.some(p => p.permission_key === 'smt_stencil_rack' && p.can_edit);
 
     // State
@@ -320,7 +323,7 @@ const StencilRackManagement: React.FC = () => {
                     <p>Register stencil racks, configure grids, and manage direct coordinates stencil storage.</p>
                 </div>
                 <div className={styles.actionButtons}>
-                    {isSuperAdmin && (
+                    {canCreateRack && (
                         <button className={styles.btnPrimary} onClick={handleOpenCreateRack}>
                             <Plus size={18} /> Add Stencil Rack
                         </button>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSmtAuth } from '../../../context/SmtAuthContext';
 import { useAuth } from '../../../hooks/useAuth';
 import styles from './SMTFG.module.css';
@@ -81,6 +82,7 @@ interface ScanRecord {
 }
 
 const SMTFG: React.FC = () => {
+    const navigate = useNavigate();
     const { smtUser } = useSmtAuth();
     const { user } = useAuth();
     const isSuperAdmin = smtUser?.role === 'Super Admin' || user?.role === 'Super Admin';
@@ -920,9 +922,20 @@ const SMTFG: React.FC = () => {
         <div className={styles.container}>
             <Toaster toasts={toasts} onRemove={removeToast} />
             
-            <div className={styles.header}>
-                <h2>🏭 SMT Finished Goods (FG) Process</h2>
-                <p>Enforce serial number tracking, stencil life verification, and final Finished Goods inspection & release.</p>
+            <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h2>🏭 SMT Finished Goods (FG) Process</h2>
+                    <p>Enforce serial number tracking, stencil life verification, and final Finished Goods inspection & release.</p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                        className={styles.secondaryButton}
+                        onClick={() => navigate('/smt/workorder-history', { state: { areaId: 'SMT' } })}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <span>📊</span> View History
+                    </button>
+                </div>
             </div>
 
             {!activeSession ? (

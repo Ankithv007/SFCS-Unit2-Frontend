@@ -68,7 +68,9 @@ export const WorkOrder: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
     const navigate = useNavigate();
-    const isSuperAdmin = user?.role === 'Super Admin' || smtUser?.role === 'Super Admin' || smtUser?.userId === 'ADMIN';
+    const userRole = (smtUser?.role || user?.role || '').trim().toLowerCase();
+    const canAccessPoDocument = userRole === 'super admin' || userRole === 'admin' || smtUser?.userId === 'ADMIN';
+    const isSuperAdmin = userRole === 'super admin' || smtUser?.userId === 'ADMIN';
     const [workOrderId, setWorkOrderId] = useState('');
     const [poId, setPoId] = useState('');
     const [remark, setRemark] = useState('');
@@ -490,6 +492,10 @@ export const WorkOrder: React.FC = () => {
     };
 
     const handleOpenPreview = async (id: string) => {
+        if (!canAccessPoDocument) {
+            addToast("Access Denied: Only Super Admin and Admin can access PO documents.", "error");
+            return;
+        }
         setPreviewWoId(id);
         setIsPreviewLoading(true);
         setPreviewData(null);
@@ -516,6 +522,10 @@ export const WorkOrder: React.FC = () => {
     };
 
     const handleDownloadPo = async (id: string, fileName: string) => {
+        if (!canAccessPoDocument) {
+            addToast("Access Denied: Only Super Admin and Admin can access PO documents.", "error");
+            return;
+        }
         try {
             addToast("Starting download...", "info");
             const blob = await apiFetch(`/api/smt/work-orders/${id}/download-po`);
@@ -928,7 +938,7 @@ export const WorkOrder: React.FC = () => {
                                             <th>SIDES</th>
                                             <th>QUANTITY</th>
                                             <th>PANEL QTY</th>
-                                            <th style={{ textAlign: 'center' }}>PO DOCUMENT</th>
+                                            {canAccessPoDocument && <th style={{ textAlign: 'center' }}>PO DOCUMENT</th>}
                                             <th>ACTION</th>
                                         </tr>
                                     </thead>
@@ -962,33 +972,35 @@ export const WorkOrder: React.FC = () => {
                                                 >
                                                     {wo.panel_quantity}
                                                 </td>
-                                                 <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                                                     {wo.po_document_path ? (
-                                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'nowrap' }}>
-                                                             {wo.po_document_type === 'application/pdf' ? (
-                                                                 <span style={{ fontSize: '1.2rem', cursor: 'default' }} title="PDF Document">📕</span>
-                                                             ) : (
-                                                                 <span style={{ fontSize: '1.2rem', cursor: 'default' }} title="Excel Spreadsheet">📗</span>
-                                                             )}
-                                                             <button
-                                                                 className={styles.compactIconBtn}
-                                                                 title="View PO Document"
-                                                                 onClick={() => handleOpenPreview(wo.work_order_id)}
-                                                             >
-                                                                 👁️
-                                                             </button>
-                                                             <button
-                                                                 className={styles.compactIconBtn}
-                                                                 title="Download PO Document"
-                                                                 onClick={() => handleDownloadPo(wo.work_order_id, wo.po_document_name)}
-                                                             >
-                                                                 📥
-                                                             </button>
-                                                         </div>
-                                                     ) : (
-                                                         <span style={{ color: '#94a3b8' }}>-</span>
-                                                     )}
-                                                 </td>
+                                                 {canAccessPoDocument && (
+                                                     <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                                                         {wo.po_document_path ? (
+                                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+                                                                 {wo.po_document_type === 'application/pdf' ? (
+                                                                     <span style={{ fontSize: '1.2rem', cursor: 'default' }} title="PDF Document">📕</span>
+                                                                 ) : (
+                                                                     <span style={{ fontSize: '1.2rem', cursor: 'default' }} title="Excel Spreadsheet">📗</span>
+                                                                 )}
+                                                                 <button
+                                                                     className={styles.compactIconBtn}
+                                                                     title="View PO Document"
+                                                                     onClick={() => handleOpenPreview(wo.work_order_id)}
+                                                                 >
+                                                                     👁️
+                                                                 </button>
+                                                                 <button
+                                                                     className={styles.compactIconBtn}
+                                                                     title="Download PO Document"
+                                                                     onClick={() => handleDownloadPo(wo.work_order_id, wo.po_document_name)}
+                                                                 >
+                                                                     📥
+                                                                 </button>
+                                                             </div>
+                                                         ) : (
+                                                             <span style={{ color: '#94a3b8' }}>-</span>
+                                                         )}
+                                                     </td>
+                                                 )}
                                                 <td>
                                                     <div style={{ display: 'flex', gap: '6px' }}>
                                                         <button
@@ -1319,46 +1331,48 @@ export const WorkOrder: React.FC = () => {
                                 </div>
 
                                 {/* Document Information */}
-                                <div className={styles.detailCard}>
-                                    <div className={styles.detailCardHeader}>
-                                        📁 Document Information
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                        <div className={styles.detailItem}>
-                                            <span className={styles.detailLabel}>PO Document</span>
-                                            <span className={styles.detailValue} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                {viewDetailWo.po_document_path ? (
-                                                    <>
-                                                        {viewDetailWo.po_document_type === 'application/pdf' ? '📕' : '📗'}
-                                                        <span style={{ fontSize: '0.9rem', color: '#4b5563', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '180px' }} title={viewDetailWo.po_document_name}>
-                                                            {viewDetailWo.po_document_name}
-                                                        </span>
-                                                    </>
-                                                ) : (
-                                                    <span style={{ color: '#9ca3af' }}>No PO document uploaded</span>
-                                                )}
-                                            </span>
+                                {canAccessPoDocument && (
+                                    <div className={styles.detailCard}>
+                                        <div className={styles.detailCardHeader}>
+                                            📁 Document Information
                                         </div>
-                                        {viewDetailWo.po_document_path && (
-                                            <div style={{ display: 'flex', gap: '8px', marginTop: '0.25rem' }}>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
-                                                    onClick={() => handleOpenPreview(viewDetailWo.work_order_id)}
-                                                >
-                                                    👁️ View Preview
-                                                </button>
-                                                <button
-                                                    className={styles.secondaryButton}
-                                                    style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
-                                                    onClick={() => handleDownloadPo(viewDetailWo.work_order_id, viewDetailWo.po_document_name)}
-                                                >
-                                                    📥 Download
-                                                </button>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            <div className={styles.detailItem}>
+                                                <span className={styles.detailLabel}>PO Document</span>
+                                                <span className={styles.detailValue} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    {viewDetailWo.po_document_path ? (
+                                                        <>
+                                                            {viewDetailWo.po_document_type === 'application/pdf' ? '📕' : '📗'}
+                                                            <span style={{ fontSize: '0.9rem', color: '#4b5563', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '180px' }} title={viewDetailWo.po_document_name}>
+                                                                {viewDetailWo.po_document_name}
+                                                            </span>
+                                                        </>
+                                                    ) : (
+                                                        <span style={{ color: '#9ca3af' }}>No PO document uploaded</span>
+                                                    )}
+                                                </span>
                                             </div>
-                                        )}
+                                            {viewDetailWo.po_document_path && (
+                                                <div style={{ display: 'flex', gap: '8px', marginTop: '0.25rem' }}>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                                                        onClick={() => handleOpenPreview(viewDetailWo.work_order_id)}
+                                                    >
+                                                        👁️ View Preview
+                                                    </button>
+                                                    <button
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                                                        onClick={() => handleDownloadPo(viewDetailWo.work_order_id, viewDetailWo.po_document_name)}
+                                                    >
+                                                        📥 Download
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
                                 {/* Audit Information */}
                                 <div className={`${styles.detailCard} ${styles.detailCardFullWidth}`}>

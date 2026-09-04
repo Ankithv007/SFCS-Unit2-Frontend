@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styles from './MaterialManagement.module.css';
 import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
+import { useSmtAuth } from '../../../context/SmtAuthContext';
+import { useAuth } from '../../../hooks/useAuth';
 import { 
     Search, RefreshCw, Eye, X, FileSpreadsheet
 } from 'lucide-react';
@@ -74,6 +76,10 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
 
 const MaterialManagement: React.FC = () => {
     const navigate = useNavigate();
+    const { smtUser } = useSmtAuth();
+    const { user } = useAuth();
+    const userRole = (smtUser?.role || user?.role || '').trim().toLowerCase();
+    const canAccessPoDocument = userRole === 'super admin' || userRole === 'admin' || smtUser?.userId === 'ADMIN';
 
     // Toasts
     const [toasts, setToasts] = useState<Toast[]>([]);
@@ -265,6 +271,10 @@ const MaterialManagement: React.FC = () => {
     };
 
     const getPoUrl = (workOrderNumber: string, action: 'view' | 'download') => {
+        if (!canAccessPoDocument) {
+            addToast("Access Denied: Only Super Admin and Admin can access PO documents.", "error");
+            return "#";
+        }
         const token = localStorage.getItem('auth_token') || '';
         const endpoint = action === 'view' ? 'view-po-file' : 'download-po';
         return `/api/smt/work-orders/${workOrderNumber}/${endpoint}?token=${encodeURIComponent(token)}`;
@@ -683,29 +693,31 @@ const MaterialManagement: React.FC = () => {
                                     </div>
 
                                     {/* PO Document Column */}
-                                    <div className={styles.compactDocCol}>
-                                        <span className={styles.compactDocHeader}>PO Document</span>
-                                        {detailRecord.po_document_path ? (
-                                            <div className={styles.compactDocActions}>
-                                                <button 
-                                                    type="button" 
-                                                    className={`${styles.compactDocBtn} ${styles.compactDocBtnView}`}
-                                                    onClick={() => window.open(getPoUrl(detailRecord.work_order_number, 'view'), '_blank')}
-                                                >
-                                                    View
-                                                </button>
-                                                <a 
-                                                    href={getPoUrl(detailRecord.work_order_number, 'download')}
-                                                    className={`${styles.compactDocBtn} ${styles.compactDocBtnDownload}`}
-                                                    download
-                                                >
-                                                    Download
-                                                </a>
-                                            </div>
-                                        ) : (
-                                            <span className={styles.compactDocMissing}>Not uploaded</span>
-                                        )}
-                                    </div>
+                                    {canAccessPoDocument && (
+                                        <div className={styles.compactDocCol}>
+                                            <span className={styles.compactDocHeader}>PO Document</span>
+                                            {detailRecord.po_document_path ? (
+                                                <div className={styles.compactDocActions}>
+                                                    <button 
+                                                        type="button" 
+                                                        className={`${styles.compactDocBtn} ${styles.compactDocBtnView}`}
+                                                        onClick={() => window.open(getPoUrl(detailRecord.work_order_number, 'view'), '_blank')}
+                                                    >
+                                                        View
+                                                    </button>
+                                                    <a 
+                                                        href={getPoUrl(detailRecord.work_order_number, 'download')}
+                                                        className={`${styles.compactDocBtn} ${styles.compactDocBtnDownload}`}
+                                                        download
+                                                    >
+                                                        Download
+                                                    </a>
+                                                </div>
+                                            ) : (
+                                                <span className={styles.compactDocMissing}>Not uploaded</span>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

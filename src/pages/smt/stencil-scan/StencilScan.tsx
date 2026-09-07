@@ -83,7 +83,6 @@ const StencilScan: React.FC = () => {
     const [selectedWoId, setSelectedWoId] = useState('');
 
     // Transaction form states
-    const [machine, setMachine] = useState('');
     const [productionLine, setProductionLine] = useState('');
     const [txRemarks, setTxRemarks] = useState('');
     
@@ -210,7 +209,6 @@ const StencilScan: React.FC = () => {
                 
                 // Clear fields
                 setSelectedWoId('');
-                setMachine('');
                 setProductionLine('');
                 setTxRemarks('');
                 setRelocateReason('');
@@ -276,7 +274,6 @@ const StencilScan: React.FC = () => {
                     job_number: stencil.stencil_rack_number || stencil.job_number,
                     work_order_id: selectedWoId,
                     work_order_number: selectedWoId,
-                    machine: machine.trim(),
                     production_line: productionLine.trim(),
                     remarks: txRemarks.trim()
                 })
@@ -285,7 +282,6 @@ const StencilScan: React.FC = () => {
             if (res.success) {
                 showToast(res.message, 'success');
                 setSelectedWoId('');
-                setMachine('');
                 setProductionLine('');
                 setTxRemarks('');
                 fetchWorkOrders();
@@ -642,47 +638,34 @@ const StencilScan: React.FC = () => {
                                                 </div>
                                             )}
                                         </div>
-                                        <div className={styles.formGrid}>
-                                            <div className={styles.inputGroup}>
-                                                <label>Target SMT Machine <span>*</span></label>
-                                                <input 
-                                                    type="text" 
-                                                    className={styles.input} 
-                                                    required
-                                                    value={machine} 
-                                                    onChange={e => setMachine(e.target.value)} 
-                                                    placeholder="e.g. SMT-LINE1-PRINTER"
-                                                />
-                                            </div>
-                                            <div className={styles.inputGroup}>
-                                                <label>Target Production Line <span>*</span></label>
-                                                <input 
-                                                    type="text" 
-                                                    className={styles.input} 
-                                                    required
-                                                    value={productionLine} 
-                                                    onChange={e => setProductionLine(e.target.value)} 
-                                                    placeholder="e.g. Line 1"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className={styles.inputGroup}>
-                                            <label>Remarks</label>
-                                            <input 
-                                                type="text" 
-                                                className={styles.input} 
-                                                value={txRemarks} 
-                                                onChange={e => setTxRemarks(e.target.value)} 
-                                                placeholder="Remarks..."
-                                            />
-                                        </div>
-                                        <button 
-                                            type="submit" 
-                                            className={`${styles.btnAction} ${styles.btnReceive}`} 
-                                            disabled={!selectedWoId || isSideMismatch || isSequenceMismatch || !machine || !productionLine || loading}
-                                        >
-                                            Confirm Check-Out
-                                        </button>
+                                         <div className={styles.inputGroup} style={{ marginBottom: '1rem' }}>
+                                             <label>Target Production Line <span>*</span></label>
+                                             <input 
+                                                 type="text" 
+                                                 className={styles.input} 
+                                                 required
+                                                 value={productionLine} 
+                                                 onChange={e => setProductionLine(e.target.value)} 
+                                                 placeholder="e.g. Line 1"
+                                             />
+                                         </div>
+                                         <div className={styles.inputGroup}>
+                                             <label>Remarks</label>
+                                             <input 
+                                                 type="text" 
+                                                 className={styles.input} 
+                                                 value={txRemarks} 
+                                                 onChange={e => setTxRemarks(e.target.value)} 
+                                                 placeholder="Remarks..."
+                                             />
+                                         </div>
+                                         <button 
+                                             type="submit" 
+                                             className={`${styles.btnAction} ${styles.btnReceive}`} 
+                                             disabled={!selectedWoId || isSideMismatch || isSequenceMismatch || !productionLine || loading}
+                                         >
+                                             Confirm Check-Out
+                                         </button>
                                     </form>
                                 </div>
                             ) : (

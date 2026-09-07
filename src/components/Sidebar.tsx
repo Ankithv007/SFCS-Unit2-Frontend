@@ -124,16 +124,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
             onMouseEnter={onMouseEnter}
             onMouseLeave={handleMouseLeave}
         >
-            <div
-                className={`${styles.menuItem} ${isActive('/dashboard') ? styles.active : ''}`}
-                onClick={() => navigate('/dashboard')}
-                title="Home"
-            >
-                <span className={styles.menuIcon}>
-                    <Home size={20} />
-                </span>
-                <span className={styles.menuText}>Home</span>
-            </div>
+            {(isSuperAdmin || hasPermission('dashboard')) && (
+                <div
+                    className={`${styles.menuItem} ${isActive('/dashboard') ? styles.active : ''}`}
+                    onClick={() => navigate('/dashboard')}
+                    title="Home"
+                >
+                    <span className={styles.menuIcon}>
+                        <Home size={20} />
+                    </span>
+                    <span className={styles.menuText}>Home</span>
+                </div>
+            )}
 
             {canViewAdminPanel && (
                 <div

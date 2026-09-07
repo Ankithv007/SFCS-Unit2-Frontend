@@ -64,6 +64,8 @@ const DescriptionCell: React.FC<{ text: string }> = ({ text }) => {
 
 
 
+const ALL_STAGES = ['PTH', 'VI', 'QA', 'Flashing', 'PCBA-FCT', 'Assembly', 'Unit Testing', 'QI', 'Packing'];
+
 export const WorkOrder: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
@@ -82,11 +84,30 @@ export const WorkOrder: React.FC = () => {
     const [pcbPerPanel, setPcbPerPanel] = useState('');
     const [panelQuantity, setPanelQuantity] = useState('');
     const [sides, setSides] = useState('');
-    const [createdBy, setCreatedBy] = useState('');
+    const [createdBy, setCreatedBy] = useState('System admin');
     const [priority, setPriority] = useState('medium');
+    const [selectedStages, setSelectedStages] = useState<string[]>(ALL_STAGES);
+    const [customerName, setCustomerName] = useState('');
+    const [modelName, setModelName] = useState('');
     const [error, setError] = useState('');
     const [editingWorkOrderId, setEditingWorkOrderId] = useState<string | null>(null);
     const [viewDetailWo, setViewDetailWo] = useState<any | null>(null);
+
+    const handleToggleAllStages = () => {
+        if (selectedStages.length === ALL_STAGES.length) {
+            setSelectedStages([]);
+        } else {
+            setSelectedStages([...ALL_STAGES]);
+        }
+    };
+
+    const handleStageToggle = (stage: string) => {
+        if (selectedStages.includes(stage)) {
+            setSelectedStages(selectedStages.filter(s => s !== stage));
+        } else {
+            setSelectedStages([...selectedStages, stage]);
+        }
+    };
 
     const [workOrders, setWorkOrders] = useState<any[]>([]);
     const [selectedCount, setSelectedCount] = useState<{
@@ -138,12 +159,8 @@ export const WorkOrder: React.FC = () => {
     useEffect(() => {
         fetchWorkOrders(currentPage, pageSize, activeSearch);
 
-        // Auto-fill Created By from SMT login info or main user login info
-        if (smtUser) {
-            setCreatedBy(smtUser.name || smtUser.userId || 'System');
-        } else if (user) {
-            setCreatedBy(user.name || user.email || 'System');
-        }
+        // Default Created By to 'System admin' for Work Order creation
+        setCreatedBy('System admin');
     }, [currentPage, pageSize, activeSearch, smtUser, user]);
 
     // Auto-calculate Panel Quantity
@@ -172,7 +189,7 @@ export const WorkOrder: React.FC = () => {
             if (responseData.success) {
                 const safeData = Array.isArray(responseData.data) ? responseData.data : [];
                 setWorkOrders(safeData.map((wo: any) => ({
-                    work_order_id: wo.id,
+                    work_order_id: wo.id || wo.work_order_id,
                     product_name: wo.product_name,
                     product_description: wo.product_description,
                     quantity: wo.quantity,
@@ -187,7 +204,10 @@ export const WorkOrder: React.FC = () => {
                     po_document_type: wo.po_document_type,
                     po_id: wo.po_id,
                     remark: wo.remark,
-                    solder_paste_status: wo.solder_paste_status
+                    solder_paste_status: wo.solder_paste_status,
+                    customer_name: wo.customer_name || wo.customerName || '',
+                    model_name: wo.model_name || wo.modelName || wo.model || '',
+                    selected_stages: wo.selected_stages || wo.selectedStages || ALL_STAGES
                 })));
                 setTotalRecords(responseData.total || 0);
                 setTotalPages(responseData.totalPages || 0);
@@ -323,6 +343,10 @@ export const WorkOrder: React.FC = () => {
         setPanelQuantity('');
         setSides('');
         setPriority('medium');
+        setSelectedStages(ALL_STAGES);
+        setCustomerName('');
+        setModelName('');
+        setCreatedBy('System admin');
         setSelectedFile(null);
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
@@ -333,6 +357,7 @@ export const WorkOrder: React.FC = () => {
     const handleEditClick = (wo: any) => {
         setEditingWorkOrderId(wo.work_order_id);
         setWorkOrderId(wo.work_order_id);
+        setCreatedBy(wo.created_by || 'System admin');
         setPoId(wo.po_id);
         setRemark(wo.remark || '');
         setLineId(wo.line_id);
@@ -340,6 +365,15 @@ export const WorkOrder: React.FC = () => {
         setProductName(wo.product_name);
         setProductDescription(wo.product_description);
         setQuantity(wo.quantity.toString());
+        setCustomerName(wo.customer_name || wo.customerName || '');
+        setModelName(wo.model_name || wo.modelName || wo.model || '');
+        setSelectedStages(
+            Array.isArray(wo.selected_stages) 
+                ? wo.selected_stages 
+                : Array.isArray(wo.selectedStages)
+                ? wo.selectedStages
+                : ALL_STAGES
+        );
         
         const computedPpp = wo.panel_quantity > 0 ? Math.round(wo.quantity / wo.panel_quantity) : 1;
         setPcbPerPanel(computedPpp.toString());
@@ -401,6 +435,21 @@ export const WorkOrder: React.FC = () => {
             return;
         }
 
+        if (!customerName.trim()) {
+            setError('Customer Name is required.');
+            return;
+        }
+
+        if (!modelName.trim()) {
+            setError('Model Name is required.');
+            return;
+        }
+
+        if (selectedStages.length === 0) {
+            setError('At least one process stage must be selected.');
+            return;
+        }
+
         setError('');
         setIsCreating(true);
 
@@ -416,7 +465,14 @@ export const WorkOrder: React.FC = () => {
             panel_quantity: parseInt(panelQuantity),
             sides: sides,
             priority: priority,
-            created_by: createdBy
+            created_by: createdBy,
+            customer_name: customerName.trim(),
+            customerName: customerName.trim(),
+            model_name: modelName.trim(),
+            modelName: modelName.trim(),
+            model: modelName.trim(),
+            selected_stages: selectedStages,
+            selectedStages: selectedStages
         };
 
         if (selectedFile) {
@@ -698,6 +754,31 @@ export const WorkOrder: React.FC = () => {
                             />
                         </div>
 
+                        {/* --- ROW 3B: CUSTOMER & MODEL DETAILS --- */}
+                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                            <label>Customer Name *</label>
+                            <input
+                                type="text"
+                                value={customerName}
+                                onChange={(e) => setCustomerName(e.target.value)}
+                                placeholder="e.g. Acme Corp / Customer Name"
+                                className={styles.input}
+                                style={{ height: '42px', boxSizing: 'border-box' }}
+                            />
+                        </div>
+
+                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                            <label>Model Name *</label>
+                            <input
+                                type="text"
+                                value={modelName}
+                                onChange={(e) => setModelName(e.target.value)}
+                                placeholder="e.g. SENSOR-V2-REV3"
+                                className={styles.input}
+                                style={{ height: '42px', boxSizing: 'border-box' }}
+                            />
+                        </div>
+
                         {/* --- ROW 4 --- */}
                         <div className={styles.inputGroup}>
                             <label>Quantity *</label>
@@ -856,6 +937,108 @@ export const WorkOrder: React.FC = () => {
                                         padding: '0.5rem'
                                     }}
                                 />
+                            </div>
+                        </div>
+
+                        {/* --- PROCESS ROUTING / STAGE SELECTION CARD --- */}
+                        <div style={{
+                            gridColumn: 'span 4',
+                            marginTop: '1.25rem',
+                            backgroundColor: '#ffffff',
+                            borderRadius: '0.75rem',
+                            border: '1px solid #e2e8f0',
+                            padding: '1.25rem',
+                            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                            boxSizing: 'border-box'
+                        }}>
+                            {/* Card Header */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '0.75rem',
+                                flexWrap: 'wrap',
+                                gap: '0.5rem'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <span style={{ fontSize: '1.2rem' }}>🔀</span>
+                                    <div>
+                                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1e293b' }}>
+                                            Backend Process Routing / Stage Selection
+                                        </h4>
+                                        <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>
+                                            Select the quality check and production stages required for this Work Order. Process steps execute strictly in ascending order.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleToggleAllStages}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.35rem',
+                                        padding: '0.35rem 0.75rem',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 600,
+                                        color: '#dc2626',
+                                        backgroundColor: '#fef2f2',
+                                        border: '1px solid #fca5a5',
+                                        borderRadius: '0.375rem',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                >
+                                    <span style={{ fontSize: '0.85rem' }}>❌</span>
+                                    {selectedStages.length === ALL_STAGES.length ? 'Deselect All' : 'Select All'}
+                                </button>
+                            </div>
+
+                            {/* Stage Pills / Chips (Strictly Horizontal Flow) */}
+                            <div style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: '0.75rem',
+                                marginTop: '0.75rem',
+                                alignItems: 'center'
+                            }}>
+                                {ALL_STAGES.map(stage => {
+                                    const isSelected = selectedStages.includes(stage);
+                                    return (
+                                        <label
+                                            key={stage}
+                                            style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                                padding: '0.5rem 0.85rem',
+                                                borderRadius: '0.5rem',
+                                                fontSize: '0.875rem',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                                userSelect: 'none',
+                                                transition: 'all 0.15s ease-in-out',
+                                                backgroundColor: isSelected ? '#eff6ff' : '#f8fafc',
+                                                color: isSelected ? '#1d4ed8' : '#475569',
+                                                border: isSelected ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                                boxShadow: isSelected ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
+                                            }}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => handleStageToggle(stage)}
+                                                style={{
+                                                    width: '16px',
+                                                    height: '16px',
+                                                    accentColor: '#2563eb',
+                                                    cursor: 'pointer'
+                                                }}
+                                            />
+                                            <span>{stage}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
@@ -1275,8 +1458,30 @@ export const WorkOrder: React.FC = () => {
                                             <span className={styles.detailValue}>{viewDetailWo.quantity} units</span>
                                         </div>
                                         <div className={styles.detailItem}>
-                                            <span className={styles.detailLabel}>Panel Quantity</span>
-                                            <span className={styles.detailValue}>{viewDetailWo.panel_quantity} panels</span>
+                                            <span className={styles.detailLabel}>Customer Name</span>
+                                            <span className={styles.detailValue} style={{ fontWeight: 600 }}>{viewDetailWo.customer_name || '-'}</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Model Name</span>
+                                            <span className={styles.detailValue} style={{ fontWeight: 600 }}>{viewDetailWo.model_name || '-'}</span>
+                                        </div>
+                                        <div className={`${styles.detailItem} ${styles.detailItemFullWidth}`} style={{ marginTop: '0.5rem' }}>
+                                            <span className={styles.detailLabel}>Process Routing / Stages</span>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.25rem' }}>
+                                                {(Array.isArray(viewDetailWo.selected_stages) ? viewDetailWo.selected_stages : ALL_STAGES).map((st: string) => (
+                                                    <span key={st} style={{
+                                                        padding: '2px 8px',
+                                                        borderRadius: '4px',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 600,
+                                                        backgroundColor: '#eff6ff',
+                                                        color: '#1d4ed8',
+                                                        border: '1px solid #bfdbfe'
+                                                    }}>
+                                                        {st}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </div>
                                         <div className={`${styles.detailItem} ${styles.detailItemFullWidth}`} style={{ marginTop: '0.5rem' }}>
                                             <span className={styles.detailLabel}>Product Description</span>

@@ -28,6 +28,7 @@ interface Batch {
     rework: number;
     debug: number;
     status: 'pending' | 'in_progress' | 'completed';
+    selectedStages?: string[] | string | null;
     started_at?: string;
     completed_at?: string;
 }
@@ -313,6 +314,21 @@ const PTH: React.FC = () => {
         }
     };
 
+    const isStageSelected = (batch: Batch): boolean => {
+        const raw = batch.selectedStages;
+        if (raw === null || raw === undefined) return true;
+        let stages: string[];
+        if (Array.isArray(raw)) {
+            stages = raw;
+        } else if (typeof raw === 'string') {
+            try { stages = JSON.parse(raw); } catch { return true; }
+        } else {
+            return true;
+        }
+        if (stages.length === 0) return true;
+        return stages.some(s => s.toLowerCase() === 'pth');
+    };
+
     const safeScannedItems = Array.isArray(scannedItems) ? scannedItems : [];
     const filteredItems = safeScannedItems.filter(item =>
         item.barcode?.toLowerCase().includes(tableSearch.toLowerCase()) ||
@@ -458,9 +474,27 @@ const PTH: React.FC = () => {
                                     </td>
                                     <td className={styles.actionColumn}>
                                         <div className={sharedStyles.actions}>
-                                            <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
-                                                {batch.status === 'completed' ? <><Eye size={14} /> View</> : <><Search size={14} /> Start Scanning</>}
-                                            </button>
+                                            {isStageSelected(batch) ? (
+                                                <button className={sharedStyles.secondaryButton} onClick={() => handleStartScanning(batch)}>
+                                                    {batch.status === 'completed' ? <><Eye size={14} /> View</> : <><Search size={14} /> Start Scanning</>}
+                                                </button>
+                                            ) : (
+                                                <span style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.3rem',
+                                                    padding: '0.3rem 0.75rem',
+                                                    borderRadius: '999px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 600,
+                                                    backgroundColor: '#f3f4f6',
+                                                    color: '#6b7280',
+                                                    border: '1px solid #e5e7eb',
+                                                    letterSpacing: '0.02em'
+                                                }}>
+                                                    — Skipped
+                                                </span>
+                                            )}
                                             {showDelete && canDelete && (
                                                 <button className={sharedStyles.deleteButton} onClick={() => handleDeleteBatch(batch.id)}>
                                                     <Trash2 size={14} />

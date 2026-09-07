@@ -131,7 +131,7 @@ export const SerialNumber: React.FC = () => {
     const [serialsTotalPages, setSerialsTotalPages] = useState(1);
     const [serialsSearch, setSerialsSearch] = useState('');
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-    const [qrCodeMap, setQrCodeMap] = useState<{[key: string]: string}>({});
+    const [qrCodeMap, setQrCodeMap] = useState<{ [key: string]: string }>({});
     const [isZipping, setIsZipping] = useState(false);
     const [pdfProgress, setPdfProgress] = useState<string | null>(null);
     const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
@@ -141,15 +141,26 @@ export const SerialNumber: React.FC = () => {
     // Large QR Preview modal state
     const [previewQrSerial, setPreviewQrSerial] = useState<string | null>(null);
 
-    // Edit customer barcode modal state
+    // Edit customer barcode model state
     const [editingSerial, setEditingSerial] = useState<any>(null);
     const [editBarcodeValue, setEditBarcodeValue] = useState<string>('');
     const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
     const fetchWorkOrders = async () => {
         try {
-            const data = await apiFetch('/api/smt/workorders/pending');
-            setWorkOrders(data);
+            let data = await apiFetch('/api/smt/workorders/pending');
+            let list = Array.isArray(data) ? data : (data?.data || data?.workOrders || []);
+
+            if (list.length === 0) {
+                const fallbackData = await apiFetch('/api/smt/work-orders');
+                list = Array.isArray(fallbackData) ? fallbackData : (fallbackData?.data || fallbackData?.workOrders || fallbackData?.rows || []);
+            }
+
+            setWorkOrders(list.map((w: any) => ({
+                ...w,
+                id: String(w.id || w.work_order_id || ''),
+                work_order_id: String(w.work_order_id || w.id || '')
+            })));
         } catch (err) {
             console.error('Error fetching pending work orders:', err);
         }
@@ -215,19 +226,13 @@ export const SerialNumber: React.FC = () => {
 
     useEffect(() => {
         if (selectedWoId) {
-            const wo = workOrders.find(w => w.id === selectedWoId);
+            const wo = workOrders.find(w => String(w.id || w.work_order_id).trim() === String(selectedWoId).trim());
             if (wo) {
                 setSelectedWo(wo);
                 const stored = localStorage.getItem(`panel_file_name_wo_${selectedWoId}`) || '';
                 setPanelFileName(stored);
             } else {
                 setSelectedWo(null);
-                setSelectedWoId('');
-                setExistingBatch(null);
-                setSavedBarcodes([]);
-                setRemarks('');
-                setAdditionalNotes('');
-                setPanelFileName('');
             }
         } else {
             setSelectedWo(null);
@@ -255,8 +260,8 @@ export const SerialNumber: React.FC = () => {
         const count = end - start + 1;
         const displayLimit = Math.min(count, 15);
         const separatorSymbol = getSeparatorChar(separator);
-        const padLength = numberLength && parseInt(numberLength, 10) > 0 
-            ? parseInt(numberLength, 10) 
+        const padLength = numberLength && parseInt(numberLength, 10) > 0
+            ? parseInt(numberLength, 10)
             : startingNumber.length;
 
         const previews: string[] = [];
@@ -397,7 +402,7 @@ export const SerialNumber: React.FC = () => {
                 setLaserValidationData(valData);
                 addToast(`File parsed successfully. Extracted ${res.serialCount} serial numbers.`, 'success');
 
-                const woRemainingQty = selectedWo 
+                const woRemainingQty = selectedWo
                     ? Math.max(0, selectedWo.quantity - Number(selectedWo.generated_count || 0))
                     : 0;
 
@@ -428,7 +433,7 @@ export const SerialNumber: React.FC = () => {
                     method: 'POST',
                     body: JSON.stringify({ temp_file_path: laserValidationData.temp_file_path })
                 });
-            } catch (e) {}
+            } catch (e) { }
         }
         setLaserFile(null);
         setLaserValidationData(null);
@@ -475,7 +480,7 @@ export const SerialNumber: React.FC = () => {
                     method: 'POST',
                     body: JSON.stringify({ temp_file_path: valData.temp_file_path })
                 });
-            } catch (e) {}
+            } catch (e) { }
             setLaserFile(null);
             setLaserValidationData(null);
         } finally {
@@ -490,7 +495,7 @@ export const SerialNumber: React.FC = () => {
                     method: 'POST',
                     body: JSON.stringify({ temp_file_path: laserValidationData.temp_file_path })
                 });
-            } catch (e) {}
+            } catch (e) { }
         }
         setLaserFile(null);
         setLaserValidationData(null);
@@ -648,8 +653,8 @@ export const SerialNumber: React.FC = () => {
                 setRecordMetadata(data.sourceConfig);
                 setSerialsPage(1);
 
-                const stored = localStorage.getItem(`panel_file_name_${data.record.id}`) || 
-                               localStorage.getItem(`panel_file_name_wo_${data.record.work_order_id}`) || '';
+                const stored = localStorage.getItem(`panel_file_name_${data.record.id}`) ||
+                    localStorage.getItem(`panel_file_name_wo_${data.record.work_order_id}`) || '';
                 setModalPanelFileName(stored);
 
                 fetchRecordSerialsList(data.record.id, 1, serialsSearch);
@@ -736,7 +741,7 @@ export const SerialNumber: React.FC = () => {
                     margin: 2,
                     errorCorrectionLevel: 'M'
                 });
-                
+
                 const canvas = document.createElement('canvas');
                 canvas.width = 250;
                 canvas.height = 295;
@@ -786,7 +791,7 @@ export const SerialNumber: React.FC = () => {
             margin: 2,
             errorCorrectionLevel: 'M'
         });
-        
+
         const ctx = mainCanvas.getContext('2d');
         if (!ctx) {
             throw new Error('Canvas context not available');
@@ -806,7 +811,7 @@ export const SerialNumber: React.FC = () => {
     // Populate composite QR codes
     useEffect(() => {
         const generateQRs = async () => {
-            const newMap: {[key: string]: string} = {};
+            const newMap: { [key: string]: string } = {};
             for (const s of recordSerials) {
                 if (qrCodeMap[s.serial_number]) continue;
                 try {
@@ -847,7 +852,7 @@ export const SerialNumber: React.FC = () => {
         try {
             addToast(`Generating QR PDF for ${serialNumber}...`, 'info');
             const dataUrl = await generateQRWithText(serialNumber);
-            
+
             const doc = new jsPDF({
                 orientation: 'portrait',
                 unit: 'mm',
@@ -884,7 +889,7 @@ export const SerialNumber: React.FC = () => {
             }
 
             addToast(`Generating ${serials.length} composite QR PNGs. Please wait...`, 'info');
-            
+
             const zip = new JSZip();
             const qrCanvas = document.createElement('canvas');
             const mainCanvas = document.createElement('canvas');
@@ -899,7 +904,7 @@ export const SerialNumber: React.FC = () => {
 
             addToast('Packaging QR codes into ZIP...', 'info');
             const content = await zip.generateAsync({ type: 'blob' });
-            
+
             const downloadUrl = window.URL.createObjectURL(content);
             const a = document.createElement('a');
             a.style.display = 'none';
@@ -942,7 +947,7 @@ export const SerialNumber: React.FC = () => {
             }
 
             addToast(`Generating combined PDF with ${serials.length} pages. Please wait...`, 'info');
-            
+
             const doc = new jsPDF({
                 orientation: 'portrait',
                 unit: 'mm',
@@ -956,10 +961,10 @@ export const SerialNumber: React.FC = () => {
 
             for (let i = 0; i < serials.length; i++) {
                 if (i > 0) {
-                     doc.addPage([80, 95], 'portrait');
+                    doc.addPage([80, 95], 'portrait');
                 }
                 await generateQRComposite(serials[i].serial_number, qrCanvas, mainCanvas);
-                
+
                 // Convert to compressed JPEG data URL to fix memory string length limit crash
                 const jpegDataUrl = mainCanvas.toDataURL('image/jpeg', 0.75);
                 doc.addImage(jpegDataUrl, 'JPEG', 5, 5, 70, 82.6, undefined, 'FAST');
@@ -985,7 +990,7 @@ export const SerialNumber: React.FC = () => {
 
     const handleDownloadAllTXT = async () => {
         if (!viewRecord) return;
-        
+
         const rawName = localStorage.getItem(`panel_file_name_${viewRecord.id}`) || '';
         const baseFileName = rawName.trim();
         if (!baseFileName) {
@@ -1046,9 +1051,9 @@ export const SerialNumber: React.FC = () => {
             // Loop to generate one TXT content per panel
             for (let p = 0; p < totalPanels; p++) {
                 const currentFileName = incrementFileName(baseFileName, p);
-                
+
                 let fileContent = '';
-                
+
                 // Header with trailing comma
                 let header = `"PanelID",`;
                 for (let i = 1; i <= pcbPerPanel; i++) {
@@ -1071,7 +1076,7 @@ export const SerialNumber: React.FC = () => {
 
             addToast('Packaging TXT files into ZIP...', 'info');
             const content = await zip.generateAsync({ type: 'blob' });
-            
+
             const downloadUrl = window.URL.createObjectURL(content);
             const a = document.createElement('a');
             a.style.display = 'none';
@@ -1097,7 +1102,7 @@ export const SerialNumber: React.FC = () => {
         try {
             addToast('Generating Excel report...', 'info');
             const blob = await apiFetch(`/api/smt/v1/smt/serial-generation-records/${viewRecord.id}/export/excel`);
-            
+
             const downloadUrl = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none';
@@ -1139,7 +1144,7 @@ export const SerialNumber: React.FC = () => {
     };
 
     // Calculate remaining quantity client-side
-    const woRemainingQty = selectedWo 
+    const woRemainingQty = selectedWo
         ? Math.max(0, selectedWo.quantity - Number(selectedWo.generated_count || 0))
         : 0;
 
@@ -1158,7 +1163,7 @@ export const SerialNumber: React.FC = () => {
         <>
             <Toaster toasts={toasts} onRemove={removeToast} />
             <div className={styles.container}>
-                
+
                 {/* --- HEADER --- */}
                 <div className={styles.header}>
                     <div>
@@ -1187,12 +1192,12 @@ export const SerialNumber: React.FC = () => {
 
                 {/* --- MAIN GENERATION PANEL SPLIT --- */}
                 <div className={styles.splitGrid}>
-                    
+
                     {/* LEFT PANEL: WO SELECT & SNAPSHOT */}
                     <div className={styles.leftPanel}>
                         <div className={styles.card}>
                             <h3 className={styles.cardTitle}>📋 Select Work Order Queue</h3>
-                            
+
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Work Order ID *</label>
                                 <WorkOrderSelector
@@ -1204,6 +1209,7 @@ export const SerialNumber: React.FC = () => {
                                     labelKey="id"
                                     productNameKey="product_name"
                                     quantityKey="quantity"
+                                    onOpen={fetchWorkOrders}
                                     required
                                 />
                             </div>
@@ -1316,7 +1322,7 @@ export const SerialNumber: React.FC = () => {
 
                             {/* DYNAMIC CARD BODY CONTAINER */}
                             <div style={{ flex: 1 }}>
-                                
+
                                 {/* 1. GENERATE CARD CONTENT */}
                                 {barcodeSource === 'GENERATE' && (
                                     <div>
@@ -1638,14 +1644,14 @@ export const SerialNumber: React.FC = () => {
                                                     View
                                                 </button>
 
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleDeleteRecord(rec.id, rec.work_order_number)}
-                                                        className={styles.buttonIconOnly}
-                                                        title="Delete Record"
-                                                    >
-                                                        🗑️
-                                                    </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteRecord(rec.id, rec.work_order_number)}
+                                                    className={styles.buttonIconOnly}
+                                                    title="Delete Record"
+                                                >
+                                                    🗑️
+                                                </button>
 
                                             </div>
                                         </td>
@@ -1697,7 +1703,7 @@ export const SerialNumber: React.FC = () => {
             {viewRecord && (
                 <div className={styles.modalOverlay} onClick={() => setViewRecord(null)}>
                     <div className={styles.modalContent} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '850px', width: '90%' }}>
-                        
+
                         {/* MODAL HEADER */}
                         <div className={styles.modalHeader}>
                             <h3 className={styles.modalTitle}>
@@ -1716,7 +1722,7 @@ export const SerialNumber: React.FC = () => {
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                                    
+
                                     {/* SECTION 1: WORK ORDER INFORMATION */}
                                     <div className={styles.card} style={{ margin: 0, padding: '1.25rem', border: '1px solid #e2e8f0' }}>
                                         <h4 style={{ margin: '0 0 1rem 0', color: '#0f172a', fontWeight: 700 }}>📋 Work Order Information</h4>
@@ -1950,10 +1956,10 @@ export const SerialNumber: React.FC = () => {
                                                             <td>
                                                                 {qrCodeMap[s.serial_number] ? (
                                                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
-                                                                        <img 
-                                                                            src={qrCodeMap[s.serial_number]} 
-                                                                            alt="QR Code Composite" 
-                                                                            style={{ width: '70px', height: '83px', display: 'block', border: '1px solid #cbd5e1', padding: '2px', borderRadius: '4px', backgroundColor: '#fff' }} 
+                                                                        <img
+                                                                            src={qrCodeMap[s.serial_number]}
+                                                                            alt="QR Code Composite"
+                                                                            style={{ width: '70px', height: '83px', display: 'block', border: '1px solid #cbd5e1', padding: '2px', borderRadius: '4px', backgroundColor: '#fff' }}
                                                                         />
                                                                         <span style={{ fontSize: '0.7rem', fontFamily: 'monospace', fontWeight: 'bold', color: '#475569' }}>
                                                                             {s.serial_number}
@@ -2078,7 +2084,7 @@ export const SerialNumber: React.FC = () => {
             {previewQrSerial && (
                 <div className={styles.modalOverlay} onClick={() => setPreviewQrSerial(null)} style={{ zIndex: 1100 }}>
                     <div className={styles.modalContent} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', width: '90%', borderRadius: '1rem', border: '1px solid #cbd5e1' }}>
-                        
+
                         <div className={styles.modalHeader} style={{ padding: '0.85rem 1.5rem', backgroundColor: '#f8fafc' }}>
                             <h4 style={{ margin: 0, color: '#0f172a', fontWeight: 800 }}>🔍 QR Code Preview</h4>
                             <button type="button" className={styles.modalCloseBtn} onClick={() => setPreviewQrSerial(null)}>✕</button>
@@ -2087,10 +2093,10 @@ export const SerialNumber: React.FC = () => {
                         <div className={styles.modalBody} style={{ padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#ffffff' }}>
                             {qrCodeMap[previewQrSerial] ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                                    <img 
-                                        src={qrCodeMap[previewQrSerial]} 
-                                        alt="Large QR Code" 
-                                        style={{ width: '220px', height: '260px', display: 'block', border: '1px solid #cbd5e1', padding: '6px', borderRadius: '8px', backgroundColor: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }} 
+                                    <img
+                                        src={qrCodeMap[previewQrSerial]}
+                                        alt="Large QR Code"
+                                        style={{ width: '220px', height: '260px', display: 'block', border: '1px solid #cbd5e1', padding: '6px', borderRadius: '8px', backgroundColor: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
                                     />
                                     <span style={{ fontSize: '1.05rem', fontFamily: 'monospace', fontWeight: 'bold', color: '#0f172a', letterSpacing: '0.025em' }}>
                                         {previewQrSerial}
@@ -2191,7 +2197,7 @@ export const SerialNumber: React.FC = () => {
             {editingSerial && (
                 <div className={styles.modalOverlay} onClick={() => setEditingSerial(null)} style={{ zIndex: 1200 }}>
                     <div className={styles.modalContent} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px', width: '90%', borderRadius: '1rem', border: '1px solid #cbd5e1' }}>
-                        
+
                         <div className={styles.modalHeader} style={{ padding: '1rem 1.5rem', backgroundColor: '#f8fafc' }}>
                             <h4 className={styles.modalTitle} style={{ margin: 0, color: '#0f172a', fontWeight: 800 }}>✏️ Edit Customer Barcode</h4>
                             <button type="button" className={styles.modalCloseBtn} onClick={() => setEditingSerial(null)}>✕</button>

@@ -9,7 +9,11 @@ import {
     Settings,
     Calendar,
     Eye,
-    Trash2
+    Trash2,
+    Search,
+    X,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 
 interface WorkOrderRecord {
@@ -39,6 +43,17 @@ const WorkOrder: React.FC = () => {
     const { user } = useAuth();
     const { showToast } = useToast();
     const [workOrders, setWorkOrders] = useState<WorkOrderRecord[]>([]);
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+
+    // Pagination States
+    const [currentPage, setCurrentPage] = useState<number>(1);
+    const [pageSize, setPageSize] = useState<number>(20);
+    const [totalRecords, setTotalRecords] = useState<number>(0);
+    const [totalPages, setTotalPages] = useState<number>(1);
+
+    // Search States
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [activeSearch, setActiveSearch] = useState<string>('');
 
     const canDelete = user?.role === 'Super Admin';
 
@@ -46,19 +61,96 @@ const WorkOrder: React.FC = () => {
     const [selectedWO, setSelectedWO] = useState<WorkOrderRecord | null>(null);
     const [woToDelete, setWoToDelete] = useState<WorkOrderRecord | null>(null);
 
-    useEffect(() => {
-        fetchWorkOrders();
-    }, []);
-
-    const fetchWorkOrders = async () => {
+    const fetchWorkOrders = async (page = 1, limit = 20, search = '') => {
+        setIsLoading(true);
         try {
-            console.log("Fetching Work Orders...");
-            const data = await apiFetch('/api/backend/work-order');
-            setWorkOrders(Array.isArray(data) ? data : []);
+            const queryParams = new URLSearchParams({
+                page: page.toString(),
+                limit: limit.toString()
+            });
+            if (search.trim()) {
+                queryParams.append('search', search.trim());
+            }
+            const res = await apiFetch(`/api/backend/work-order?${queryParams.toString()}`);
+            if (res && res.data && Array.isArray(res.data)) {
+                setWorkOrders(res.data);
+                const total = typeof res.total === 'number' ? res.total : res.data.length;
+                setTotalRecords(total);
+                setTotalPages(typeof res.totalPages === 'number' ? res.totalPages : Math.ceil(total / limit) || 1);
+                if (typeof res.page === 'number') {
+                    setCurrentPage(res.page);
+                }
+            } else if (Array.isArray(res)) {
+                setWorkOrders(res);
+                setTotalRecords(res.length);
+                setTotalPages(Math.ceil(res.length / limit) || 1);
+            } else {
+                setWorkOrders([]);
+                setTotalRecords(0);
+                setTotalPages(1);
+            }
         } catch (error) {
             console.error('Error fetching work orders:', error);
             showToast('Failed to load work orders', 'error');
+        } finally {
+            setIsLoading(false);
         }
+    };
+
+    useEffect(() => {
+        fetchWorkOrders(currentPage, pageSize, activeSearch);
+    }, [currentPage, pageSize]);
+
+    const handleSearch = () => {
+        const trimmed = searchQuery.trim();
+        setActiveSearch(trimmed);
+        setCurrentPage(1);
+        fetchWorkOrders(1, pageSize, trimmed);
+    };
+
+    const handleClearSearch = () => {
+        setSearchQuery('');
+        setActiveSearch('');
+        setCurrentPage(1);
+        fetchWorkOrders(1, pageSize, '');
+    };
+
+    const handlePageSizeChange = (newSize: number) => {
+        setPageSize(newSize);
+        setCurrentPage(1);
+        fetchWorkOrders(1, newSize, activeSearch);
+    };
+
+    const handlePageChange = (newPage: number) => {
+        if (newPage < 1 || (totalPages > 0 && newPage > totalPages) || newPage === currentPage || isLoading) {
+            return;
+        }
+        setCurrentPage(newPage);
+    };
+
+    const getPageNumbers = (current: number, total: number): (number | string)[] => {
+        if (total <= 7) {
+            return Array.from({ length: total }, (_, i) => i + 1);
+        }
+        const pages: (number | string)[] = [];
+        if (current <= 4) {
+            for (let i = 1; i <= 5; i++) pages.push(i);
+            pages.push('...');
+            pages.push(total);
+        } else if (current >= total - 3) {
+            pages.push(1);
+            pages.push('...');
+            for (let i = total - 4; i <= total; i++) pages.push(i);
+        } else {
+            pages.push(1);
+            pages.push('...');
+            pages.push(current - 1);
+            pages.push(current);
+            pages.push(current + 1);
+            pages.push('...');
+            pages.push(total);
+        }
+        return pages;
     };
 
     const handleView = (wo: WorkOrderRecord) => {
@@ -83,8 +175,8 @@ const WorkOrder: React.FC = () => {
             });
             showToast('Work Order deleted successfully', 'success');
             setWoToDelete(null);
-            // 🔥 REFRESH TABLE
-            await fetchWorkOrders();
+            // Refresh table on current page
+            await fetchWorkOrders(currentPage, pageSize, activeSearch);
         } catch (error: any) {
             showToast(error.message || 'Failed to delete work order', 'error');
         }
@@ -100,9 +192,48 @@ const WorkOrder: React.FC = () => {
             </div>
 
             <div className={styles.card}>
-                <div className={styles.cardHeader}>
-                    <h3><Calendar size={20} /> Work Order Records</h3>
+                <div className={styles.cardHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <h3 style={{ margin: 0 }}><Calendar size={20} /> Work Order Records</h3>
+
+                    {/* Search Work Order */}
+                    <div className={styles.searchSection}>
+                        <div className={styles.searchWrapper}>
+                            <Search size={16} className={styles.searchIcon} />
+                            <input
+                                type="text"
+                                placeholder="Enter Work Order Number..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        handleSearch();
+                                    }
+                                }}
+                                disabled={isLoading}
+                                className={styles.searchInput}
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            className={styles.searchBtn}
+                            onClick={handleSearch}
+                            disabled={isLoading}
+                        >
+                            <Search size={14} /> Search
+                        </button>
+                        {(activeSearch || searchQuery) && (
+                            <button
+                                type="button"
+                                className={styles.clearBtn}
+                                onClick={handleClearSearch}
+                                disabled={isLoading}
+                            >
+                                <X size={14} /> Clear
+                            </button>
+                        )}
+                    </div>
                 </div>
+
                 <div className={styles.tableContainer}>
                     <table className={styles.table}>
                         <thead>
@@ -117,7 +248,16 @@ const WorkOrder: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {workOrders.length > 0 ? (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.6rem' }}>
+                                            <span className={styles.spinner} />
+                                            <span style={{ fontSize: '0.95rem', fontWeight: 500 }}>Loading work orders...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : workOrders.length > 0 ? (
                                 workOrders.map((wo) => (
                                     <tr key={wo.id}>
                                         <td style={{ fontWeight: 'bold', color: '#4f46e5' }}>{wo.wo_number}</td>
@@ -162,14 +302,100 @@ const WorkOrder: React.FC = () => {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                                        No records found.
+                                    <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: '#9ca3af' }}>
+                                        {activeSearch ? (
+                                            <div>
+                                                <div style={{ fontWeight: 600, fontSize: '1rem', color: '#4b5563', marginBottom: '0.25rem' }}>
+                                                    No Work Orders found matching "{activeSearch}"
+                                                </div>
+                                                <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                                                    Try entering a different Work Order Number or click Clear.
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            'No records found.'
+                                        )}
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {totalRecords > 0 && (
+                    <div className={styles.paginationSection}>
+                        <div className={styles.paginationInfo}>
+                            Showing {workOrders.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords} Work Orders
+                            {activeSearch && (
+                                <span style={{ marginLeft: '0.5rem', color: '#4f46e5', fontWeight: 600 }}>
+                                    (filtered by "{activeSearch}")
+                                </span>
+                            )}
+                        </div>
+
+                        <div className={styles.paginationControls}>
+                            {/* Page size selection */}
+                            <select
+                                value={pageSize}
+                                onChange={(e) => handlePageSizeChange(parseInt(e.target.value, 10))}
+                                disabled={isLoading}
+                                className={styles.pageSizeSelect}
+                                aria-label="Work orders per page"
+                            >
+                                <option value={10}>10 per page</option>
+                                <option value={20}>20 per page</option>
+                                <option value={50}>50 per page</option>
+                                <option value={100}>100 per page</option>
+                            </select>
+
+                            {/* Previous button */}
+                            <button
+                                type="button"
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1 || isLoading}
+                                className={styles.navBtn}
+                            >
+                                <ChevronLeft size={16} /> Previous
+                            </button>
+
+                            {/* Page numbers with ellipsis */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                {getPageNumbers(currentPage, totalPages).map((p, idx) => {
+                                    if (p === '...') {
+                                        return (
+                                            <span key={`ellipsis-${idx}`} className={styles.ellipsis}>
+                                                ...
+                                            </span>
+                                        );
+                                    }
+                                    const isCurrent = p === currentPage;
+                                    return (
+                                        <button
+                                            key={p}
+                                            type="button"
+                                            onClick={() => handlePageChange(p as number)}
+                                            disabled={isLoading}
+                                            className={`${styles.pageNumberBtn} ${isCurrent ? styles.activePageNumber : ''}`}
+                                        >
+                                            {p}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Next button */}
+                            <button
+                                type="button"
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages || totalPages === 0 || isLoading}
+                                className={styles.navBtn}
+                            >
+                                Next <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* View Details Dialog */}

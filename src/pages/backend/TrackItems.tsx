@@ -138,10 +138,9 @@ const TrackItems: React.FC = () => {
         
         const fetchWOs = async () => {
             try {
-                const res = await apiFetch('/api/backend/work-order');
-                if (Array.isArray(res)) {
-                    setWorkOrdersList(res.map((w: any) => w.wo_number || w.id));
-                }
+                const res = await apiFetch('/api/backend/work-order?all=true');
+                const list = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
+                setWorkOrdersList(list.map((w: any) => w.wo_number || w.id));
             } catch (err) {
                 console.error("Failed to load WOs", err);
             }

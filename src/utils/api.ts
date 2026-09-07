@@ -92,6 +92,7 @@ export async function apiFetch(
     const isBlob = contentType && (
         contentType.includes('application/octet-stream') ||
         contentType.includes('application/blob') ||
+        contentType.includes('application/pdf') ||
         contentType.includes('text/csv') ||
         contentType.includes('application/vnd.openxmlformats-officedocument') ||
         contentType.includes('application/vnd.ms-excel') ||

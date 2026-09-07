@@ -135,10 +135,6 @@ const VI: React.FC = () => {
     const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchBatches();
-    }, []);
-
-    useEffect(() => {
         fetchPendingBatches(1, searchTermPending);
     }, [searchTermPending]);
 

@@ -134,10 +134,6 @@ const PTH: React.FC = () => {
     const scanInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        fetchBatches();
-    }, []);
-
-    useEffect(() => {
         fetchPendingBatches(1, searchTermPending);
     }, [searchTermPending]);
 

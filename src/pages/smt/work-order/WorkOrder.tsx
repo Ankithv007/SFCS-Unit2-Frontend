@@ -70,9 +70,12 @@ export const WorkOrder: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
     const navigate = useNavigate();
-    const userRole = (smtUser?.role || user?.role || '').trim().toLowerCase();
-    const canAccessPoDocument = userRole === 'super admin' || userRole === 'admin' || smtUser?.userId === 'ADMIN';
-    const isSuperAdmin = userRole === 'super admin' || smtUser?.userId === 'ADMIN';
+    const userRole = (user?.role || smtUser?.role || '').trim().toLowerCase();
+    const canAccessPoDocument = userRole === 'super admin' || userRole === 'admin' || 
+                                (smtUser?.role || '').trim().toLowerCase() === 'super admin' || 
+                                (smtUser?.role || '').trim().toLowerCase() === 'admin' || 
+                                smtUser?.userId === 'ADMIN';
+    const isSuperAdmin = userRole === 'super admin' || (smtUser?.role || '').trim().toLowerCase() === 'super admin' || smtUser?.userId === 'ADMIN';
     const [workOrderId, setWorkOrderId] = useState('');
     const [poId, setPoId] = useState('');
     const [remark, setRemark] = useState('');
@@ -584,7 +587,8 @@ export const WorkOrder: React.FC = () => {
         }
         try {
             addToast("Starting download...", "info");
-            const blob = await apiFetch(`/api/smt/work-orders/${id}/download-po`);
+            const responseData = await apiFetch(`/api/smt/work-orders/${id}/download-po`);
+            const blob = responseData instanceof Blob ? responseData : new Blob([responseData]);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none';
@@ -597,6 +601,25 @@ export const WorkOrder: React.FC = () => {
             addToast("File downloaded successfully.", "success");
         } catch (err: any) {
             addToast(err.message || "Failed to download file.", "error");
+        }
+    };
+
+    const handleViewClick = async (wo: any) => {
+        setViewDetailWo(wo);
+        try {
+            const targetId = wo.work_order_id || wo.id;
+            if (targetId) {
+                const res = await apiFetch(`/api/smt/work-orders/${targetId}`);
+                if (res && res.success && res.data) {
+                    setViewDetailWo((prev: any) => ({
+                        ...prev,
+                        ...res.data,
+                        work_order_id: res.data.id || res.data.work_order_id || prev?.work_order_id
+                    }));
+                }
+            }
+        } catch (e) {
+            // Keep existing wo data
         }
     };
 
@@ -1040,6 +1063,58 @@ export const WorkOrder: React.FC = () => {
                                     );
                                 })}
                             </div>
+
+                            {/* Visual Configured Process Route */}
+                            {selectedStages.length > 0 ? (
+                                <div style={{
+                                    marginTop: '0.85rem',
+                                    padding: '0.65rem 0.9rem',
+                                    background: '#f0fdf4',
+                                    borderRadius: '0.5rem',
+                                    border: '1px solid #bbf7d0',
+                                    fontSize: '0.85rem'
+                                }}>
+                                    <div style={{ fontWeight: 700, color: '#166534', marginBottom: '0.35rem' }}>
+                                        Configured Process Route ({ALL_STAGES.filter(s => selectedStages.includes(s)).length} stages active):
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem' }}>
+                                        {ALL_STAGES.filter(s => selectedStages.includes(s)).map((st, idx, arr) => (
+                                            <React.Fragment key={st}>
+                                                <span style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.25rem',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px',
+                                                    backgroundColor: '#dcfce7',
+                                                    color: '#166534',
+                                                    fontWeight: 600,
+                                                    fontSize: '0.8rem',
+                                                    border: '1px solid #86efac'
+                                                }}>
+                                                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>{idx + 1}.</span> {st}
+                                                </span>
+                                                {idx < arr.length - 1 && (
+                                                    <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '0.9rem' }}>→</span>
+                                                )}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{
+                                    marginTop: '0.85rem',
+                                    padding: '0.65rem 0.9rem',
+                                    background: '#fef2f2',
+                                    borderRadius: '0.5rem',
+                                    border: '1px solid #fecaca',
+                                    fontSize: '0.85rem',
+                                    color: '#b91c1c',
+                                    fontWeight: 600
+                                }}>
+                                    ⚠️ At least one stage must be selected for the Work Order.
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1157,9 +1232,9 @@ export const WorkOrder: React.FC = () => {
                                                 </td>
                                                  {canAccessPoDocument && (
                                                      <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                                                         {wo.po_document_path ? (
+                                                         {(wo.po_document_path || wo.po_document_name) ? (
                                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'nowrap' }}>
-                                                                 {wo.po_document_type === 'application/pdf' ? (
+                                                                 {(wo.po_document_type === 'application/pdf' || wo.po_document_name?.toLowerCase().endsWith('.pdf')) ? (
                                                                      <span style={{ fontSize: '1.2rem', cursor: 'default' }} title="PDF Document">📕</span>
                                                                  ) : (
                                                                      <span style={{ fontSize: '1.2rem', cursor: 'default' }} title="Excel Spreadsheet">📗</span>
@@ -1167,14 +1242,14 @@ export const WorkOrder: React.FC = () => {
                                                                  <button
                                                                      className={styles.compactIconBtn}
                                                                      title="View PO Document"
-                                                                     onClick={() => handleOpenPreview(wo.work_order_id)}
+                                                                     onClick={() => handleOpenPreview(wo.work_order_id || wo.id)}
                                                                  >
                                                                      👁️
                                                                  </button>
                                                                  <button
                                                                      className={styles.compactIconBtn}
                                                                      title="Download PO Document"
-                                                                     onClick={() => handleDownloadPo(wo.work_order_id, wo.po_document_name)}
+                                                                     onClick={() => handleDownloadPo(wo.work_order_id || wo.id, wo.po_document_name)}
                                                                  >
                                                                      📥
                                                                  </button>
@@ -1187,7 +1262,7 @@ export const WorkOrder: React.FC = () => {
                                                 <td>
                                                     <div style={{ display: 'flex', gap: '6px' }}>
                                                         <button
-                                                            onClick={() => setViewDetailWo(wo)}
+                                                            onClick={() => handleViewClick(wo)}
                                                             className={styles.secondaryButton}
                                                             style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', border: '1px solid #4b5563', color: '#4b5563' }}
                                                         >
@@ -1466,20 +1541,28 @@ export const WorkOrder: React.FC = () => {
                                             <span className={styles.detailValue} style={{ fontWeight: 600 }}>{viewDetailWo.model_name || '-'}</span>
                                         </div>
                                         <div className={`${styles.detailItem} ${styles.detailItemFullWidth}`} style={{ marginTop: '0.5rem' }}>
-                                            <span className={styles.detailLabel}>Process Routing / Stages</span>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.25rem' }}>
-                                                {(Array.isArray(viewDetailWo.selected_stages) ? viewDetailWo.selected_stages : ALL_STAGES).map((st: string) => (
-                                                    <span key={st} style={{
-                                                        padding: '2px 8px',
-                                                        borderRadius: '4px',
-                                                        fontSize: '0.75rem',
-                                                        fontWeight: 600,
-                                                        backgroundColor: '#eff6ff',
-                                                        color: '#1d4ed8',
-                                                        border: '1px solid #bfdbfe'
-                                                    }}>
-                                                        {st}
-                                                    </span>
+                                            <span className={styles.detailLabel}>Configured Process Route</span>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem', marginTop: '0.35rem' }}>
+                                                {ALL_STAGES.filter(s => (Array.isArray(viewDetailWo.selected_stages) ? viewDetailWo.selected_stages : ALL_STAGES).includes(s)).map((st: string, idx: number, arr: any[]) => (
+                                                    <React.Fragment key={st}>
+                                                        <span style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '0.25rem',
+                                                            padding: '3px 9px',
+                                                            borderRadius: '5px',
+                                                            fontSize: '0.8rem',
+                                                            fontWeight: 600,
+                                                            backgroundColor: '#eff6ff',
+                                                            color: '#1d4ed8',
+                                                            border: '1px solid #bfdbfe'
+                                                        }}>
+                                                            <span style={{ opacity: 0.75 }}>{idx + 1}.</span> {st}
+                                                        </span>
+                                                        {idx < arr.length - 1 && (
+                                                            <span style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: '0.85rem' }}>→</span>
+                                                        )}
+                                                    </React.Fragment>
                                                 ))}
                                             </div>
                                         </div>
@@ -1544,11 +1627,11 @@ export const WorkOrder: React.FC = () => {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                             <div className={styles.detailItem}>
                                                 <span className={styles.detailLabel}>PO Document</span>
-                                                <span className={styles.detailValue} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                    {viewDetailWo.po_document_path ? (
+                                                <span className={styles.detailValue} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    {(viewDetailWo.po_document_path || viewDetailWo.po_document_name) ? (
                                                         <>
-                                                            {viewDetailWo.po_document_type === 'application/pdf' ? '📕' : '📗'}
-                                                            <span style={{ fontSize: '0.9rem', color: '#4b5563', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '180px' }} title={viewDetailWo.po_document_name}>
+                                                            {(viewDetailWo.po_document_type === 'application/pdf' || viewDetailWo.po_document_name?.toLowerCase().endsWith('.pdf')) ? '📕' : '📗'}
+                                                            <span style={{ fontSize: '0.9rem', color: '#1e293b', fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }} title={viewDetailWo.po_document_name}>
                                                                 {viewDetailWo.po_document_name}
                                                             </span>
                                                         </>
@@ -1557,19 +1640,19 @@ export const WorkOrder: React.FC = () => {
                                                     )}
                                                 </span>
                                             </div>
-                                            {viewDetailWo.po_document_path && (
+                                            {(viewDetailWo.po_document_path || viewDetailWo.po_document_name) && (
                                                 <div style={{ display: 'flex', gap: '8px', marginTop: '0.25rem' }}>
                                                     <button
                                                         className={styles.secondaryButton}
-                                                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
-                                                        onClick={() => handleOpenPreview(viewDetailWo.work_order_id)}
+                                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                        onClick={() => handleOpenPreview(viewDetailWo.work_order_id || viewDetailWo.id)}
                                                     >
                                                         👁️ View Preview
                                                     </button>
                                                     <button
                                                         className={styles.secondaryButton}
-                                                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
-                                                        onClick={() => handleDownloadPo(viewDetailWo.work_order_id, viewDetailWo.po_document_name)}
+                                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                        onClick={() => handleDownloadPo(viewDetailWo.work_order_id || viewDetailWo.id, viewDetailWo.po_document_name)}
                                                     >
                                                         📥 Download
                                                     </button>

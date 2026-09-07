@@ -323,10 +323,6 @@ const PCBAFCT: React.FC = () => {
     const [pendingUsnBarcode, setPendingUsnBarcode] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchBatches();
-    }, []);
-
-    useEffect(() => {
         fetchPendingBatches(1, searchTermPending);
     }, [searchTermPending]);
 

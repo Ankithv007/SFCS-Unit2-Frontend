@@ -48,6 +48,13 @@ interface TrackResult {
     total_reworks: number;
     total_debugs: number;
     scan_history: ScanEntry[];
+    selected_stages?: any;
+    active_route?: Array<{
+        id: number;
+        stage_code: string;
+        stage_name: string;
+        stage_order?: number;
+    }>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -74,6 +81,7 @@ const statusColor = (s: string): string => {
         case 'DEBUG': return '#ef4444';
         case 'READY_FOR_RESCAN': return '#6366f1';
         case 'IN_PROGRESS': return '#3b82f6';
+        case 'SKIPPED': return '#94a3b8';
         default: return '#94a3b8';
     }
 };
@@ -85,8 +93,75 @@ const statusBg = (s: string): string => {
         case 'DEBUG': return 'rgba(239,68,68,0.12)';
         case 'READY_FOR_RESCAN': return 'rgba(99,102,241,0.12)';
         case 'IN_PROGRESS': return 'rgba(59,130,246,0.12)';
+        case 'SKIPPED': return 'rgba(148,163,184,0.12)';
         default: return 'rgba(148,163,184,0.12)';
     }
+};
+
+const normalizeStageId = (s: string) => (s || '').toUpperCase().replace(/[\s\-_]/g, '');
+
+const isStageInRoute = (stage: { code: string; name: string; label: string }, trackData: TrackResult): boolean => {
+    // 1. Authoritative: check backend-resolved active_route
+    if (Array.isArray(trackData.active_route)) {
+        const stageCodeNorm = normalizeStageId(stage.code);
+        const stageNameNorm = normalizeStageId(stage.name);
+        const stageLabelNorm = normalizeStageId(stage.label);
+
+        return trackData.active_route.some(r => {
+            const rCodeNorm = normalizeStageId(r.stage_code);
+            const rNameNorm = normalizeStageId(r.stage_name);
+            return (
+                rCodeNorm === stageCodeNorm ||
+                rNameNorm === stageNameNorm ||
+                rCodeNorm === stageLabelNorm ||
+                rNameNorm === stageLabelNorm ||
+                rCodeNorm === stageNameNorm ||
+                rNameNorm === stageCodeNorm
+            );
+        });
+    }
+
+    // 2. Fallback: if active_route is undefined, inspect selected_stages
+    if (trackData.selected_stages !== undefined) {
+        // Legacy Work Order: NULL means default to all standard stages active
+        if (trackData.selected_stages === null) {
+            return true;
+        }
+        let list: any[] = [];
+        if (Array.isArray(trackData.selected_stages)) {
+            list = trackData.selected_stages;
+        } else if (typeof trackData.selected_stages === 'string') {
+            try {
+                const parsed = JSON.parse(trackData.selected_stages);
+                if (Array.isArray(parsed)) list = parsed;
+            } catch {
+                list = [];
+            }
+        }
+        // If empty array [], it's an invalid configuration -> no stages active
+        if (list.length === 0) {
+            return false;
+        }
+        const stageCodeNorm = normalizeStageId(stage.code);
+        const stageNameNorm = normalizeStageId(stage.name);
+        const stageLabelNorm = normalizeStageId(stage.label);
+        return list.some(item => {
+            const itemStr = typeof item === 'string' ? item : (item?.stage_code || item?.stage_name || '');
+            const itemNorm = normalizeStageId(itemStr);
+            return (
+                itemNorm === stageCodeNorm ||
+                itemNorm === stageNameNorm ||
+                itemNorm === stageLabelNorm ||
+                (stageCodeNorm === 'PTH' && itemNorm === 'PRESOLDERING') ||
+                (stageCodeNorm === 'QA' && itemNorm === 'QUALITYASSURANCE') ||
+                (stageCodeNorm === 'VI' && itemNorm === 'VISUALINSPECTION') ||
+                (stageCodeNorm === 'QI' && itemNorm === 'QUALITYINSPECTION')
+            );
+        });
+    }
+
+    // Default to true for legacy Work Orders where no stage route info exists
+    return true;
 };
 
 const StatusBadge: React.FC<{ status: string; small?: boolean }> = ({ status, small }) => (
@@ -229,6 +304,11 @@ const TrackItems: React.FC = () => {
     const getStageStatus = (stage: { code: string; name: string; label: string }): string => {
         if (!data) return 'pending';
 
+        // Check whether stage is in the Work Order's active route
+        if (!isStageInRoute(stage, data)) {
+            return 'SKIPPED';
+        }
+
         // 1. Get all scan history entries for this stage
         const entries = data.scan_history.filter(h => 
             h.station === stage.name || 
@@ -290,7 +370,7 @@ const TrackItems: React.FC = () => {
         }
 
         if (isCurrent) {
-            if (currentStatus === 'ACCEPTED') {
+            if (currentStatus === 'ACCEPTED' || currentStatus === 'COMPLETED') {
                 return 'ACCEPTED';
             }
             return 'IN_PROGRESS';
@@ -572,8 +652,9 @@ const TrackItems: React.FC = () => {
 
                                  {PRODUCTION_PIPELINE.map((stage, idx) => {
                                      const stStatus = getStageStatus(stage);
-                                     const isCurrent = stStatus === 'IN_PROGRESS';
-                                     const visited = stStatus !== 'pending';
+                                     const isSkipped = stStatus === 'SKIPPED';
+                                     const isCurrent = !isSkipped && stStatus === 'IN_PROGRESS';
+                                     const visited = !isSkipped && stStatus !== 'pending';
                                      const color = statusColor(stStatus);
                                      const entries = data.scan_history.filter(h => 
                                          h.station === stage.name || 
@@ -584,25 +665,35 @@ const TrackItems: React.FC = () => {
 
                                      return (
                                          <React.Fragment key={stage.code}>
-                                             <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
+                                             <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''} ${isSkipped ? styles.pipelineNodeSkipped : ''}`}>
                                                  <div className={styles.pipelineNodeDot} style={{
-                                                     background: color,
-                                                     boxShadow: isCurrent ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` : `0 0 0 4px ${color}22`,
+                                                     background: isSkipped ? '#f1f5f9' : color,
+                                                     color: isSkipped ? '#94a3b8' : '#ffffff',
+                                                     border: isSkipped ? '1px dashed #cbd5e1' : 'none',
+                                                     boxShadow: isCurrent 
+                                                         ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` 
+                                                         : (isSkipped ? 'none' : `0 0 0 4px ${color}22`),
                                                  }}>
                                                      <StationIcon station={stage.code} />
                                                  </div>
-                                                 <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
+                                                 <div className={styles.pipelineNodeLabel} style={{ color: isSkipped ? '#94a3b8' : (visited ? '#1e293b' : '#94a3b8') }}>
                                                      {stage.label}
                                                      {isCurrent && <span className={styles.liveTag}>LIVE</span>}
                                                  </div>
-                                                 {visited ? <StatusBadge status={stStatus} small /> : <span className={styles.pendingTag}>Pending</span>}
-                                                 {entries.length > 1 && (
+                                                 {isSkipped ? (
+                                                     <StatusBadge status="SKIPPED" small />
+                                                 ) : visited ? (
+                                                     <StatusBadge status={stStatus} small />
+                                                 ) : (
+                                                     <span className={styles.pendingTag}>Pending</span>
+                                                 )}
+                                                 {entries.length > 1 && !isSkipped && (
                                                      <span className={styles.rescannedTag}>×{entries.length} scans</span>
                                                  )}
                                              </div>
 
                                              {/* Repair branch nodes */}
-                                             {entries.some(e => e.status === 'REWORK') && (() => {
+                                             {!isSkipped && entries.some(e => e.status === 'REWORK') && (() => {
                                                  const isActive = data.current_stage === 'Rework';
                                                  return (
                                                      <div className={styles.repairBranch}>
@@ -623,7 +714,7 @@ const TrackItems: React.FC = () => {
                                                  );
                                              })()}
 
-                                             {entries.some(e => e.status === 'DEBUG') && (() => {
+                                             {!isSkipped && entries.some(e => e.status === 'DEBUG') && (() => {
                                                  const isActive = data.current_stage === 'Debug';
                                                  return (
                                                      <div className={styles.repairBranch}>

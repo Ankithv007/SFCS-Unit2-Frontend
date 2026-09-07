@@ -324,6 +324,14 @@
     border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
+.pipelineNodeSkipped {
+    opacity: 0.75;
+}
+
+.pipelineNodeSkipped:hover {
+    background: #f8fafc;
+}
+
 .pipelineNodeDot {
     width: 32px; height: 32px;
     border-radius: 50%;

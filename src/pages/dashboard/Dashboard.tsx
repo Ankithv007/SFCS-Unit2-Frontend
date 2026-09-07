@@ -337,7 +337,7 @@ export default function SFCSDashboard() {
     }
   }, [activeWoId, activeTab, selectedDate, fetchDashboardStats]);
 
-  // 20-Second Auto-Refresh Polling with unmount cleanup
+  // 20-Second Auto-Refresh Polling with unmount cleanup (fallback)
   useEffect(() => {
     const interval = setInterval(() => {
       if (activeTab === 'live') {
@@ -351,6 +351,77 @@ export default function SFCSDashboard() {
 
     return () => clearInterval(interval);
   }, [activeTab, activeWoId, selectedDate, fetchLiveWorkOrders, fetchDashboardStats]);
+
+  // Real-time SMT Dashboard updates via Server-Sent Events (SSE) + BroadcastChannel fallback
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+
+    let eventSource: EventSource | null = null;
+    let bc: BroadcastChannel | null = null;
+
+    try {
+      eventSource = new EventSource(`/api/smt/admin/dashboard/events?token=${encodeURIComponent(token)}`);
+
+      eventSource.onmessage = (event) => {
+        try {
+          if (!event.data) return;
+          const payload = JSON.parse(event.data);
+          if (payload && (payload.event === 'SMT_DASHBOARD_UPDATE' || payload.type === 'SMT_DASHBOARD_UPDATE')) {
+            const affectedWoId = payload.workOrderId || payload.data?.workOrderId;
+            if (!affectedWoId || affectedWoId === activeWoId) {
+              const dateToFetch = activeTab === 'search' ? selectedDate : 'all';
+              if (activeWoId) {
+                fetchDashboardStats(activeWoId, dateToFetch, true);
+              }
+            }
+            if (activeTab === 'live') {
+              fetchLiveWorkOrders();
+            }
+          }
+        } catch {
+          // Ignore comments or heartbeat messages
+        }
+      };
+
+      eventSource.onerror = () => {
+        // EventSource will automatically attempt reconnection
+      };
+    } catch (sseErr) {
+      console.warn('SSE connection failed to initialize:', sseErr);
+    }
+
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('smt-production-channel');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'SMT_DASHBOARD_UPDATE') {
+            const affectedWoId = event.data?.workOrderId;
+            if (!affectedWoId || affectedWoId === activeWoId) {
+              const dateToFetch = activeTab === 'search' ? selectedDate : 'all';
+              if (activeWoId) {
+                fetchDashboardStats(activeWoId, dateToFetch, true);
+              }
+            }
+            if (activeTab === 'live') {
+              fetchLiveWorkOrders();
+            }
+          }
+        };
+      } catch {
+        // BroadcastChannel optional
+      }
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (bc) {
+        bc.close();
+      }
+    };
+  }, [activeWoId, activeTab, selectedDate, fetchDashboardStats, fetchLiveWorkOrders]);
 
   // Manual Refresh handler
   const handleManualRefresh = () => {

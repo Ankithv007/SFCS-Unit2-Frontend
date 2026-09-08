@@ -139,9 +139,9 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
     };
 
     const filteredUsers = allUsers.filter(u => 
-        u.name.toLowerCase().includes(userSearch.toLowerCase()) || 
-        u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
-        (u.employee_code && u.employee_code.toLowerCase().includes(userSearch.toLowerCase()))
+        String(u?.name ?? '').toLowerCase().includes(String(userSearch ?? '').toLowerCase()) || 
+        String(u?.email ?? '').toLowerCase().includes(String(userSearch ?? '').toLowerCase()) ||
+        String(u?.employee_code ?? '').toLowerCase().includes(String(userSearch ?? '').toLowerCase())
     );
 
     return (
@@ -225,9 +225,9 @@ export const DepartmentWizardModal: React.FC<DepartmentWizardModalProps> = ({
                                     </thead>
                                     <tbody>
                                         {systemPages.filter((sp) => 
-                                            sp.route_path.toLowerCase().includes(pageSearch.toLowerCase()) ||
-                                            sp.module_name.toLowerCase().includes(pageSearch.toLowerCase()) ||
-                                            sp.page_name.toLowerCase().includes(pageSearch.toLowerCase())
+                                            String(sp?.route_path ?? '').toLowerCase().includes(String(pageSearch ?? '').toLowerCase()) ||
+                                            String(sp?.module_name ?? '').toLowerCase().includes(String(pageSearch ?? '').toLowerCase()) ||
+                                            String(sp?.page_name ?? '').toLowerCase().includes(String(pageSearch ?? '').toLowerCase())
                                         ).map((sp) => {
                                             const perm = permissions[sp.id] || {
                                                 system_page_id: sp.id,

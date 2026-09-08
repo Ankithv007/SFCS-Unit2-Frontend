@@ -535,6 +535,16 @@
     text-align: center;
 }
 
+.cellStencilName {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.75rem;
+    margin-top: 0.15rem;
+    word-break: break-word;
+    max-width: 100%;
+    text-align: center;
+}
+
 .cellStatusBadgeWrapper {
     margin-top: 0.25rem;
     width: 100%;

@@ -87,7 +87,6 @@ export const WorkOrder: React.FC = () => {
     const [pcbPerPanel, setPcbPerPanel] = useState('');
     const [panelQuantity, setPanelQuantity] = useState('');
     const [sides, setSides] = useState('');
-    const [createdBy, setCreatedBy] = useState('System admin');
     const [priority, setPriority] = useState('medium');
     const [selectedStages, setSelectedStages] = useState<string[]>(ALL_STAGES);
     const [customerName, setCustomerName] = useState('');
@@ -95,6 +94,54 @@ export const WorkOrder: React.FC = () => {
     const [error, setError] = useState('');
     const [editingWorkOrderId, setEditingWorkOrderId] = useState<string | null>(null);
     const [viewDetailWo, setViewDetailWo] = useState<any | null>(null);
+
+    const getCurrentUserName = (): string => {
+        try {
+            if (user?.name && user.name.trim()) return user.name.trim();
+            if (smtUser?.name && smtUser.name.trim()) return smtUser.name.trim();
+
+            const storedUserData = localStorage.getItem('user_data');
+            if (storedUserData) {
+                const parsed = JSON.parse(storedUserData);
+                if (parsed?.name && String(parsed.name).trim()) return String(parsed.name).trim();
+                if (parsed?.username && String(parsed.username).trim()) return String(parsed.username).trim();
+            }
+
+            const smtStored = localStorage.getItem('smtUser');
+            if (smtStored) {
+                const parsed = JSON.parse(smtStored);
+                if (parsed?.name && String(parsed.name).trim()) return String(parsed.name).trim();
+                if (parsed?.userId && String(parsed.userId).trim()) return String(parsed.userId).trim();
+            }
+
+            const headerName = localStorage.getItem('X-User-Name');
+            if (headerName && headerName.trim()) return headerName.trim();
+
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                const parts = token.split('.');
+                if (parts.length >= 2) {
+                    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                    const decoded = JSON.parse(atob(base64));
+                    if (decoded?.name && String(decoded.name).trim()) return String(decoded.name).trim();
+                    if (decoded?.username && String(decoded.username).trim()) return String(decoded.username).trim();
+                    if (decoded?.email && String(decoded.email).trim()) return String(decoded.email).trim();
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return '';
+    };
+
+    const currentUserName = getCurrentUserName();
+    const [createdBy, setCreatedBy] = useState(currentUserName);
+
+    useEffect(() => {
+        if (!editingWorkOrderId && currentUserName) {
+            setCreatedBy(currentUserName);
+        }
+    }, [currentUserName, editingWorkOrderId]);
 
     const handleToggleAllStages = () => {
         if (selectedStages.length === ALL_STAGES.length) {
@@ -161,10 +208,7 @@ export const WorkOrder: React.FC = () => {
 
     useEffect(() => {
         fetchWorkOrders(currentPage, pageSize, activeSearch);
-
-        // Default Created By to 'System admin' for Work Order creation
-        setCreatedBy('System admin');
-    }, [currentPage, pageSize, activeSearch, smtUser, user]);
+    }, [currentPage, pageSize, activeSearch]);
 
     // Auto-calculate Panel Quantity
     useEffect(() => {
@@ -349,7 +393,7 @@ export const WorkOrder: React.FC = () => {
         setSelectedStages(ALL_STAGES);
         setCustomerName('');
         setModelName('');
-        setCreatedBy('System admin');
+        setCreatedBy(currentUserName);
         setSelectedFile(null);
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
@@ -360,7 +404,7 @@ export const WorkOrder: React.FC = () => {
     const handleEditClick = (wo: any) => {
         setEditingWorkOrderId(wo.work_order_id);
         setWorkOrderId(wo.work_order_id);
-        setCreatedBy(wo.created_by || 'System admin');
+        setCreatedBy(wo.created_by || '');
         setPoId(wo.po_id);
         setRemark(wo.remark || '');
         setLineId(wo.line_id);
@@ -424,7 +468,8 @@ export const WorkOrder: React.FC = () => {
             return;
         }
 
-        if (!productName || !productDescription || !quantity || !panelQuantity || !createdBy) {
+        const finalCreatedBy = editingWorkOrderId ? createdBy : (currentUserName || createdBy);
+        if (!productName || !productDescription || !quantity || !panelQuantity || !finalCreatedBy) {
             setError('All fields are required.');
             return;
         }
@@ -468,7 +513,7 @@ export const WorkOrder: React.FC = () => {
             panel_quantity: parseInt(panelQuantity),
             sides: sides,
             priority: priority,
-            created_by: createdBy,
+            created_by: finalCreatedBy,
             customer_name: customerName.trim(),
             customerName: customerName.trim(),
             model_name: modelName.trim(),

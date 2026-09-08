@@ -28,8 +28,8 @@ export const DepartmentManagementTab: React.FC<DepartmentManagementTabProps> = (
     const [searchQuery, setSearchQuery] = useState('');
 
     const filteredDepts = departments.filter(d => 
-        d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        (d.description && d.description.toLowerCase().includes(searchQuery.toLowerCase()))
+        String(d?.name ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase()) || 
+        String(d?.description ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase())
     );
 
     return (

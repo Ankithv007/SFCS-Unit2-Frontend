@@ -451,19 +451,38 @@ const WorkOrder: React.FC = () => {
                                             <span className={smtStyles.detailLabel}>Process Routing / Stages</span>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.25rem' }}>
                                                 {(() => {
-                                                    let stages: string[] = ALL_STAGES;
+                                                    let stages: string[] = [];
                                                     if (Array.isArray(selectedWO.selected_stages)) {
                                                         stages = selectedWO.selected_stages;
                                                     } else if (typeof selectedWO.selected_stages === 'string') {
                                                         try {
-                                                            stages = JSON.parse(selectedWO.selected_stages);
+                                                            const parsed = JSON.parse(selectedWO.selected_stages);
+                                                            if (Array.isArray(parsed)) {
+                                                                stages = parsed;
+                                                            } else {
+                                                                stages = ALL_STAGES;
+                                                            }
                                                         } catch (e) {
                                                             stages = ALL_STAGES;
                                                         }
+                                                    } else if (selectedWO.selected_stages === null || selectedWO.selected_stages === undefined) {
+                                                        stages = ALL_STAGES;
                                                     }
+
+                                                    if (stages.length === 0) {
+                                                        return <span style={{ color: '#6b7280', fontSize: '0.85rem' }}>No stages configured</span>;
+                                                    }
+
                                                     // Always display in canonical process order
                                                     const sorted = [...stages].sort(
-                                                        (a, b) => ALL_STAGES.indexOf(a) - ALL_STAGES.indexOf(b)
+                                                        (a, b) => {
+                                                            const idxA = ALL_STAGES.indexOf(a);
+                                                            const idxB = ALL_STAGES.indexOf(b);
+                                                            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                                                            if (idxA !== -1) return -1;
+                                                            if (idxB !== -1) return 1;
+                                                            return 0;
+                                                        }
                                                     );
                                                     return sorted.map((st: string) => (
                                                         <span key={st} style={{

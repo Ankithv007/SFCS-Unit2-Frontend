@@ -4,7 +4,7 @@ import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { 
-    Grid, Plus, Trash2, Edit2, AlertCircle, X, Info, Settings
+    Grid, Plus, Trash2, Edit2, AlertCircle, X, Info, Settings, FileSpreadsheet
 } from 'lucide-react';
 
 interface Rack {
@@ -61,6 +61,43 @@ const StencilRackManagement: React.FC = () => {
     const [showRackModal, setShowRackModal] = useState(false);
     const [editRackData, setEditRackData] = useState<Rack | null>(null);
     const [showEditLocationModal, setShowEditLocationModal] = useState(false);
+    const [downloadingRackId, setDownloadingRackId] = useState<string | null>(null);
+
+    const handleDownloadRackExcel = async (rack: Rack) => {
+        if (!rack || !rack.id) return;
+        setDownloadingRackId(rack.id);
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch(`/api/smt/stencil-rack/${rack.id}/export/excel`, {
+                method: 'GET',
+                headers: {
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                }
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.message || `Failed to export Excel for rack ${rack.name}`);
+            }
+
+            const blob = await response.blob();
+            const safeName = rack.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Stencil_Rack_${safeName}_Report.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            showToast(`Excel report downloaded for rack: ${rack.name}`, 'success');
+        } catch (err: any) {
+            console.error('Error downloading rack Excel report:', err);
+            showToast(err.message || 'Failed to download Excel report', 'error');
+        } finally {
+            setDownloadingRackId(null);
+        }
+    };
 
     // Rack Form State
     const [rackName, setRackName] = useState('');
@@ -360,6 +397,18 @@ const StencilRackManagement: React.FC = () => {
                                         <span className={styles.rackDimensions}>{rack.rows} × {rack.columns}</span>
                                     </div>
                                     <div className={styles.rackCardActions}>
+                                        <button 
+                                            type="button"
+                                            className={styles.btnIcon} 
+                                            title={`Download Excel Report for ${rack.name}`}
+                                            disabled={downloadingRackId === rack.id}
+                                            onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                handleDownloadRackExcel(rack); 
+                                            }}
+                                        >
+                                            <FileSpreadsheet size={14} />
+                                        </button>
                                         {isSuperAdmin && (
                                             <>
                                                 <button 
@@ -396,12 +445,12 @@ const StencilRackManagement: React.FC = () => {
                     ) : (
                         <div>
                             {/* Selected Rack Meta Info */}
-                            <div className={styles.detailHeader}>
-                                <div className={styles.detailHeaderTitle}>
-                                    <h3>Storage Matrix Explorer</h3>
-                                    <p>Manage physical storage assignments by row and column coordinates.</p>
+                                <div className={styles.detailHeader}>
+                                    <div className={styles.detailHeaderTitle}>
+                                        <h3>Storage Matrix Explorer</h3>
+                                        <p>Manage physical storage assignments by row and column coordinates.</p>
+                                    </div>
                                 </div>
-                            </div>
 
                              {/* Information Card */}
                             <div className={styles.rackInfoCard}>
@@ -498,6 +547,11 @@ const StencilRackManagement: React.FC = () => {
                                                                     <div className={styles.cellCardOccupied}>
                                                                         <div className={styles.cellRackNumber}>{loc.stencil_rack_number}</div>
                                                                         <div className={styles.cellJobNumber}>{loc.job_number}</div>
+                                                                        {loc.stencil_name && (
+                                                                            <div className={styles.cellStencilName} title={loc.stencil_name}>
+                                                                                {loc.stencil_name}
+                                                                            </div>
+                                                                        )}
                                                                         <div className={styles.cellStatusBadgeWrapper}>
                                                                             <span className={`${styles.statusBadge} ${loc.status === 'STORED' ? styles.statusStored : styles.statusCheckedOut}`}>
                                                                                 {loc.status}

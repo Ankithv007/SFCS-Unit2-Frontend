@@ -1,12 +1,14 @@
 .dashboardContainer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 10px;
+  padding: 10px 16px;
   background-color: #f4f7fa;
+  min-height: calc(100vh - 96px);
   height: calc(100vh - 96px);
   box-sizing: border-box;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   color: #0f172a;
 }
 
@@ -360,10 +362,11 @@
 
 .twoColumnGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 270px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 12px;
   flex: 1;
   min-height: 0;
+  height: 100%;
 }
 
 .leftColumn {
@@ -373,6 +376,7 @@
   height: 100%;
   justify-content: space-between;
   min-height: 0;
+  flex: 1;
 }
 
 /* PRODUCTION MATRIX SECTION */
@@ -624,7 +628,7 @@
 .rightColumn {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   height: 100%;
   justify-content: space-between;
   min-height: 0;
@@ -635,7 +639,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   background-color: #ffffff;
   border: 1px solid #e1e7ed;
   border-radius: 6px;
@@ -651,10 +655,11 @@
   align-items: center;
   width: 100%;
   margin-bottom: 2px;
+  flex-shrink: 0;
 }
 
 .chartTitle {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   color: #334155;
@@ -665,8 +670,8 @@
 }
 
 .chartDot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
@@ -676,7 +681,7 @@
   position: relative;
   width: 100%;
   flex: 1;
-  min-height: 80px;
+  min-height: 85px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -692,14 +697,14 @@
 }
 
 .chartCenterNumber {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   font-weight: 800;
   color: #0f172a;
   line-height: 1;
 }
 
 .chartCenterSub {
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   color: #64748b;
   font-weight: 600;
   text-transform: uppercase;
@@ -766,13 +771,333 @@
   gap: 8px;
 }
 
+/* ==========================================================================
+   DOUBLE-SIDED PRODUCTION PIPELINE (TOP / BOTTOM + SHARED SMT FG)
+   ========================================================================== */
+
+.doubleSidedContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  justify-content: space-between;
+}
+
+.sidesGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  flex: 1.15;
+  min-height: 0;
+}
+
+.sideCard {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.sideCardTop {
+  border: 1px solid #bfdbfe;
+}
+
+.sideCardBottom {
+  border: 1px solid #ddd6fe;
+}
+
+.sideCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
+}
+
+.sideCardHeaderTop {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+.sideCardHeaderBottom {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+}
+
+.sideCardTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sideCardTitleTop {
+  color: #1e40af;
+}
+
+.sideCardTitleBottom {
+  color: #6b21a8;
+}
+
+.sideBadge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.sideBadgeTop {
+  background-color: #bfdbfe;
+  color: #1e3a8a;
+}
+
+.sideBadgeBottom {
+  background-color: #ddd6fe;
+  color: #581c87;
+}
+
+.sideTableWrapper {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+}
+
+.sideTable {
+  width: 100%;
+  height: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  table-layout: fixed;
+}
+
+.sideTable thead {
+  flex-shrink: 0;
+}
+
+.sideTable tbody {
+  height: 100%;
+}
+
+.sideTable tbody tr {
+  height: calc(100% / 3);
+}
+
+.thSideStage {
+  background-color: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  width: 28%;
+}
+
+.thSideSub {
+  background-color: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-align: center;
+  padding: 8px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  width: 18%;
+}
+
+.tdSideStage {
+  padding: 8px 12px;
+  font-weight: 700;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+
+.sideTable .tdCell {
+  padding: 8px 8px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+/* Converging Flow Connector */
+.flowConnector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 2px 0;
+  flex-shrink: 0;
+}
+
+.connectorLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: #f8fafc;
+  padding: 5px 16px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  letter-spacing: 0.03em;
+}
+
+.connectorIcon {
+  font-size: 0.85rem;
+  color: #38bdf8;
+}
+
+/* Shared SMT FG Final Release Card */
+.sharedFgCard {
+  background-color: #ffffff;
+  border: 1.5px solid #10b981;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(16, 185, 129, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 0.95;
+  min-height: 0;
+}
+
+.sharedFgHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  padding: 8px 14px;
+  border-bottom: 1px solid #a7f3d0;
+  flex-shrink: 0;
+}
+
+.sharedFgTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #065f46;
+  letter-spacing: -0.01em;
+}
+
+.sharedFgBadge {
+  background-color: #059669;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+}
+
+.sharedFgBody {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.sharedFgMetricsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.sharedFgMetricBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 6px;
+  border-radius: 6px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.sharedFgMetricValue {
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.2;
+  width: 100%;
+  text-align: center;
+  padding: 4px 0;
+  border-radius: 4px;
+}
+
+.sharedFgMetricLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-top: 4px;
+  letter-spacing: 0.02em;
+}
+
+.sharedFgProgressBar {
+  width: 100%;
+  height: 9px;
+  background-color: #e2e8f0;
+  border-radius: 5px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sharedFgProgressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.sharedFgSub {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+@media (max-height: 720px) {
+  .dashboardContainer {
+    height: auto;
+  }
+}
+
 @media (max-width: 1023px) {
   .dashboardContainer {
     height: auto;
     overflow: auto;
   }
   .twoColumnGrid {
-    grid-template-columns: minmax(0, 1fr) 180px;
+    grid-template-columns: minmax(0, 1fr) 200px;
+  }
+  .sidesGrid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -800,5 +1125,8 @@
   }
   .chartCard {
     height: 160px;
+  }
+  .sidesGrid {
+    grid-template-columns: 1fr;
   }
 }

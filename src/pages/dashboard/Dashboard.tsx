@@ -14,6 +14,22 @@ interface LiveWorkOrder {
   model_name?: string;
 }
 
+export interface SmtStageMetrics {
+  pass: number;
+  fail: number;
+  pending: number;
+  yield: number;
+  passed?: number;
+  failed?: number;
+  percentage?: number;
+}
+
+export interface SmtSideMetrics {
+  printing: SmtStageMetrics;
+  preAOI: SmtStageMetrics;
+  postAOI: SmtStageMetrics;
+}
+
 interface DashboardMetrics {
   workOrderId: string;
   totalQuantity: number;
@@ -23,6 +39,10 @@ interface DashboardMetrics {
   modelName?: string;
   selectedDate?: string;
   availableDates?: string[];
+  isDoubleSided?: boolean;
+  sides?: string;
+  top?: SmtSideMetrics;
+  bottom?: SmtSideMetrics;
   actualStatus: {
     labelled: number;
     passed?: number;
@@ -38,19 +58,12 @@ interface DashboardMetrics {
     percentage: number;
   };
   postAOI: {
-    eligible: number;
     passed: number;
     failed: number;
     pending: number;
     percentage: number;
   };
-  smtFG?: {
-    eligible: number;
-    passed: number;
-    failed: number;
-    pending: number;
-    percentage: number;
-  };
+  smtFG?: SmtStageMetrics;
 }
 
 export function Dashboard() {
@@ -452,25 +465,48 @@ export default function SFCSDashboard() {
   const COLOR_FAIL = '#dc2626'; // Red
   const COLOR_PENDING = '#cbd5e1'; // Light Grey/Slate
   const COLOR_LABELLED = '#0284c7'; // Blue
+  const COLOR_TOP = '#3b82f6'; // Blue
+  const COLOR_BOTTOM = '#8b5cf6'; // Purple
 
-  // Chart 1: Actual Status (Labelled vs Pending)
+  // Single-Sided Chart 1: Actual Status (Labelled vs Pending)
   const actualChartData = dashboardData ? [
     { name: 'Labelled', value: dashboardData.actualStatus.labelled, color: COLOR_LABELLED },
     { name: 'Pending', value: dashboardData.actualStatus.pending, color: COLOR_PENDING }
   ] : [];
 
-  // Chart 2: Pre-AOI (Passed, Failed, Pending)
+  // Single-Sided Chart 2: Pre-AOI (Passed, Failed, Pending)
   const preAoiChartData = dashboardData ? [
     { name: 'Passed', value: dashboardData.preAOI.passed, color: COLOR_PASS },
     { name: 'Failed', value: dashboardData.preAOI.failed, color: COLOR_FAIL },
     { name: 'Pending', value: dashboardData.preAOI.pending, color: COLOR_PENDING }
   ] : [];
 
-  // Chart 3: Post-AOI (Passed, Failed, Pending)
+  // Single-Sided Chart 3: Post-AOI (Passed, Failed, Pending)
   const postAoiChartData = dashboardData ? [
     { name: 'Passed', value: dashboardData.postAOI.passed, color: COLOR_PASS },
     { name: 'Failed', value: dashboardData.postAOI.failed, color: COLOR_FAIL },
     { name: 'Pending', value: dashboardData.postAOI.pending, color: COLOR_PENDING }
+  ] : [];
+
+  // Double-Sided Chart 1: TOP Side Yield (Passed, Failed, Pending)
+  const topYieldChartData = dashboardData?.top ? [
+    { name: 'Passed', value: dashboardData.top.postAOI.pass ?? dashboardData.top.postAOI.passed ?? 0, color: COLOR_TOP },
+    { name: 'Failed', value: dashboardData.top.postAOI.fail ?? dashboardData.top.postAOI.failed ?? 0, color: COLOR_FAIL },
+    { name: 'Pending', value: dashboardData.top.postAOI.pending ?? 0, color: COLOR_PENDING }
+  ] : [];
+
+  // Double-Sided Chart 2: BOTTOM Side Yield (Passed, Failed, Pending)
+  const bottomYieldChartData = dashboardData?.bottom ? [
+    { name: 'Passed', value: dashboardData.bottom.postAOI.pass ?? dashboardData.bottom.postAOI.passed ?? 0, color: COLOR_BOTTOM },
+    { name: 'Failed', value: dashboardData.bottom.postAOI.fail ?? dashboardData.bottom.postAOI.failed ?? 0, color: COLOR_FAIL },
+    { name: 'Pending', value: dashboardData.bottom.postAOI.pending ?? 0, color: COLOR_PENDING }
+  ] : [];
+
+  // Double-Sided Chart 3: Shared SMT FG Yield (Passed, Failed, Pending)
+  const smtFgChartData = dashboardData?.smtFG ? [
+    { name: 'Passed', value: dashboardData.smtFG.pass ?? dashboardData.smtFG.passed ?? 0, color: COLOR_PASS },
+    { name: 'Failed', value: dashboardData.smtFG.fail ?? dashboardData.smtFG.failed ?? 0, color: COLOR_FAIL },
+    { name: 'Pending', value: dashboardData.smtFG.pending ?? 0, color: COLOR_PENDING }
   ] : [];
 
   return (
@@ -681,342 +717,689 @@ export default function SFCSDashboard() {
 
             <div className={styles.headerItem}>
               <span className={styles.headerLabel}>Overall Status</span>
-              <span
-                className={`${styles.statusBadge} ${
-                  dashboardData.overallStatus === 'NOT STARTED'
-                    ? styles.statusNotStarted
-                    : dashboardData.overallStatus === 'COMPLETED'
-                    ? styles.statusCompleted
-                    : styles.statusInProgress
-                }`}
-              >
-                {dashboardData.overallStatus}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span
+                  className={`${styles.statusBadge} ${
+                    dashboardData.overallStatus === 'NOT STARTED'
+                      ? styles.statusNotStarted
+                      : dashboardData.overallStatus === 'COMPLETED'
+                      ? styles.statusCompleted
+                      : styles.statusInProgress
+                  }`}
+                >
+                  {dashboardData.overallStatus}
+                </span>
+                {dashboardData.sides && (
+                  <span className={styles.historicalBadge} style={{ margin: 0 }}>
+                    {dashboardData.sides}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           {/* MAIN TWO-COLUMN DASHBOARD GRID */}
           <div className={styles.twoColumnGrid}>
-            {/* LEFT COLUMN: Production Matrix & Process Flow */}
+            {/* LEFT COLUMN: Production Matrix & Process Flow OR Double-Sided Flow */}
             <div className={styles.leftColumn}>
-              {/* PRODUCTION MATRIX (Placed ABOVE Process Flow) */}
-              <div className={styles.matrixSection}>
-                <div className={styles.matrixHeader}>
-                  <div className={styles.matrixTitle}>PRODUCTION MATRIX</div>
-                  <div className={styles.matrixSubtitle}>Stage progression & metric breakdown</div>
+              {dashboardData.isDoubleSided ? (
+                <div className={styles.doubleSidedContainer}>
+                  {/* TOP & BOTTOM INDEPENDENT SIDE PIPELINES (Side-by-side on desktop) */}
+                  <div className={styles.sidesGrid}>
+                    {/* TOP SIDE CARD */}
+                    <div className={`${styles.sideCard} ${styles.sideCardTop}`}>
+                      <div className={`${styles.sideCardHeader} ${styles.sideCardHeaderTop}`}>
+                        <div className={`${styles.sideCardTitle} ${styles.sideCardTitleTop}`}>
+                          <span>🔵</span> TOP SIDE
+                        </div>
+                        <span className={`${styles.sideBadge} ${styles.sideBadgeTop}`}>Side 1</span>
+                      </div>
+                      <div className={styles.sideTableWrapper}>
+                        <table className={styles.sideTable}>
+                          <thead>
+                            <tr>
+                              <th className={styles.thSideStage}>Stage</th>
+                              <th className={styles.thSideSub}>Pass</th>
+                              <th className={styles.thSideSub}>Fail</th>
+                              <th className={styles.thSideSub}>Pending</th>
+                              <th className={styles.thSideSub}>Yield</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {/* Row 1: Printing */}
+                            <tr>
+                              <td className={styles.tdSideStage}>
+                                <span className={styles.stageContent}>
+                                  <span className={styles.stageIcon}>🖨️</span> Printing
+                                </span>
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                                {dashboardData.top?.printing.pass ?? dashboardData.top?.printing.passed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                                {dashboardData.top?.printing.fail ?? dashboardData.top?.printing.failed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                                {dashboardData.top?.printing.pending ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                                {dashboardData.top?.printing.yield ?? dashboardData.top?.printing.percentage ?? 0}%
+                              </td>
+                            </tr>
+                            {/* Row 2: Pre AOI */}
+                            <tr>
+                              <td className={styles.tdSideStage}>
+                                <span className={styles.stageContent}>
+                                  <span className={styles.stageIcon}>🔍</span> Pre AOI
+                                </span>
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                                {dashboardData.top?.preAOI.pass ?? dashboardData.top?.preAOI.passed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                                {dashboardData.top?.preAOI.fail ?? dashboardData.top?.preAOI.failed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                                {dashboardData.top?.preAOI.pending ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                                {dashboardData.top?.preAOI.yield ?? dashboardData.top?.preAOI.percentage ?? 0}%
+                              </td>
+                            </tr>
+                            {/* Row 3: Post AOI */}
+                            <tr>
+                              <td className={styles.tdSideStage}>
+                                <span className={styles.stageContent}>
+                                  <span className={styles.stageIcon}>🔍</span> Post AOI
+                                </span>
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                                {dashboardData.top?.postAOI.pass ?? dashboardData.top?.postAOI.passed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                                {dashboardData.top?.postAOI.fail ?? dashboardData.top?.postAOI.failed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                                {dashboardData.top?.postAOI.pending ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                                {dashboardData.top?.postAOI.yield ?? dashboardData.top?.postAOI.percentage ?? 0}%
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* BOTTOM SIDE CARD */}
+                    <div className={`${styles.sideCard} ${styles.sideCardBottom}`}>
+                      <div className={`${styles.sideCardHeader} ${styles.sideCardHeaderBottom}`}>
+                        <div className={`${styles.sideCardTitle} ${styles.sideCardTitleBottom}`}>
+                          <span>🟣</span> BOTTOM SIDE
+                        </div>
+                        <span className={`${styles.sideBadge} ${styles.sideBadgeBottom}`}>Side 2</span>
+                      </div>
+                      <div className={styles.sideTableWrapper}>
+                        <table className={styles.sideTable}>
+                          <thead>
+                            <tr>
+                              <th className={styles.thSideStage}>Stage</th>
+                              <th className={styles.thSideSub}>Pass</th>
+                              <th className={styles.thSideSub}>Fail</th>
+                              <th className={styles.thSideSub}>Pending</th>
+                              <th className={styles.thSideSub}>Yield</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {/* Row 1: Printing */}
+                            <tr>
+                              <td className={styles.tdSideStage}>
+                                <span className={styles.stageContent}>
+                                  <span className={styles.stageIcon}>🖨️</span> Printing
+                                </span>
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                                {dashboardData.bottom?.printing.pass ?? dashboardData.bottom?.printing.passed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                                {dashboardData.bottom?.printing.fail ?? dashboardData.bottom?.printing.failed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                                {dashboardData.bottom?.printing.pending ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                                {dashboardData.bottom?.printing.yield ?? dashboardData.bottom?.printing.percentage ?? 0}%
+                              </td>
+                            </tr>
+                            {/* Row 2: Pre AOI */}
+                            <tr>
+                              <td className={styles.tdSideStage}>
+                                <span className={styles.stageContent}>
+                                  <span className={styles.stageIcon}>🔍</span> Pre AOI
+                                </span>
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                                {dashboardData.bottom?.preAOI.pass ?? dashboardData.bottom?.preAOI.passed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                                {dashboardData.bottom?.preAOI.fail ?? dashboardData.bottom?.preAOI.failed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                                {dashboardData.bottom?.preAOI.pending ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                                {dashboardData.bottom?.preAOI.yield ?? dashboardData.bottom?.preAOI.percentage ?? 0}%
+                              </td>
+                            </tr>
+                            {/* Row 3: Post AOI */}
+                            <tr>
+                              <td className={styles.tdSideStage}>
+                                <span className={styles.stageContent}>
+                                  <span className={styles.stageIcon}>🔍</span> Post AOI
+                                </span>
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                                {dashboardData.bottom?.postAOI.pass ?? dashboardData.bottom?.postAOI.passed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                                {dashboardData.bottom?.postAOI.fail ?? dashboardData.bottom?.postAOI.failed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                                {dashboardData.bottom?.postAOI.pending ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                                {dashboardData.bottom?.postAOI.yield ?? dashboardData.bottom?.postAOI.percentage ?? 0}%
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CONVERGING FLOW CONNECTOR */}
+                  <div className={styles.flowConnector}>
+                    <div className={styles.connectorLine}>
+                      <span>TOP + BOTTOM</span>
+                      <span className={styles.connectorIcon}>➔</span>
+                      <span>SMT FG FINAL RELEASE</span>
+                    </div>
+                  </div>
+
+                  {/* SHARED SMT FG FINAL RELEASE CARD */}
+                  <div className={styles.sharedFgCard}>
+                    <div className={styles.sharedFgHeader}>
+                      <div className={styles.sharedFgTitle}>
+                        <span>📦</span> SMT FG — SHARED FINAL RELEASE
+                      </div>
+                      <span className={styles.sharedFgBadge}>Final Stage</span>
+                    </div>
+                    <div className={styles.sharedFgBody}>
+                      <div className={styles.sharedFgMetricsGrid}>
+                        <div className={styles.sharedFgMetricBox}>
+                          <span className={`${styles.sharedFgMetricValue} ${styles.cellGreen}`}>
+                            {dashboardData.smtFG?.pass ?? dashboardData.smtFG?.passed ?? 0}
+                          </span>
+                          <span className={styles.sharedFgMetricLabel}>Pass</span>
+                        </div>
+                        <div className={styles.sharedFgMetricBox}>
+                          <span className={`${styles.sharedFgMetricValue} ${styles.cellRed}`}>
+                            {dashboardData.smtFG?.fail ?? dashboardData.smtFG?.failed ?? 0}
+                          </span>
+                          <span className={styles.sharedFgMetricLabel}>Fail</span>
+                        </div>
+                        <div className={styles.sharedFgMetricBox}>
+                          <span className={`${styles.sharedFgMetricValue} ${styles.cellAmber}`}>
+                            {dashboardData.smtFG?.pending ?? 0}
+                          </span>
+                          <span className={styles.sharedFgMetricLabel}>Pending</span>
+                        </div>
+                        <div className={styles.sharedFgMetricBox}>
+                          <span className={`${styles.sharedFgMetricValue} ${styles.cellBlue}`}>
+                            {dashboardData.smtFG?.yield ?? dashboardData.smtFG?.percentage ?? 0}%
+                          </span>
+                          <span className={styles.sharedFgMetricLabel}>Yield</span>
+                        </div>
+                      </div>
+
+                      <div className={styles.sharedFgProgressBar}>
+                        <div
+                          className={styles.sharedFgProgressFill}
+                          style={{
+                            width: `${Math.min(100, Math.round(((dashboardData.smtFG?.pass ?? dashboardData.smtFG?.passed ?? 0) / (dashboardData.totalQuantity || 1)) * 100))}%`
+                          }}
+                        />
+                      </div>
+
+                      <div className={styles.sharedFgSub}>
+                        <span>Total Work Order Target: {dashboardData.totalQuantity}</span>
+                        <span>
+                          Completion: {Math.min(100, Math.round(((dashboardData.smtFG?.pass ?? dashboardData.smtFG?.passed ?? 0) / (dashboardData.totalQuantity || 1)) * 100))}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              ) : (
+                <>
+                  {/* PRODUCTION MATRIX (Placed ABOVE Process Flow) */}
+                  <div className={styles.matrixSection}>
+                    <div className={styles.matrixHeader}>
+                      <div className={styles.matrixTitle}>PRODUCTION MATRIX</div>
+                      <div className={styles.matrixSubtitle}>Stage progression & metric breakdown</div>
+                    </div>
 
-                <div className={styles.matrixTableWrapper}>
-                  <table className={styles.matrixTable}>
-                    <thead>
-                      <tr>
-                        <th className={styles.thStage}>Stage</th>
-                        <th className={styles.thSub}>Pass</th>
-                        <th className={styles.thSub}>Fail</th>
-                        <th className={styles.thSub}>Pending</th>
-                        <th className={styles.thSub}>Yield</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Row 1: Printing */}
-                      <tr>
-                        <td className={styles.tdStage}>
-                          <span className={styles.stageContent}>
-                            <span className={styles.stageIcon}>🖨️</span> Printing
-                          </span>
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellGreen}`}>
-                          {dashboardData.actualStatus.passed ?? dashboardData.actualStatus.labelled}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellRed}`}>
-                          {dashboardData.actualStatus.failed || 0}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellAmber}`}>
-                          {dashboardData.actualStatus.pending}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellBlue}`}>
-                          {dashboardData.actualStatus.percentage}%
-                        </td>
-                      </tr>
+                    <div className={styles.matrixTableWrapper}>
+                      <table className={styles.matrixTable}>
+                        <thead>
+                          <tr>
+                            <th className={styles.thStage}>Stage</th>
+                            <th className={styles.thSub}>Pass</th>
+                            <th className={styles.thSub}>Fail</th>
+                            <th className={styles.thSub}>Pending</th>
+                            <th className={styles.thSub}>Yield</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Row 1: Printing */}
+                          <tr>
+                            <td className={styles.tdStage}>
+                              <span className={styles.stageContent}>
+                                <span className={styles.stageIcon}>🖨️</span> Printing
+                              </span>
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                              {dashboardData.actualStatus.passed ?? dashboardData.actualStatus.labelled}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                              {dashboardData.actualStatus.failed || 0}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                              {dashboardData.actualStatus.pending}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                              {dashboardData.actualStatus.percentage}%
+                            </td>
+                          </tr>
 
-                      {/* Row 2: Pre AOI */}
-                      <tr>
-                        <td className={styles.tdStage}>
-                          <span className={styles.stageContent}>
-                            <span className={styles.stageIcon}>🔍</span> Pre AOI
-                          </span>
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellGreen}`}>
-                          {dashboardData.preAOI.passed}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellRed}`}>
-                          {dashboardData.preAOI.failed}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellAmber}`}>
-                          {dashboardData.preAOI.pending}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellBlue}`}>
-                          {dashboardData.preAOI.percentage}%
-                        </td>
-                      </tr>
+                          {/* Row 2: Pre AOI */}
+                          <tr>
+                            <td className={styles.tdStage}>
+                              <span className={styles.stageContent}>
+                                <span className={styles.stageIcon}>🔍</span> Pre AOI
+                              </span>
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                              {dashboardData.preAOI.passed}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                              {dashboardData.preAOI.failed}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                              {dashboardData.preAOI.pending}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                              {dashboardData.preAOI.percentage}%
+                            </td>
+                          </tr>
 
-                      {/* Row 3: Post AOI */}
-                      <tr>
-                        <td className={styles.tdStage}>
-                          <span className={styles.stageContent}>
-                            <span className={styles.stageIcon}>🔍</span> Post AOI
-                          </span>
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellGreen}`}>
-                          {dashboardData.postAOI.passed}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellRed}`}>
-                          {dashboardData.postAOI.failed}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellAmber}`}>
-                          {dashboardData.postAOI.pending}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellBlue}`}>
-                          {dashboardData.postAOI.percentage}%
-                        </td>
-                      </tr>
+                          {/* Row 3: Post AOI */}
+                          <tr>
+                            <td className={styles.tdStage}>
+                              <span className={styles.stageContent}>
+                                <span className={styles.stageIcon}>🔍</span> Post AOI
+                              </span>
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                              {dashboardData.postAOI.passed}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                              {dashboardData.postAOI.failed}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                              {dashboardData.postAOI.pending}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                              {dashboardData.postAOI.percentage}%
+                            </td>
+                          </tr>
 
-                      {/* Row 4: SMT FG */}
-                      <tr>
-                        <td className={styles.tdStage}>
-                          <span className={styles.stageContent}>
-                            <span className={styles.stageIcon}>📦</span> SMT FG
-                          </span>
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellGreen}`}>
-                          {dashboardData.smtFG ? dashboardData.smtFG.passed : dashboardData.postAOI.passed}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellRed}`}>
-                          {dashboardData.smtFG ? dashboardData.smtFG.failed : 0}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                          {/* Row 4: SMT FG */}
+                          <tr>
+                            <td className={styles.tdStage}>
+                              <span className={styles.stageContent}>
+                                <span className={styles.stageIcon}>📦</span> SMT FG
+                              </span>
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                              {dashboardData.smtFG ? (dashboardData.smtFG.pass ?? dashboardData.smtFG.passed) : dashboardData.postAOI.passed}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                              {dashboardData.smtFG ? (dashboardData.smtFG.fail ?? dashboardData.smtFG.failed) : 0}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                              {dashboardData.smtFG
+                                ? dashboardData.smtFG.pending
+                                : Math.max(0, dashboardData.totalQuantity - dashboardData.postAOI.passed)}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                              {dashboardData.smtFG
+                                ? `${dashboardData.smtFG.yield ?? dashboardData.smtFG.percentage}%`
+                                : `${
+                                    dashboardData.totalQuantity > 0
+                                      ? Math.round((dashboardData.postAOI.passed / dashboardData.totalQuantity) * 100)
+                                      : 0
+                                  }%`}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* PRODUCTION PROCESS FLOW (Placed BELOW Matrix) */}
+                  <div className={styles.flowSection}>
+                    <div className={styles.flowHeader}>
+                      <div className={styles.flowTitle}>PRODUCTION PROCESS FLOW</div>
+                      <div className={styles.flowSubtitle}>Real-time production progression</div>
+                    </div>
+
+                    <div className={styles.flowDiagram}>
+                      <div className={styles.flowNode}>
+                        <span className={styles.nodeTitle}>Printing Stage</span>
+                        <span className={styles.nodeMain} style={{ color: COLOR_PASS }}>
+                          Passed: {dashboardData.actualStatus.passed ?? dashboardData.actualStatus.labelled}
+                        </span>
+                        <div className={styles.progressTrack}>
+                          <div
+                            className={styles.progressBar}
+                            style={{
+                              width: `${Math.min(100, Math.round(((dashboardData.actualStatus.passed ?? dashboardData.actualStatus.labelled) / (dashboardData.totalQuantity || 1)) * 100))}%`,
+                              backgroundColor: COLOR_PASS
+                            }}
+                          />
+                        </div>
+                        <span className={styles.nodeSub}>
+                          Failed: {dashboardData.actualStatus.failed || 0} | Pending: {dashboardData.actualStatus.pending}
+                        </span>
+                      </div>
+
+                      <span className={styles.flowArrow}>➔</span>
+
+                      <div className={styles.flowNode}>
+                        <span className={styles.nodeTitle}>Pre-AOI Stage</span>
+                        <span className={styles.nodeMain} style={{ color: COLOR_PASS }}>
+                          Passed: {dashboardData.preAOI.passed}
+                        </span>
+                        <div className={styles.progressTrack}>
+                          <div
+                            className={styles.progressBar}
+                            style={{
+                              width: `${Math.min(100, Math.round((dashboardData.preAOI.passed / (dashboardData.totalQuantity || 1)) * 100))}%`,
+                              backgroundColor: COLOR_PASS
+                            }}
+                          />
+                        </div>
+                        <span className={styles.nodeSub}>
+                          Failed: {dashboardData.preAOI.failed} | Pending: {dashboardData.preAOI.pending}
+                        </span>
+                      </div>
+
+                      <span className={styles.flowArrow}>➔</span>
+
+                      <div className={styles.flowNode}>
+                        <span className={styles.nodeTitle}>Post-AOI Stage</span>
+                        <span className={styles.nodeMain} style={{ color: COLOR_PASS }}>
+                          Passed: {dashboardData.postAOI.passed}
+                        </span>
+                        <div className={styles.progressTrack}>
+                          <div
+                            className={styles.progressBar}
+                            style={{
+                              width: `${Math.min(100, Math.round((dashboardData.postAOI.passed / (dashboardData.totalQuantity || 1)) * 100))}%`,
+                              backgroundColor: COLOR_PASS
+                            }}
+                          />
+                        </div>
+                        <span className={styles.nodeSub}>
+                          Failed: {dashboardData.postAOI.failed} | Pending: {dashboardData.postAOI.pending}
+                        </span>
+                      </div>
+
+                      <span className={styles.flowArrow}>➔</span>
+
+                      <div className={styles.flowNode}>
+                        <span className={styles.nodeTitle}>SMT FG Stage</span>
+                        <span className={styles.nodeMain} style={{ color: COLOR_PASS }}>
+                          Passed: {dashboardData.smtFG ? (dashboardData.smtFG.pass ?? dashboardData.smtFG.passed) : dashboardData.postAOI.passed}
+                        </span>
+                        <div className={styles.progressTrack}>
+                          <div
+                            className={styles.progressBar}
+                            style={{
+                              width: `${Math.min(100, Math.round(((dashboardData.smtFG ? (dashboardData.smtFG.pass ?? dashboardData.smtFG.passed) : dashboardData.postAOI.passed) / (dashboardData.totalQuantity || 1)) * 100))}%`,
+                              backgroundColor: COLOR_PASS
+                            }}
+                          />
+                        </div>
+                        <span className={styles.nodeSub}>
+                          Failed: {dashboardData.smtFG ? (dashboardData.smtFG.fail ?? dashboardData.smtFG.failed) : 0} | Pending:{' '}
                           {dashboardData.smtFG
                             ? dashboardData.smtFG.pending
                             : Math.max(0, dashboardData.totalQuantity - dashboardData.postAOI.passed)}
-                        </td>
-                        <td className={`${styles.tdCell} ${styles.cellBlue}`}>
-                          {dashboardData.smtFG
-                            ? `${dashboardData.smtFG.percentage}%`
-                            : `${
-                                dashboardData.totalQuantity > 0
-                                  ? Math.round((dashboardData.postAOI.passed / dashboardData.totalQuantity) * 100)
-                                  : 0
-                              }%`}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* PRODUCTION PROCESS FLOW (Placed BELOW Matrix) */}
-              <div className={styles.flowSection}>
-                <div className={styles.flowHeader}>
-                  <div className={styles.flowTitle}>PRODUCTION PROCESS FLOW</div>
-                  <div className={styles.flowSubtitle}>Real-time production progression</div>
-                </div>
-
-                <div className={styles.flowDiagram}>
-                  <div className={styles.flowNode}>
-                    <span className={styles.nodeTitle}>Printing Stage</span>
-                    <span className={styles.nodeMain} style={{ color: COLOR_PASS }}>
-                      Passed: {dashboardData.actualStatus.passed ?? dashboardData.actualStatus.labelled}
-                    </span>
-                    <div className={styles.progressTrack}>
-                      <div
-                        className={styles.progressBar}
-                        style={{
-                          width: `${Math.min(100, Math.round(((dashboardData.actualStatus.passed ?? dashboardData.actualStatus.labelled) / (dashboardData.totalQuantity || 1)) * 100))}%`,
-                          backgroundColor: COLOR_PASS
-                        }}
-                      />
+                        </span>
+                      </div>
                     </div>
-                    <span className={styles.nodeSub}>
-                      Failed: {dashboardData.actualStatus.failed || 0} | Pending: {dashboardData.actualStatus.pending}
-                    </span>
                   </div>
-
-                  <span className={styles.flowArrow}>➔</span>
-
-                  <div className={styles.flowNode}>
-                    <span className={styles.nodeTitle}>Pre-AOI Stage</span>
-                    <span className={styles.nodeMain} style={{ color: COLOR_PASS }}>
-                      Passed: {dashboardData.preAOI.passed}
-                    </span>
-                    <div className={styles.progressTrack}>
-                      <div
-                        className={styles.progressBar}
-                        style={{
-                          width: `${Math.min(100, Math.round((dashboardData.preAOI.passed / (dashboardData.totalQuantity || 1)) * 100))}%`,
-                          backgroundColor: COLOR_PASS
-                        }}
-                      />
-                    </div>
-                    <span className={styles.nodeSub}>
-                      Failed: {dashboardData.preAOI.failed} | Pending: {dashboardData.preAOI.pending}
-                    </span>
-                  </div>
-
-                  <span className={styles.flowArrow}>➔</span>
-
-                  <div className={styles.flowNode}>
-                    <span className={styles.nodeTitle}>Post-AOI Stage</span>
-                    <span className={styles.nodeMain} style={{ color: COLOR_PASS }}>
-                      Passed: {dashboardData.postAOI.passed}
-                    </span>
-                    <div className={styles.progressTrack}>
-                      <div
-                        className={styles.progressBar}
-                        style={{
-                          width: `${
-                            dashboardData.postAOI.eligible > 0
-                              ? Math.min(100, Math.round((dashboardData.postAOI.passed / dashboardData.postAOI.eligible) * 100))
-                              : 0
-                          }%`,
-                          backgroundColor: COLOR_PASS
-                        }}
-                      />
-                    </div>
-                    <span className={styles.nodeSub}>
-                      Failed: {dashboardData.postAOI.failed} | Pending: {dashboardData.postAOI.pending}
-                    </span>
-                  </div>
-
-                  <span className={styles.flowArrow}>➔</span>
-
-                  <div className={styles.flowNode}>
-                    <span className={styles.nodeTitle}>SMT FG Stage</span>
-                    <span className={styles.nodeMain} style={{ color: COLOR_PASS }}>
-                      Passed: {dashboardData.smtFG ? dashboardData.smtFG.passed : dashboardData.postAOI.passed}
-                    </span>
-                    <div className={styles.progressTrack}>
-                      <div
-                        className={styles.progressBar}
-                        style={{
-                          width: `${
-                            dashboardData.smtFG && dashboardData.smtFG.eligible > 0
-                              ? Math.min(100, Math.round((dashboardData.smtFG.passed / dashboardData.smtFG.eligible) * 100))
-                              : dashboardData.postAOI.passed > 0
-                              ? Math.min(100, Math.round(((dashboardData.smtFG ? dashboardData.smtFG.passed : dashboardData.postAOI.passed) / (dashboardData.postAOI.passed || 1)) * 100))
-                              : 0
-                          }%`,
-                          backgroundColor: COLOR_PASS
-                        }}
-                      />
-                    </div>
-                    <span className={styles.nodeSub}>
-                      Failed: {dashboardData.smtFG ? dashboardData.smtFG.failed : 0} | Pending:{' '}
-                      {dashboardData.smtFG
-                        ? dashboardData.smtFG.pending
-                        : Math.max(0, dashboardData.totalQuantity - dashboardData.postAOI.passed)}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                </>
+              )}
             </div>
 
             {/* RIGHT ANALYTICS COLUMN (3 Vertically Stacked Compact Donut Charts) */}
             <div className={styles.rightColumn}>
-              {/* Chart 1: Actual Status */}
-              <div className={styles.chartCard}>
-                <div className={styles.chartHeaderRow}>
-                  <span className={styles.chartTitle}>Actual Status Distribution</span>
-                  <span className={styles.chartDot} style={{ backgroundColor: '#0284c7' }} />
-                </div>
-                <div className={styles.chartWrapper}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={actualChartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={32}
-                        outerRadius={48}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {actualChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className={styles.chartCenterLabel}>
-                    <div className={styles.chartCenterNumber}>{dashboardData.actualStatus.percentage}%</div>
-                    <div className={styles.chartCenterSub}>Labelled</div>
+              {dashboardData.isDoubleSided ? (
+                <>
+                  {/* Double-Sided Chart 1: TOP Side Yield */}
+                  <div className={styles.chartCard}>
+                    <div className={styles.chartHeaderRow}>
+                      <span className={styles.chartTitle}>TOP Side Yield</span>
+                      <span className={styles.chartDot} style={{ backgroundColor: '#3b82f6' }} />
+                    </div>
+                    <div className={styles.chartWrapper}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={topYieldChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={36}
+                            outerRadius={52}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {topYieldChartData.map((entry, index) => (
+                              <Cell key={`cell-top-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.chartCenterLabel}>
+                        <div className={styles.chartCenterNumber}>
+                          {dashboardData.top?.postAOI.yield ?? dashboardData.top?.postAOI.percentage ?? 0}%
+                        </div>
+                        <div className={styles.chartCenterSub}>Top Yield</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              {/* Chart 2: Pre-AOI */}
-              <div className={styles.chartCard}>
-                <div className={styles.chartHeaderRow}>
-                  <span className={styles.chartTitle}>Pre-AOI Pass Rate</span>
-                  <span className={styles.chartDot} style={{ backgroundColor: '#16a34a' }} />
-                </div>
-                <div className={styles.chartWrapper}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={preAoiChartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={32}
-                        outerRadius={48}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {preAoiChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className={styles.chartCenterLabel}>
-                    <div className={styles.chartCenterNumber}>{dashboardData.preAOI.percentage}%</div>
-                    <div className={styles.chartCenterSub}>Pass %</div>
+                  {/* Double-Sided Chart 2: BOTTOM Side Yield */}
+                  <div className={styles.chartCard}>
+                    <div className={styles.chartHeaderRow}>
+                      <span className={styles.chartTitle}>BOTTOM Side Yield</span>
+                      <span className={styles.chartDot} style={{ backgroundColor: '#8b5cf6' }} />
+                    </div>
+                    <div className={styles.chartWrapper}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={bottomYieldChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={36}
+                            outerRadius={52}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {bottomYieldChartData.map((entry, index) => (
+                              <Cell key={`cell-bottom-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.chartCenterLabel}>
+                        <div className={styles.chartCenterNumber}>
+                          {dashboardData.bottom?.postAOI.yield ?? dashboardData.bottom?.postAOI.percentage ?? 0}%
+                        </div>
+                        <div className={styles.chartCenterSub}>Bottom Yield</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              {/* Chart 3: Post-AOI */}
-              <div className={styles.chartCard}>
-                <div className={styles.chartHeaderRow}>
-                  <span className={styles.chartTitle}>Post-AOI Pass Rate</span>
-                  <span className={styles.chartDot} style={{ backgroundColor: '#8b5cf6' }} />
-                </div>
-                <div className={styles.chartWrapper}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={postAoiChartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={32}
-                        outerRadius={48}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {postAoiChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className={styles.chartCenterLabel}>
-                    <div className={styles.chartCenterNumber}>{dashboardData.postAOI.percentage}%</div>
-                    <div className={styles.chartCenterSub}>Pass %</div>
+                  {/* Double-Sided Chart 3: Shared SMT FG Yield */}
+                  <div className={styles.chartCard}>
+                    <div className={styles.chartHeaderRow}>
+                      <span className={styles.chartTitle}>Shared SMT FG Yield</span>
+                      <span className={styles.chartDot} style={{ backgroundColor: '#10b981' }} />
+                    </div>
+                    <div className={styles.chartWrapper}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={smtFgChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={36}
+                            outerRadius={52}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {smtFgChartData.map((entry, index) => (
+                              <Cell key={`cell-fg-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.chartCenterLabel}>
+                        <div className={styles.chartCenterNumber}>
+                          {dashboardData.smtFG?.yield ?? dashboardData.smtFG?.percentage ?? 0}%
+                        </div>
+                        <div className={styles.chartCenterSub}>FG Yield</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                </>
+              ) : (
+                <>
+                  {/* Single-Sided Chart 1: Actual Status */}
+                  <div className={styles.chartCard}>
+                    <div className={styles.chartHeaderRow}>
+                      <span className={styles.chartTitle}>Actual Status Distribution</span>
+                      <span className={styles.chartDot} style={{ backgroundColor: '#0284c7' }} />
+                    </div>
+                    <div className={styles.chartWrapper}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={actualChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={36}
+                            outerRadius={52}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {actualChartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.chartCenterLabel}>
+                        <div className={styles.chartCenterNumber}>{dashboardData.actualStatus.percentage}%</div>
+                        <div className={styles.chartCenterSub}>Labelled</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Single-Sided Chart 2: Pre-AOI */}
+                  <div className={styles.chartCard}>
+                    <div className={styles.chartHeaderRow}>
+                      <span className={styles.chartTitle}>Pre-AOI Pass Rate</span>
+                      <span className={styles.chartDot} style={{ backgroundColor: '#16a34a' }} />
+                    </div>
+                    <div className={styles.chartWrapper}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={preAoiChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={36}
+                            outerRadius={52}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {preAoiChartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.chartCenterLabel}>
+                        <div className={styles.chartCenterNumber}>{dashboardData.preAOI.percentage}%</div>
+                        <div className={styles.chartCenterSub}>Pass %</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Single-Sided Chart 3: Post-AOI */}
+                  <div className={styles.chartCard}>
+                    <div className={styles.chartHeaderRow}>
+                      <span className={styles.chartTitle}>Post-AOI Pass Rate</span>
+                      <span className={styles.chartDot} style={{ backgroundColor: '#8b5cf6' }} />
+                    </div>
+                    <div className={styles.chartWrapper}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={postAoiChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={36}
+                            outerRadius={52}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {postAoiChartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.chartCenterLabel}>
+                        <div className={styles.chartCenterNumber}>{dashboardData.postAOI.percentage}%</div>
+                        <div className={styles.chartCenterSub}>Pass %</div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

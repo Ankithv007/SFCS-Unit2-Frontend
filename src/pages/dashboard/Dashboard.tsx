@@ -200,7 +200,7 @@ export default function SFCSDashboard() {
     doc.text('Passed', 75, currentY + 5);
     doc.text('Failed', 105, currentY + 5);
     doc.text('Pending', 135, currentY + 5);
-    doc.text('Yield %', 168, currentY + 5);
+    doc.text('Completed %', 164, currentY + 5);
     currentY += 7;
 
     doc.setFont('helvetica', 'normal');
@@ -762,7 +762,7 @@ export default function SFCSDashboard() {
                               <th className={styles.thSideSub}>Pass</th>
                               <th className={styles.thSideSub}>Fail</th>
                               <th className={styles.thSideSub}>Pending</th>
-                              <th className={styles.thSideSub}>Yield</th>
+                              <th className={styles.thSideSub}>Completed %</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -847,7 +847,7 @@ export default function SFCSDashboard() {
                               <th className={styles.thSideSub}>Pass</th>
                               <th className={styles.thSideSub}>Fail</th>
                               <th className={styles.thSideSub}>Pending</th>
-                              <th className={styles.thSideSub}>Yield</th>
+                              <th className={styles.thSideSub}>Completed %</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -997,7 +997,7 @@ export default function SFCSDashboard() {
                             <th className={styles.thSub}>Pass</th>
                             <th className={styles.thSub}>Fail</th>
                             <th className={styles.thSub}>Pending</th>
-                            <th className={styles.thSub}>Yield</th>
+                            <th className={styles.thSub}>Completed %</th>
                           </tr>
                         </thead>
                         <tbody>

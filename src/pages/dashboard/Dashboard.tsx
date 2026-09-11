@@ -759,7 +759,7 @@ export default function SFCSDashboard() {
                     <div className={`${styles.sideCard} ${styles.sideCardTop}`}>
                       <div className={`${styles.sideCardHeader} ${styles.sideCardHeaderTop}`}>
                         <div className={`${styles.sideCardTitle} ${styles.sideCardTitleTop}`}>
-                          <span>🔵</span> TOP SIDE
+                          <span></span> TOP SIDE
                         </div>
                         <span className={`${styles.sideBadge} ${styles.sideBadgeTop}`}>Side 1</span>
                       </div>
@@ -792,7 +792,7 @@ export default function SFCSDashboard() {
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
-                                  <span className={styles.stageIcon}>🖨️</span> Printing
+                                  <span className={styles.stageIcon}></span> Printing
                                 </span>
                               </td>
                               <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -812,7 +812,7 @@ export default function SFCSDashboard() {
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
-                                  <span className={styles.stageIcon}>🔬</span> SPI
+                                  <span className={styles.stageIcon}></span> SPI
                                 </span>
                               </td>
                               <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -832,7 +832,7 @@ export default function SFCSDashboard() {
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
-                                  <span className={styles.stageIcon}>🔍</span> Pre AOI
+                                  <span className={styles.stageIcon}></span> Pre AOI
                                 </span>
                               </td>
                               <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -852,7 +852,7 @@ export default function SFCSDashboard() {
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
-                                  <span className={styles.stageIcon}>🔍</span> Post AOI
+                                  <span className={styles.stageIcon}></span> Post AOI
                                 </span>
                               </td>
                               <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -877,7 +877,7 @@ export default function SFCSDashboard() {
                     <div className={`${styles.sideCard} ${styles.sideCardBottom}`}>
                       <div className={`${styles.sideCardHeader} ${styles.sideCardHeaderBottom}`}>
                         <div className={`${styles.sideCardTitle} ${styles.sideCardTitleBottom}`}>
-                          <span>🟣</span> BOTTOM SIDE
+                          <span></span> BOTTOM SIDE
                         </div>
                         <span className={`${styles.sideBadge} ${styles.sideBadgeBottom}`}>Side 2</span>
                       </div>
@@ -910,7 +910,7 @@ export default function SFCSDashboard() {
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
-                                  <span className={styles.stageIcon}>🖨️</span> Printing
+                                  <span className={styles.stageIcon}></span> Printing
                                 </span>
                               </td>
                               <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -930,7 +930,7 @@ export default function SFCSDashboard() {
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
-                                  <span className={styles.stageIcon}>🔬</span> SPI
+                                  <span className={styles.stageIcon}></span> SPI
                                 </span>
                               </td>
                               <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -950,7 +950,7 @@ export default function SFCSDashboard() {
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
-                                  <span className={styles.stageIcon}>🔍</span> Pre AOI
+                                  <span className={styles.stageIcon}></span> Pre AOI
                                 </span>
                               </td>
                               <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -970,7 +970,7 @@ export default function SFCSDashboard() {
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
-                                  <span className={styles.stageIcon}>🔍</span> Post AOI
+                                  <span className={styles.stageIcon}></span> Post AOI
                                 </span>
                               </td>
                               <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -1083,7 +1083,7 @@ export default function SFCSDashboard() {
                           <tr>
                             <td className={styles.tdStage}>
                               <span className={styles.stageContent}>
-                                <span className={styles.stageIcon}>🖨️</span> Printing
+                                <span className={styles.stageIcon}></span> Printing
                               </span>
                             </td>
                             <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -1104,7 +1104,7 @@ export default function SFCSDashboard() {
                           <tr>
                             <td className={styles.tdStage}>
                               <span className={styles.stageContent}>
-                                <span className={styles.stageIcon}>🔬</span> SPI
+                                <span className={styles.stageIcon}></span> SPI
                               </span>
                             </td>
                             <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -1125,7 +1125,7 @@ export default function SFCSDashboard() {
                           <tr>
                             <td className={styles.tdStage}>
                               <span className={styles.stageContent}>
-                                <span className={styles.stageIcon}>🔍</span> Pre AOI
+                                <span className={styles.stageIcon}></span> Pre AOI
                               </span>
                             </td>
                             <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -1146,7 +1146,7 @@ export default function SFCSDashboard() {
                           <tr>
                             <td className={styles.tdStage}>
                               <span className={styles.stageContent}>
-                                <span className={styles.stageIcon}>🔍</span> Post AOI
+                                <span className={styles.stageIcon}></span> Post AOI
                               </span>
                             </td>
                             <td className={`${styles.tdCell} ${styles.cellGreen}`}>
@@ -1167,7 +1167,7 @@ export default function SFCSDashboard() {
                           <tr>
                             <td className={styles.tdStage}>
                               <span className={styles.stageContent}>
-                                <span className={styles.stageIcon}>📦</span> SMT FG
+                                <span className={styles.stageIcon}></span> SMT FG
                               </span>
                             </td>
                             <td className={`${styles.tdCell} ${styles.cellGreen}`}>

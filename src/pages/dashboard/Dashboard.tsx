@@ -26,6 +26,7 @@ export interface SmtStageMetrics {
 
 export interface SmtSideMetrics {
   printing: SmtStageMetrics;
+  spi?: SmtStageMetrics;
   preAOI: SmtStageMetrics;
   postAOI: SmtStageMetrics;
 }
@@ -50,6 +51,7 @@ interface DashboardMetrics {
     pending: number;
     percentage: number;
   };
+  spi?: SmtStageMetrics;
   yieldSPI: number;
   preAOI: {
     passed: number;
@@ -72,11 +74,11 @@ export function Dashboard() {
 
 export default function SFCSDashboard() {
   const [activeTab, setActiveTab] = useState<'live' | 'search'>('live');
-  
+
   // Live Work Orders List
   const [liveWorkOrders, setLiveWorkOrders] = useState<LiveWorkOrder[]>([]);
   const [currentLiveIndex, setCurrentLiveIndex] = useState<number>(0);
-  
+
   // Selected Work Order ID for Search mode
   const [searchSelectedWoId, setSearchSelectedWoId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('all');
@@ -285,8 +287,8 @@ export default function SFCSDashboard() {
     doc.save(`SFCS_WO_${data.summary.workOrderId}_${data.summary.selectedDate}.pdf`);
   };
 
-  const activeWoId = activeTab === 'live' 
-    ? liveWorkOrders[currentLiveIndex]?.id || null 
+  const activeWoId = activeTab === 'live'
+    ? liveWorkOrders[currentLiveIndex]?.id || null
     : searchSelectedWoId;
 
   // 1. Fetch Live Work Orders list for Live Tab
@@ -461,12 +463,13 @@ export default function SFCSDashboard() {
   };
 
   // Color constants for charts
-  const COLOR_PASS = '#16a34a'; // Green
+  const COLOR_PASS = '#059669'; // Rich Emerald Green
   const COLOR_FAIL = '#dc2626'; // Red
   const COLOR_PENDING = '#cbd5e1'; // Light Grey/Slate
   const COLOR_LABELLED = '#0284c7'; // Blue
-  const COLOR_TOP = '#3b82f6'; // Blue
-  const COLOR_BOTTOM = '#8b5cf6'; // Purple
+  const COLOR_TOP = '#2563eb'; // Blue
+  const COLOR_BOTTOM = '#7c3aed'; // Purple
+  const COLOR_SPI = '#0d9488'; // Teal
 
   // Single-Sided Chart 1: Actual Status (Labelled vs Pending)
   const actualChartData = dashboardData ? [
@@ -474,14 +477,21 @@ export default function SFCSDashboard() {
     { name: 'Pending', value: dashboardData.actualStatus.pending, color: COLOR_PENDING }
   ] : [];
 
-  // Single-Sided Chart 2: Pre-AOI (Passed, Failed, Pending)
+  // Single-Sided Chart 2: SPI (Passed, Failed, Pending)
+  const spiChartData = dashboardData ? [
+    { name: 'Passed', value: dashboardData.spi?.passed ?? dashboardData.spi?.pass ?? 0, color: COLOR_PASS },
+    { name: 'Failed', value: dashboardData.spi?.failed ?? dashboardData.spi?.fail ?? 0, color: COLOR_FAIL },
+    { name: 'Pending', value: dashboardData.spi?.pending ?? 0, color: COLOR_PENDING }
+  ] : [];
+
+  // Single-Sided Chart 3: Pre-AOI (Passed, Failed, Pending)
   const preAoiChartData = dashboardData ? [
     { name: 'Passed', value: dashboardData.preAOI.passed, color: COLOR_PASS },
     { name: 'Failed', value: dashboardData.preAOI.failed, color: COLOR_FAIL },
     { name: 'Pending', value: dashboardData.preAOI.pending, color: COLOR_PENDING }
   ] : [];
 
-  // Single-Sided Chart 3: Post-AOI (Passed, Failed, Pending)
+  // Single-Sided Chart 4: Post-AOI (Passed, Failed, Pending)
   const postAoiChartData = dashboardData ? [
     { name: 'Passed', value: dashboardData.postAOI.passed, color: COLOR_PASS },
     { name: 'Failed', value: dashboardData.postAOI.failed, color: COLOR_FAIL },
@@ -517,7 +527,7 @@ export default function SFCSDashboard() {
           <div className={styles.titleSection}>
             <h1>Production Dashboard</h1>
             <p>
-              Real-Time Work Order SMT Production & AOI Analytics
+              Real-Time Work Order SMT Production, SPI & AOI Analytics
               {activeTab === 'search' && selectedDate !== 'all' && (
                 <span className={styles.historicalBadge}>
                   📅 Day-Wise View: {selectedDate}
@@ -719,13 +729,12 @@ export default function SFCSDashboard() {
               <span className={styles.headerLabel}>Overall Status</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <span
-                  className={`${styles.statusBadge} ${
-                    dashboardData.overallStatus === 'NOT STARTED'
-                      ? styles.statusNotStarted
-                      : dashboardData.overallStatus === 'COMPLETED'
+                  className={`${styles.statusBadge} ${dashboardData.overallStatus === 'NOT STARTED'
+                    ? styles.statusNotStarted
+                    : dashboardData.overallStatus === 'COMPLETED'
                       ? styles.statusCompleted
                       : styles.statusInProgress
-                  }`}
+                    }`}
                 >
                   {dashboardData.overallStatus}
                 </span>
@@ -758,11 +767,24 @@ export default function SFCSDashboard() {
                         <table className={styles.sideTable}>
                           <thead>
                             <tr>
-                              <th className={styles.thSideStage}>Stage</th>
-                              <th className={styles.thSideSub}>Pass</th>
-                              <th className={styles.thSideSub}>Fail</th>
-                              <th className={styles.thSideSub}>Pending</th>
-                              <th className={styles.thSideSub}>Completed %</th>
+                              <th className={styles.thSideStage}>
+                                <span className={styles.thHeaderContent}>STAGE</span>
+                              </th>
+                              <th className={`${styles.thSideSub} ${styles.thPass}`}>
+                                <span className={styles.thHeaderContent}>PASS</span>
+                              </th>
+                              <th className={`${styles.thSideSub} ${styles.thFail}`}>
+                                <span className={styles.thHeaderContent}>FAIL</span>
+                              </th>
+                              <th className={`${styles.thSideSub} ${styles.thPending}`}>
+                                <span className={styles.thHeaderContent}>PENDING</span>
+                              </th>
+                              <th className={`${styles.thSideSub} ${styles.thCompleted}`}>
+                                <span className={styles.thHeaderContent}>
+                                  <span>COMPLETED</span>
+                                  <span className={styles.thPercentSign}>%</span>
+                                </span>
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -786,7 +808,27 @@ export default function SFCSDashboard() {
                                 {dashboardData.top?.printing.yield ?? dashboardData.top?.printing.percentage ?? 0}%
                               </td>
                             </tr>
-                            {/* Row 2: Pre AOI */}
+                            {/* Row 2: SPI */}
+                            <tr>
+                              <td className={styles.tdSideStage}>
+                                <span className={styles.stageContent}>
+                                  <span className={styles.stageIcon}>🔬</span> SPI
+                                </span>
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                                {dashboardData.top?.spi?.pass ?? dashboardData.top?.spi?.passed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                                {dashboardData.top?.spi?.fail ?? dashboardData.top?.spi?.failed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                                {dashboardData.top?.spi?.pending ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                                {dashboardData.top?.spi?.yield ?? dashboardData.top?.spi?.percentage ?? 0}%
+                              </td>
+                            </tr>
+                            {/* Row 3: Pre AOI */}
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
@@ -843,11 +885,24 @@ export default function SFCSDashboard() {
                         <table className={styles.sideTable}>
                           <thead>
                             <tr>
-                              <th className={styles.thSideStage}>Stage</th>
-                              <th className={styles.thSideSub}>Pass</th>
-                              <th className={styles.thSideSub}>Fail</th>
-                              <th className={styles.thSideSub}>Pending</th>
-                              <th className={styles.thSideSub}>Completed %</th>
+                              <th className={styles.thSideStage}>
+                                <span className={styles.thHeaderContent}>STAGE</span>
+                              </th>
+                              <th className={`${styles.thSideSub} ${styles.thPass}`}>
+                                <span className={styles.thHeaderContent}>PASS</span>
+                              </th>
+                              <th className={`${styles.thSideSub} ${styles.thFail}`}>
+                                <span className={styles.thHeaderContent}>FAIL</span>
+                              </th>
+                              <th className={`${styles.thSideSub} ${styles.thPending}`}>
+                                <span className={styles.thHeaderContent}>PENDING</span>
+                              </th>
+                              <th className={`${styles.thSideSub} ${styles.thCompleted}`}>
+                                <span className={styles.thHeaderContent}>
+                                  <span>COMPLETED</span>
+                                  <span className={styles.thPercentSign}>%</span>
+                                </span>
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -871,7 +926,27 @@ export default function SFCSDashboard() {
                                 {dashboardData.bottom?.printing.yield ?? dashboardData.bottom?.printing.percentage ?? 0}%
                               </td>
                             </tr>
-                            {/* Row 2: Pre AOI */}
+                            {/* Row 2: SPI */}
+                            <tr>
+                              <td className={styles.tdSideStage}>
+                                <span className={styles.stageContent}>
+                                  <span className={styles.stageIcon}>🔬</span> SPI
+                                </span>
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                                {dashboardData.bottom?.spi?.pass ?? dashboardData.bottom?.spi?.passed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                                {dashboardData.bottom?.spi?.fail ?? dashboardData.bottom?.spi?.failed ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                                {dashboardData.bottom?.spi?.pending ?? 0}
+                              </td>
+                              <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                                {dashboardData.bottom?.spi?.yield ?? dashboardData.bottom?.spi?.percentage ?? 0}%
+                              </td>
+                            </tr>
+                            {/* Row 3: Pre AOI */}
                             <tr>
                               <td className={styles.tdSideStage}>
                                 <span className={styles.stageContent}>
@@ -917,65 +992,55 @@ export default function SFCSDashboard() {
                     </div>
                   </div>
 
-                  {/* CONVERGING FLOW CONNECTOR */}
-                  <div className={styles.flowConnector}>
-                    <div className={styles.connectorLine}>
-                      <span>TOP + BOTTOM</span>
-                      <span className={styles.connectorIcon}>➔</span>
-                      <span>SMT FG FINAL RELEASE</span>
-                    </div>
-                  </div>
-
-                  {/* SHARED SMT FG FINAL RELEASE CARD */}
-                  <div className={styles.sharedFgCard}>
-                    <div className={styles.sharedFgHeader}>
+                  {/* COMPACT SHARED SMT FG RELEASE BAR */}
+                  <div className={styles.sharedFgCardCompact}>
+                    <div className={styles.sharedFgCompactHeader}>
                       <div className={styles.sharedFgTitle}>
-                        <span>📦</span> SMT FG — SHARED FINAL RELEASE
+                        <span>📦</span> SMT FG — Combined Final Release
+                        <span className={styles.flowBadge}>TOP + BOTTOM ➔ SMT FG</span>
                       </div>
-                      <span className={styles.sharedFgBadge}>Final Stage</span>
+                      <div className={styles.sharedFgCompactSub}>
+                        <span>Target: <strong>{dashboardData.totalQuantity}</strong></span>
+                        <span className={styles.compactDot}>•</span>
+                        <span>Completion: <strong>{Math.min(100, Math.round(((dashboardData.smtFG?.pass ?? dashboardData.smtFG?.passed ?? 0) / (dashboardData.totalQuantity || 1)) * 100))}%</strong></span>
+                      </div>
                     </div>
-                    <div className={styles.sharedFgBody}>
-                      <div className={styles.sharedFgMetricsGrid}>
-                        <div className={styles.sharedFgMetricBox}>
-                          <span className={`${styles.sharedFgMetricValue} ${styles.cellGreen}`}>
+
+                    <div className={styles.sharedFgCompactContent}>
+                      <div className={styles.sharedFgMetricsInline}>
+                        <div className={`${styles.compactMetricItem} ${styles.cellGreen}`}>
+                          <span className={styles.compactMetricLabel}>PASS</span>
+                          <span className={styles.compactMetricValue}>
                             {dashboardData.smtFG?.pass ?? dashboardData.smtFG?.passed ?? 0}
                           </span>
-                          <span className={styles.sharedFgMetricLabel}>Pass</span>
                         </div>
-                        <div className={styles.sharedFgMetricBox}>
-                          <span className={`${styles.sharedFgMetricValue} ${styles.cellRed}`}>
+                        <div className={`${styles.compactMetricItem} ${styles.cellRed}`}>
+                          <span className={styles.compactMetricLabel}>FAIL</span>
+                          <span className={styles.compactMetricValue}>
                             {dashboardData.smtFG?.fail ?? dashboardData.smtFG?.failed ?? 0}
                           </span>
-                          <span className={styles.sharedFgMetricLabel}>Fail</span>
                         </div>
-                        <div className={styles.sharedFgMetricBox}>
-                          <span className={`${styles.sharedFgMetricValue} ${styles.cellAmber}`}>
+                        <div className={`${styles.compactMetricItem} ${styles.cellAmber}`}>
+                          <span className={styles.compactMetricLabel}>PENDING</span>
+                          <span className={styles.compactMetricValue}>
                             {dashboardData.smtFG?.pending ?? 0}
                           </span>
-                          <span className={styles.sharedFgMetricLabel}>Pending</span>
                         </div>
-                        <div className={styles.sharedFgMetricBox}>
-                          <span className={`${styles.sharedFgMetricValue} ${styles.cellBlue}`}>
+                        <div className={`${styles.compactMetricItem} ${styles.cellBlue}`}>
+                          <span className={styles.compactMetricLabel}>YIELD</span>
+                          <span className={styles.compactMetricValue}>
                             {dashboardData.smtFG?.yield ?? dashboardData.smtFG?.percentage ?? 0}%
                           </span>
-                          <span className={styles.sharedFgMetricLabel}>Yield</span>
                         </div>
                       </div>
 
-                      <div className={styles.sharedFgProgressBar}>
+                      <div className={styles.sharedFgProgressBarCompact}>
                         <div
                           className={styles.sharedFgProgressFill}
                           style={{
                             width: `${Math.min(100, Math.round(((dashboardData.smtFG?.pass ?? dashboardData.smtFG?.passed ?? 0) / (dashboardData.totalQuantity || 1)) * 100))}%`
                           }}
                         />
-                      </div>
-
-                      <div className={styles.sharedFgSub}>
-                        <span>Total Work Order Target: {dashboardData.totalQuantity}</span>
-                        <span>
-                          Completion: {Math.min(100, Math.round(((dashboardData.smtFG?.pass ?? dashboardData.smtFG?.passed ?? 0) / (dashboardData.totalQuantity || 1)) * 100))}%
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -993,11 +1058,24 @@ export default function SFCSDashboard() {
                       <table className={styles.matrixTable}>
                         <thead>
                           <tr>
-                            <th className={styles.thStage}>Stage</th>
-                            <th className={styles.thSub}>Pass</th>
-                            <th className={styles.thSub}>Fail</th>
-                            <th className={styles.thSub}>Pending</th>
-                            <th className={styles.thSub}>Completed %</th>
+                            <th className={styles.thStage}>
+                              <span className={styles.thHeaderContent}>STAGE</span>
+                            </th>
+                            <th className={`${styles.thSub} ${styles.thPass}`}>
+                              <span className={styles.thHeaderContent}>PASS</span>
+                            </th>
+                            <th className={`${styles.thSub} ${styles.thFail}`}>
+                              <span className={styles.thHeaderContent}>FAIL</span>
+                            </th>
+                            <th className={`${styles.thSub} ${styles.thPending}`}>
+                              <span className={styles.thHeaderContent}>PENDING</span>
+                            </th>
+                            <th className={`${styles.thSub} ${styles.thCompleted}`}>
+                              <span className={styles.thHeaderContent}>
+                                <span>COMPLETED</span>
+                                <span className={styles.thPercentSign}>%</span>
+                              </span>
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1022,7 +1100,28 @@ export default function SFCSDashboard() {
                             </td>
                           </tr>
 
-                          {/* Row 2: Pre AOI */}
+                          {/* Row 2: SPI */}
+                          <tr>
+                            <td className={styles.tdStage}>
+                              <span className={styles.stageContent}>
+                                <span className={styles.stageIcon}>🔬</span> SPI
+                              </span>
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellGreen}`}>
+                              {dashboardData.spi?.passed ?? dashboardData.spi?.pass ?? 0}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellRed}`}>
+                              {dashboardData.spi?.failed ?? dashboardData.spi?.fail ?? 0}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellAmber}`}>
+                              {dashboardData.spi?.pending ?? 0}
+                            </td>
+                            <td className={`${styles.tdCell} ${styles.cellBlue}`}>
+                              {dashboardData.spi?.percentage ?? dashboardData.spi?.yield ?? dashboardData.yieldSPI ?? 0}%
+                            </td>
+                          </tr>
+
+                          {/* Row 3: Pre AOI */}
                           <tr>
                             <td className={styles.tdStage}>
                               <span className={styles.stageContent}>
@@ -1043,7 +1142,7 @@ export default function SFCSDashboard() {
                             </td>
                           </tr>
 
-                          {/* Row 3: Post AOI */}
+                          {/* Row 4: Post AOI */}
                           <tr>
                             <td className={styles.tdStage}>
                               <span className={styles.stageContent}>
@@ -1064,7 +1163,7 @@ export default function SFCSDashboard() {
                             </td>
                           </tr>
 
-                          {/* Row 4: SMT FG */}
+                          {/* Row 5: SMT FG */}
                           <tr>
                             <td className={styles.tdStage}>
                               <span className={styles.stageContent}>
@@ -1085,11 +1184,10 @@ export default function SFCSDashboard() {
                             <td className={`${styles.tdCell} ${styles.cellBlue}`}>
                               {dashboardData.smtFG
                                 ? `${dashboardData.smtFG.yield ?? dashboardData.smtFG.percentage}%`
-                                : `${
-                                    dashboardData.totalQuantity > 0
-                                      ? Math.round((dashboardData.postAOI.passed / dashboardData.totalQuantity) * 100)
-                                      : 0
-                                  }%`}
+                                : `${dashboardData.totalQuantity > 0
+                                  ? Math.round((dashboardData.postAOI.passed / dashboardData.totalQuantity) * 100)
+                                  : 0
+                                }%`}
                             </td>
                           </tr>
                         </tbody>
@@ -1120,7 +1218,30 @@ export default function SFCSDashboard() {
                           />
                         </div>
                         <span className={styles.nodeSub}>
-                          Failed: {dashboardData.actualStatus.failed || 0} | Pending: {dashboardData.actualStatus.pending}
+                          Failed: <strong style={{ color: '#b91c1c' }}>{dashboardData.actualStatus.failed || 0}</strong> | Pending:{' '}
+                          <strong style={{ color: '#b45309' }}>{dashboardData.actualStatus.pending}</strong>
+                        </span>
+                      </div>
+
+                      <span className={styles.flowArrow}>➔</span>
+
+                      <div className={styles.flowNode}>
+                        <span className={styles.nodeTitle}>SPI Stage</span>
+                        <span className={styles.nodeMain} style={{ color: COLOR_PASS }}>
+                          Passed: {dashboardData.spi?.passed ?? dashboardData.spi?.pass ?? 0}
+                        </span>
+                        <div className={styles.progressTrack}>
+                          <div
+                            className={styles.progressBar}
+                            style={{
+                              width: `${Math.min(100, Math.round(((dashboardData.spi?.passed ?? dashboardData.spi?.pass ?? 0) / (dashboardData.totalQuantity || 1)) * 100))}%`,
+                              backgroundColor: COLOR_PASS
+                            }}
+                          />
+                        </div>
+                        <span className={styles.nodeSub}>
+                          Failed: <strong style={{ color: '#b91c1c' }}>{dashboardData.spi?.failed ?? dashboardData.spi?.fail ?? 0}</strong> | Pending:{' '}
+                          <strong style={{ color: '#b45309' }}>{dashboardData.spi?.pending ?? 0}</strong>
                         </span>
                       </div>
 
@@ -1141,7 +1262,8 @@ export default function SFCSDashboard() {
                           />
                         </div>
                         <span className={styles.nodeSub}>
-                          Failed: {dashboardData.preAOI.failed} | Pending: {dashboardData.preAOI.pending}
+                          Failed: <strong style={{ color: '#b91c1c' }}>{dashboardData.preAOI.failed}</strong> | Pending:{' '}
+                          <strong style={{ color: '#b45309' }}>{dashboardData.preAOI.pending}</strong>
                         </span>
                       </div>
 
@@ -1162,7 +1284,8 @@ export default function SFCSDashboard() {
                           />
                         </div>
                         <span className={styles.nodeSub}>
-                          Failed: {dashboardData.postAOI.failed} | Pending: {dashboardData.postAOI.pending}
+                          Failed: <strong style={{ color: '#b91c1c' }}>{dashboardData.postAOI.failed}</strong> | Pending:{' '}
+                          <strong style={{ color: '#b45309' }}>{dashboardData.postAOI.pending}</strong>
                         </span>
                       </div>
 
@@ -1183,10 +1306,12 @@ export default function SFCSDashboard() {
                           />
                         </div>
                         <span className={styles.nodeSub}>
-                          Failed: {dashboardData.smtFG ? (dashboardData.smtFG.fail ?? dashboardData.smtFG.failed) : 0} | Pending:{' '}
-                          {dashboardData.smtFG
-                            ? dashboardData.smtFG.pending
-                            : Math.max(0, dashboardData.totalQuantity - dashboardData.postAOI.passed)}
+                          Failed: <strong style={{ color: '#b91c1c' }}>{dashboardData.smtFG ? (dashboardData.smtFG.fail ?? dashboardData.smtFG.failed) : 0}</strong> | Pending:{' '}
+                          <strong style={{ color: '#b45309' }}>
+                            {dashboardData.smtFG
+                              ? dashboardData.smtFG.pending
+                              : Math.max(0, dashboardData.totalQuantity - dashboardData.postAOI.passed)}
+                          </strong>
                         </span>
                       </div>
                     </div>
@@ -1212,8 +1337,8 @@ export default function SFCSDashboard() {
                             data={topYieldChartData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={36}
-                            outerRadius={52}
+                            innerRadius={58}
+                            outerRadius={80}
                             paddingAngle={3}
                             dataKey="value"
                           >
@@ -1246,8 +1371,8 @@ export default function SFCSDashboard() {
                             data={bottomYieldChartData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={36}
-                            outerRadius={52}
+                            innerRadius={58}
+                            outerRadius={80}
                             paddingAngle={3}
                             dataKey="value"
                           >
@@ -1267,10 +1392,10 @@ export default function SFCSDashboard() {
                     </div>
                   </div>
 
-                  {/* Double-Sided Chart 3: Shared SMT FG Yield */}
+                  {/* Double-Sided Chart 3: SMT FG Yield */}
                   <div className={styles.chartCard}>
                     <div className={styles.chartHeaderRow}>
-                      <span className={styles.chartTitle}>Shared SMT FG Yield</span>
+                      <span className={styles.chartTitle}>SMT FG Yield</span>
                       <span className={styles.chartDot} style={{ backgroundColor: '#10b981' }} />
                     </div>
                     <div className={styles.chartWrapper}>
@@ -1280,8 +1405,8 @@ export default function SFCSDashboard() {
                             data={smtFgChartData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={36}
-                            outerRadius={52}
+                            innerRadius={58}
+                            outerRadius={80}
                             paddingAngle={3}
                             dataKey="value"
                           >
@@ -1316,8 +1441,8 @@ export default function SFCSDashboard() {
                             data={actualChartData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={36}
-                            outerRadius={52}
+                            innerRadius={50}
+                            outerRadius={70}
                             paddingAngle={3}
                             dataKey="value"
                           >
@@ -1335,7 +1460,41 @@ export default function SFCSDashboard() {
                     </div>
                   </div>
 
-                  {/* Single-Sided Chart 2: Pre-AOI */}
+                  {/* Single-Sided Chart 2: SPI Pass Rate */}
+                  <div className={styles.chartCard}>
+                    <div className={styles.chartHeaderRow}>
+                      <span className={styles.chartTitle}>SPI Pass Rate</span>
+                      <span className={styles.chartDot} style={{ backgroundColor: COLOR_SPI }} />
+                    </div>
+                    <div className={styles.chartWrapper}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={spiChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={70}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {spiChartData.map((entry, index) => (
+                              <Cell key={`cell-spi-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className={styles.chartCenterLabel}>
+                        <div className={styles.chartCenterNumber}>
+                          {dashboardData.spi?.percentage ?? dashboardData.spi?.yield ?? dashboardData.yieldSPI ?? 0}%
+                        </div>
+                        <div className={styles.chartCenterSub}>Pass %</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Single-Sided Chart 3: Pre-AOI */}
                   <div className={styles.chartCard}>
                     <div className={styles.chartHeaderRow}>
                       <span className={styles.chartTitle}>Pre-AOI Pass Rate</span>
@@ -1348,8 +1507,8 @@ export default function SFCSDashboard() {
                             data={preAoiChartData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={36}
-                            outerRadius={52}
+                            innerRadius={50}
+                            outerRadius={70}
                             paddingAngle={3}
                             dataKey="value"
                           >
@@ -1367,7 +1526,7 @@ export default function SFCSDashboard() {
                     </div>
                   </div>
 
-                  {/* Single-Sided Chart 3: Post-AOI */}
+                  {/* Single-Sided Chart 4: Post-AOI */}
                   <div className={styles.chartCard}>
                     <div className={styles.chartHeaderRow}>
                       <span className={styles.chartTitle}>Post-AOI Pass Rate</span>
@@ -1380,8 +1539,8 @@ export default function SFCSDashboard() {
                             data={postAoiChartData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={36}
-                            outerRadius={52}
+                            innerRadius={50}
+                            outerRadius={70}
                             paddingAngle={3}
                             dataKey="value"
                           >

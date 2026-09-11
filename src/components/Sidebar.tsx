@@ -88,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
             if (
                 location.pathname.startsWith('/smt/serial-number') ||
                 location.pathname.startsWith('/smt/printing') ||
+                location.pathname.startsWith('/smt/spi') ||
                 location.pathname.startsWith('/smt/pre-aoi') ||
                 location.pathname.startsWith('/smt/post-aoi') ||
                 location.pathname.startsWith('/smt/rework') ||
@@ -323,6 +324,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                             <span className={styles.menuIcon}>
                                                 <Printer size={16} />
                                             </span> Printing
+                                        </div>
+                                    )}
+                                    {hasPermission('smt_spi') && (
+                                        <div
+                                            className={`${styles.subSubmenuItem} ${isActive('/smt/spi') ? styles.activeSubSubmenu : ''}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate('/smt/spi');
+                                            }}
+                                        >
+                                            <span className={styles.menuIcon}>
+                                                <Eye size={16} />
+                                            </span> SPI
                                         </div>
                                     )}
                                     {hasPermission('smt_pre_aoi') && (

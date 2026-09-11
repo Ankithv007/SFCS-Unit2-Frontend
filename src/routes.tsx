@@ -24,6 +24,7 @@ import { Printing } from './pages/smt/printing/Printing';
 import PostAoi from './pages/smt/post-aoi/PostAoi';
 import Rework from './pages/smt/rework/Rework';
 import PreAoi from './pages/smt/pre-aoi/PreAoi';
+import Spi from './pages/smt/spi/Spi';
 import SMTFG from './pages/smt/smt-fg/SMTFG';
 import SmtTrackItems from './pages/smt/smt-track-items/SmtTrackItems';
 import SmtDowntimeTracker from './pages/smt/smt-downtime/SmtDowntimeTracker';
@@ -318,6 +319,10 @@ export const router = createBrowserRouter([
                     {
                         path: 'printing',
                         element: <Printing />,
+                    },
+                    {
+                        path: 'spi',
+                        element: <Spi />,
                     },
                     {
                         path: 'solder-paste',

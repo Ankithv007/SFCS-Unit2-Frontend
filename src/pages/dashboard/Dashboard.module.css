@@ -293,10 +293,10 @@
 
 .woHeaderCard {
   background-color: #ffffff;
-  border: 1px solid #e1e7ed;
-  border-radius: 6px;
-  padding: 8px 0;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   align-items: center;
@@ -306,25 +306,25 @@
 .headerItem {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0 14px;
+  gap: 3px;
+  padding: 0 16px;
 }
 
 .headerItem:not(:last-child) {
-  border-right: 1px solid #e2e8f0;
+  border-right: 1.5px solid #e2e8f0;
 }
 
 .headerLabel {
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #64748b;
-  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #475569;
+  font-weight: 700;
 }
 
 .headerValue {
-  font-size: 1.05rem;
-  font-weight: 800;
+  font-size: 1.25rem;
+  font-weight: 900;
   color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
@@ -337,12 +337,13 @@
 
 .statusBadge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 0.68rem;
-  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.76rem;
+  font-weight: 800;
   text-transform: uppercase;
   width: fit-content;
+  letter-spacing: 0.03em;
 }
 
 .statusCompleted {
@@ -362,7 +363,7 @@
 
 .twoColumnGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 12px;
   flex: 1;
   min-height: 0;
@@ -401,16 +402,17 @@
 }
 
 .matrixTitle {
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 800;
   color: #0f172a;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .matrixSubtitle {
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   color: #64748b;
+  font-weight: 600;
 }
 
 .matrixTableWrapper {
@@ -423,28 +425,60 @@
 .matrixTable {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 4px;
+  border-spacing: 5px;
   font-size: 0.75rem;
   table-layout: fixed;
   height: 100%;
 }
 
+.matrixTable thead tr {
+  height: 85px;
+}
+
 .matrixTable th {
   background-color: #f8fafc;
   color: #334155;
-  font-weight: 700;
+  font-weight: 900;
   text-transform: uppercase;
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
-  padding: 4px 6px;
-  border-radius: 4px;
-  border: 1px solid #e2e8f0;
+  font-size: 1.25rem;
+  letter-spacing: 0.03em;
+  padding: 0;
+  height: 85px;
+  min-height: 85px;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
   text-align: center;
+  vertical-align: middle;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.thHeaderContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 85px;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 4px 4px;
 }
 
 .thStage {
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%) !important;
+  color: #020617 !important;
+  border: 2px solid #cbd5e1 !important;
+  font-weight: 900;
+  font-size: 1.25rem !important;
+  letter-spacing: 0.04em;
   text-align: center !important;
   width: 20%;
+  height: 85px;
+  min-height: 85px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+  -webkit-text-stroke: 0.35px #020617;
 }
 
 .thSerialGroup {
@@ -453,69 +487,161 @@
 }
 
 .thSub {
-  font-weight: 700;
+  font-weight: 900;
   width: 20%;
+  height: 85px;
+  min-height: 85px;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 1. PASS: 1.6x height (~85px), eye-catching 1.55rem font, visible from 2-3m */
+.thPass {
+  background: linear-gradient(180deg, #dcfce7 0%, #bbf7d0 100%) !important;
+  color: #022c22 !important;
+  border: 2px solid #22c55e !important;
+  font-size: 1.55rem !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 1px rgba(255, 255, 255, 0.5);
+  -webkit-text-stroke: 0.4px #022c22;
+  box-shadow: 0 1px 3px rgba(34, 197, 94, 0.15);
+}
+
+/* 2. FAIL: 1.6x height (~85px), eye-catching 1.55rem font, visible from 2-3m */
+.thFail {
+  background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%) !important;
+  color: #450a0a !important;
+  border: 2px solid #ef4444 !important;
+  font-size: 1.55rem !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 1px rgba(255, 255, 255, 0.5);
+  -webkit-text-stroke: 0.4px #450a0a;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.15);
+}
+
+/* 3. PENDING: 1.6x height (~85px), 1.25rem font (fits 7 letters safely inside box without overflow) */
+.thPending {
+  background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%) !important;
+  color: #451a03 !important;
+  border: 2px solid #f59e0b !important;
+  font-size: 1.25rem !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 1px rgba(255, 255, 255, 0.5);
+  -webkit-text-stroke: 0.4px #451a03;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.15);
+}
+
+/* 4. COMPLETED %: 1.6x height (~85px), 1.1rem font, structured so it stays inside box */
+.thCompleted {
+  background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%) !important;
+  color: #172554 !important;
+  border: 2px solid #3b82f6 !important;
+  font-size: 1.1rem !important;
+  font-weight: 950 !important;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 1px rgba(255, 255, 255, 0.5);
+  -webkit-text-stroke: 0.3px #172554;
+  box-shadow: 0 1px 3px rgba(59, 130, 246, 0.15);
+}
+
+.thPercentSign {
+  font-size: 0.95rem;
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0.95;
+  margin-top: 1px;
 }
 
 .tdStage {
   text-align: center;
   vertical-align: middle;
-  font-weight: 700;
-  color: #1e293b;
-  font-size: 0.85rem;
+  font-weight: 800;
+  color: #0f172a;
+  font-size: 1.05rem;
   padding: 6px 8px;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
   width: 20%;
   box-sizing: border-box;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .stageContent {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   white-space: nowrap;
 }
 
 .stageIcon {
-  font-size: 1rem;
+  font-size: 1.25rem;
 }
 
 .tdCell {
   text-align: center;
   vertical-align: middle;
-  font-weight: 800;
-  padding: 6px 8px;
-  border-radius: 4px;
-  font-size: 0.95rem;
+  font-weight: 900;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
   width: 20%;
   box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .cellGreen {
-  background-color: #f0fdf4;
-  color: #15803d;
-  border: 1px solid #bbf7d0;
+  background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+  color: #065f46;
+  border: 2px solid #34d399;
+  text-shadow:
+    -1px -1px 0 rgba(255, 255, 255, 0.9),
+    1px -1px 0 rgba(255, 255, 255, 0.9),
+    -1px 1px 0 rgba(255, 255, 255, 0.9),
+    1px 1px 0 rgba(255, 255, 255, 0.9);
+  -webkit-text-stroke: 0.5px #065f46;
 }
 
 .cellRed {
-  background-color: #fef2f2;
+  background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
   color: #b91c1c;
-  border: 1px solid #fecaca;
+  border: 2px solid #f87171;
+  text-shadow:
+    -1px -1px 0 rgba(255, 255, 255, 0.9),
+    1px -1px 0 rgba(255, 255, 255, 0.9),
+    -1px 1px 0 rgba(255, 255, 255, 0.9),
+    1px 1px 0 rgba(255, 255, 255, 0.9);
+  -webkit-text-stroke: 0.5px #b91c1c;
 }
 
 .cellAmber {
-  background-color: #fffbe6;
+  background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
   color: #b45309;
-  border: 1px solid #fde68a;
+  border: 2px solid #fbbf24;
+  text-shadow:
+    -1px -1px 0 rgba(255, 255, 255, 0.9),
+    1px -1px 0 rgba(255, 255, 255, 0.9),
+    -1px 1px 0 rgba(255, 255, 255, 0.9),
+    1px 1px 0 rgba(255, 255, 255, 0.9);
+  -webkit-text-stroke: 0.5px #b45309;
 }
 
 .cellBlue {
-  background-color: #f0f9ff;
-  color: #0369a1;
-  border: 1px solid #bae6fd;
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+  color: #1d4ed8;
+  border: 2px solid #60a5fa;
+  text-shadow:
+    -1px -1px 0 rgba(255, 255, 255, 0.9),
+    1px -1px 0 rgba(255, 255, 255, 0.9),
+    -1px 1px 0 rgba(255, 255, 255, 0.9),
+    1px 1px 0 rgba(255, 255, 255, 0.9);
+  -webkit-text-stroke: 0.5px #1d4ed8;
 }
 
 /* PRODUCTION PROCESS FLOW SECTION */
@@ -538,16 +664,17 @@
 }
 
 .flowTitle {
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 800;
   color: #0f172a;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
 .flowSubtitle {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   color: #64748b;
+  font-weight: 600;
 }
 
 .flowDiagram {
@@ -561,65 +688,68 @@
 .flowNode {
   flex: 1;
   min-width: 0;
-  background-color: #f8fafc;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .nodeTitle {
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: #64748b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.nodeMain {
-  font-size: 0.95rem;
+  font-size: 0.74rem;
   font-weight: 800;
-  color: #0369a1;
-  white-space: nowrap;
-}
-
-.progressTrack {
-  width: 100%;
-  height: 6px;
-  background-color: #e2e8f0;
-  border-radius: 3px;
-  overflow: hidden;
-  margin: 2px 0;
-}
-
-.progressBar {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.nodeSub {
-  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
   color: #475569;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.nodeMain {
+  font-size: 1.28rem;
+  font-weight: 900;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.progressTrack {
+  width: 100%;
+  height: 8px;
+  background-color: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 3px 0;
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.nodeSub {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .flowArrow {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background-color: #e0f2fe;
   color: #0284c7;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: bold;
   flex-shrink: 0;
 }
@@ -628,7 +758,7 @@
 .rightColumn {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   height: 100%;
   justify-content: space-between;
   min-height: 0;
@@ -641,12 +771,13 @@
   align-items: center;
   justify-content: space-between;
   background-color: #ffffff;
-  border: 1px solid #e1e7ed;
-  border-radius: 6px;
-  padding: 10px 14px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 10px 4px 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
   min-height: 0;
   position: relative;
+  overflow: hidden;
 }
 
 .chartHeaderRow {
@@ -659,10 +790,10 @@
 }
 
 .chartTitle {
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: 800;
   text-transform: uppercase;
-  color: #334155;
+  color: #1e293b;
   letter-spacing: 0.03em;
   white-space: nowrap;
   overflow: hidden;
@@ -681,7 +812,7 @@
   position: relative;
   width: 100%;
   flex: 1;
-  min-height: 85px;
+  min-height: 70px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -694,20 +825,41 @@
   transform: translate(-50%, -50%);
   text-align: center;
   pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 90px;
 }
 
 .chartCenterNumber {
-  font-size: 1.25rem;
-  font-weight: 800;
+  font-size: 1.45rem;
+  font-weight: 900;
   color: #0f172a;
-  line-height: 1;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  /* High-contrast multi-pass white outline so numbers pop out and are easy to see */
+  text-shadow:
+    -1.5px -1.5px 0 #ffffff,
+    1.5px -1.5px 0 #ffffff,
+    -1.5px 1.5px 0 #ffffff,
+    1.5px 1.5px 0 #ffffff,
+    0px -1.5px 0 #ffffff,
+    0px 1.5px 0 #ffffff,
+    -1.5px 0px 0 #ffffff,
+    1.5px 0px 0 #ffffff,
+    0px 2px 4px rgba(15, 23, 42, 0.2);
+  -webkit-text-stroke: 0.5px #0f172a;
 }
 
 .chartCenterSub {
-  font-size: 0.65rem;
-  color: #64748b;
-  font-weight: 600;
+  font-size: 0.68rem;
+  color: #475569;
+  font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .skeletonContainer {
@@ -729,6 +881,7 @@
   0% {
     background-position: 200% 0;
   }
+
   100% {
     background-position: -200% 0;
   }
@@ -778,7 +931,7 @@
 .doubleSidedContainer {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   flex: 1;
   height: 100%;
@@ -789,9 +942,9 @@
 .sidesGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  flex: 1.15;
+  flex: 1;
   min-height: 0;
 }
 
@@ -817,7 +970,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-bottom: 1px solid #f1f5f9;
   flex-shrink: 0;
 }
@@ -877,7 +1030,8 @@
 .sideTable {
   width: 100%;
   height: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 3px;
   font-size: 0.78rem;
   table-layout: fixed;
 }
@@ -886,182 +1040,164 @@
   flex-shrink: 0;
 }
 
+.sideTable thead tr {
+  height: 85px;
+}
+
 .sideTable tbody {
   height: 100%;
 }
 
 .sideTable tbody tr {
-  height: calc(100% / 3);
+  height: calc(100% / 4);
 }
 
 .thSideStage {
-  background-color: #f8fafc;
-  color: #475569;
-  font-weight: 700;
-  font-size: 0.72rem;
-  text-align: left;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+  color: #0f172a;
+  font-weight: 900;
+  font-size: 1.15rem;
+  text-align: center;
+  padding: 0;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
   width: 28%;
+  height: 85px;
+  min-height: 85px;
+  box-sizing: border-box;
+  vertical-align: middle;
 }
 
 .thSideSub {
   background-color: #f8fafc;
   color: #475569;
-  font-weight: 700;
-  font-size: 0.72rem;
+  font-weight: 900;
   text-align: center;
-  padding: 8px 8px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 0;
+  border: 2px solid #e2e8f0;
+  border-radius: 6px;
   width: 18%;
+  height: 85px;
+  min-height: 85px;
+  box-sizing: border-box;
+  vertical-align: middle;
 }
 
 .tdSideStage {
-  padding: 8px 12px;
-  font-weight: 700;
-  color: #1e293b;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 4px 10px;
+  font-weight: 800;
+  color: #0f172a;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
   white-space: nowrap;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   vertical-align: middle;
 }
 
 .sideTable .tdCell {
-  padding: 8px 8px;
-  font-size: 1.05rem;
-  font-weight: 800;
-  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 1.45rem;
+  font-weight: 900;
+  border-radius: 6px;
   vertical-align: middle;
 }
 
-/* Converging Flow Connector */
-.flowConnector {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  margin: 2px 0;
-  flex-shrink: 0;
-}
-
-.connectorLine {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-  color: #f8fafc;
-  padding: 5px 16px;
-  border-radius: 20px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  letter-spacing: 0.03em;
-}
-
-.connectorIcon {
-  font-size: 0.85rem;
-  color: #38bdf8;
-}
-
-/* Shared SMT FG Final Release Card */
-.sharedFgCard {
+/* Compact SMT FG Final Release Bar */
+.sharedFgCardCompact {
   background-color: #ffffff;
   border: 1.5px solid #10b981;
   border-radius: 8px;
-  box-shadow: 0 2px 5px rgba(16, 185, 129, 0.1);
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.08);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  flex: 0.95;
-  min-height: 0;
+  gap: 6px;
+  padding: 7px 12px 6px 12px;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-.sharedFgHeader {
+.sharedFgCompactHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-  padding: 8px 14px;
-  border-bottom: 1px solid #a7f3d0;
-  flex-shrink: 0;
+  flex-wrap: nowrap;
+  gap: 8px;
 }
 
 .sharedFgTitle {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 800;
   color: #065f46;
   letter-spacing: -0.01em;
 }
 
-.sharedFgBadge {
-  background-color: #059669;
-  color: #ffffff;
-  font-size: 0.68rem;
+.flowBadge {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: #38bdf8;
+  font-size: 0.65rem;
   font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 4px;
-  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.04em;
+  margin-left: 6px;
 }
 
-.sharedFgBody {
-  padding: 12px 16px;
+.sharedFgCompactSub {
+  font-size: 0.74rem;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compactDot {
+  color: #94a3b8;
+}
+
+.sharedFgCompactContent {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 10px;
-  flex: 1;
-  min-height: 0;
+  gap: 6px;
 }
 
-.sharedFgMetricsGrid {
+.sharedFgMetricsInline {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  flex: 1;
-  min-height: 0;
-  align-items: stretch;
+  gap: 8px;
 }
 
-.sharedFgMetricBox {
+.compactMetricItem {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 8px 6px;
+  justify-content: space-between;
+  padding: 4px 10px;
   border-radius: 6px;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  height: 100%;
   box-sizing: border-box;
 }
 
-.sharedFgMetricValue {
-  font-size: 1.45rem;
+.compactMetricLabel {
+  font-size: 0.7rem;
   font-weight: 800;
-  line-height: 1.2;
-  width: 100%;
-  text-align: center;
-  padding: 4px 0;
-  border-radius: 4px;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
 }
 
-.sharedFgMetricLabel {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #64748b;
-  text-transform: uppercase;
-  margin-top: 4px;
-  letter-spacing: 0.02em;
+.compactMetricValue {
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 1;
 }
 
-.sharedFgProgressBar {
+.sharedFgProgressBarCompact {
   width: 100%;
-  height: 9px;
+  height: 6px;
   background-color: #e2e8f0;
-  border-radius: 5px;
+  border-radius: 3px;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -1069,17 +1205,8 @@
 .sharedFgProgressFill {
   height: 100%;
   background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-  border-radius: 5px;
+  border-radius: 3px;
   transition: width 0.3s ease;
-}
-
-.sharedFgSub {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.75rem;
-  color: #64748b;
-  font-weight: 600;
-  flex-shrink: 0;
 }
 
 @media (max-height: 720px) {
@@ -1093,9 +1220,11 @@
     height: auto;
     overflow: auto;
   }
+
   .twoColumnGrid {
     grid-template-columns: minmax(0, 1fr) 200px;
   }
+
   .sidesGrid {
     grid-template-columns: 1fr;
   }
@@ -1106,26 +1235,33 @@
     grid-template-columns: 1fr;
     gap: 12px;
   }
+
   .woHeaderCard {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .headerItem:not(:last-child) {
     border-right: none;
   }
+
   .flowDiagram {
     flex-direction: column;
     align-items: stretch;
   }
+
   .flowArrow {
     transform: rotate(90deg);
     align-self: center;
   }
+
   .rightColumn {
     height: auto;
   }
+
   .chartCard {
     height: 160px;
   }
+
   .sidesGrid {
     grid-template-columns: 1fr;
   }

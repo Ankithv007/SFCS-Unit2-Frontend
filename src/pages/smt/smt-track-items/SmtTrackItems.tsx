@@ -4,7 +4,7 @@ import styles from './SmtTrackItems.module.css';
 import {
     Search, Package, AlertTriangle,
     Clock, Activity, Zap, ArrowDown, RotateCcw, ChevronRight,
-    FileText, TrendingUp, Download, Cpu, MapPin, Filter
+    FileText, TrendingUp, Download, Cpu, MapPin, Filter, Eye
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -43,11 +43,12 @@ interface SmtTrackResult {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SMT_PIPELINE = ['Serial Number', 'Printing', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
+const SMT_PIPELINE = ['Serial Number', 'Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
 
 const STAGE_ROUTES: Record<string, string> = {
     'Serial Number': '/smt/serial-number',
     'Printing': '/smt/printing',
+    'SPI': '/smt/spi',
     'Pre AOI': '/smt/pre-aoi',
     'Post AOI': '/smt/post-aoi',
     'Rework': '/smt/rework',
@@ -91,6 +92,7 @@ const StationIcon: React.FC<{ station: string }> = ({ station }) => {
     const s = station.toLowerCase();
     if (s === 'rework') return <RotateCcw size={16} />;
     if (s === 'printing') return <Cpu size={16} />;
+    if (s === 'spi') return <Eye size={16} />;
     return <Zap size={16} />;
 };
 
@@ -535,7 +537,7 @@ const SmtTrackItems: React.FC = () => {
                             {/* TOP/BOTTOM dual pipeline */}
                             {(() => {
                                 const isDoubleSided = (data.sides || '').toLowerCase().includes('/');
-                                const SIDE_STAGES = ['Printing', 'Pre AOI', 'Post AOI', 'Rework'];
+                                const SIDE_STAGES = ['Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework'];
 
                                 const renderNode = (stage: string, side: string | null) => {
                                     const entries = side

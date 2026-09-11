@@ -45,6 +45,7 @@ export const systemPagesConfig: SystemPageRoute[] = [
     { permission_key: 'smt_serial_number', module_name: 'SMT', page_name: 'Serial Number', route_path: '/smt/serial-number', display_order: 53, page_type: 'PAGE', icon: 'Barcode', parent_module: 'SMT' },
     { permission_key: 'smt_printing', module_name: 'SMT', page_name: 'Printing', route_path: '/smt/printing', display_order: 54, page_type: 'PAGE', icon: 'Printer', parent_module: 'SMT' },
     { permission_key: 'smt_solder_paste', module_name: 'SMT', page_name: 'Solder Paste Management', route_path: '/smt/solder-paste', display_order: 55, page_type: 'PAGE', icon: 'Database', parent_module: 'SMT' },
+    { permission_key: 'smt_spi', module_name: 'SMT', page_name: 'SPI', route_path: '/smt/spi', display_order: 55, page_type: 'PAGE', icon: 'Eye', parent_module: 'SMT' },
     { permission_key: 'smt_pre_aoi', module_name: 'SMT', page_name: 'Pre AOI', route_path: '/smt/pre-aoi', display_order: 56, page_type: 'PAGE', icon: 'Eye', parent_module: 'SMT' },
     { permission_key: 'smt_post_aoi', module_name: 'SMT', page_name: 'Post AOI', route_path: '/smt/post-aoi', display_order: 57, page_type: 'PAGE', icon: 'CheckCircle', parent_module: 'SMT' },
     { permission_key: 'smt_rework', module_name: 'SMT', page_name: 'Rework', route_path: '/smt/rework', display_order: 58, page_type: 'PAGE', icon: 'Wrench', parent_module: 'SMT' },

@@ -404,12 +404,12 @@
     background-color: #f8fafc;
     color: #0f172a;
     font-weight: 800;
-    font-size: 1.1rem;
+    font-size: 1.15rem;
     text-align: center;
     padding: 0.75rem;
     border-bottom: 2px solid #e2e8f0;
     border-right: 1px solid #e2e8f0;
-    min-width: 150px;
+    min-width: 170px;
     position: sticky;
     top: 0;
     z-index: 10;
@@ -461,16 +461,16 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    min-height: 110px;
+    min-height: 130px;
     border-radius: 8px;
     border: 1.5px solid #cbd5e1;
-    padding: 0.75rem 0.5rem 0.5rem 0.5rem;
+    padding: 0.85rem 0.6rem 0.6rem 0.6rem;
     box-sizing: border-box;
     transition: all 0.2s ease-in-out;
     position: relative;
     background-color: #ffffff;
     cursor: pointer;
-    gap: 0.2rem;
+    gap: 0.35rem;
 }
 
 .cellCardOccupied:hover, .cellCardEmpty:hover {
@@ -503,14 +503,14 @@
     color: #2563eb;
     border: 1.5px solid #cbd5e1;
     border-radius: 6px;
-    padding: 0.2rem 0.45rem;
-    font-size: 0.725rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
     display: inline-flex;
     align-items: center;
-    gap: 0.2rem;
+    gap: 0.25rem;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
     z-index: 5;
 }
@@ -533,7 +533,7 @@
 .cellRackNumber {
     font-weight: 800;
     color: #1d4ed8;
-    font-size: 1rem;
+    font-size: 1.25rem;
     margin-top: 0.1rem;
     word-break: break-all;
     max-width: 100%;
@@ -544,8 +544,7 @@
 .cellJobNumber {
     font-weight: 700;
     color: #334155;
-    font-size: 0.85rem;
-    margin-top: 0.1rem;
+    font-size: 1.05rem;
     word-break: break-all;
     max-width: 100%;
     text-align: center;
@@ -554,27 +553,26 @@
 .cellStencilName {
     font-weight: 700;
     color: #0f172a;
-    font-size: 0.85rem;
-    margin-top: 0.1rem;
+    font-size: 1.05rem;
     word-break: break-word;
     max-width: 100%;
     text-align: center;
 }
 
 .cellStatusBadgeWrapper {
-    margin-top: 0.25rem;
+    margin-top: 0.35rem;
     width: 100%;
     display: flex;
     justify-content: center;
 }
 
 .statusBadge {
-    font-size: 0.675rem;
+    font-size: 0.8rem;
     font-weight: 800;
-    padding: 0.2rem 0.5rem;
+    padding: 0.25rem 0.65rem;
     border-radius: 6px;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
     box-shadow: 0 1px 2px rgba(0,0,0,0.06);
 }
 
@@ -591,7 +589,7 @@
 }
 
 .cellEmptyLabel {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     color: #64748b;
     font-weight: 600;
     margin-top: auto;
@@ -618,7 +616,7 @@
     border-radius: 16px;
     padding: 2rem;
     width: 100%;
-    max-width: 500px;
+    max-width: 520px;
     box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
 }
 
@@ -632,7 +630,7 @@
 }
 
 .modalHeader h3 {
-    font-size: 1.25rem;
+    font-size: 1.35rem;
     font-weight: 800;
     color: #0f172a;
     margin: 0;
@@ -666,9 +664,9 @@
 }
 
 .formGroup label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #334155;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1e293b;
 }
 
 .formGroup label span {
@@ -682,14 +680,15 @@
 }
 
 .input, .select, .textarea {
-    padding: 0.625rem 0.875rem;
-    border: 1px solid #cbd5e1;
+    padding: 0.75rem 1rem;
+    border: 1.5px solid #cbd5e1;
     border-radius: 8px;
-    font-size: 0.9rem;
+    font-size: 1rem;
+    font-weight: 500;
     transition: all 0.2s ease;
     outline: none;
     background-color: #ffffff;
-    color: #1e293b;
+    color: #0f172a;
 }
 
 .input:focus, .select:focus, .textarea:focus {

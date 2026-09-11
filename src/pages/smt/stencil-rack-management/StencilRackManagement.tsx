@@ -559,7 +559,7 @@ const StencilRackManagement: React.FC = () => {
                                                                                     handleCellClick(loc);
                                                                                 }}
                                                                             >
-                                                                                <Edit2 size={12} /> Edit
+                                                                                <Edit2 size={14} /> Edit
                                                                             </button>
                                                                         )}
                                                                         <div className={styles.cellRackNumber}>{loc.stencil_rack_number}</div>
@@ -591,7 +591,7 @@ const StencilRackManagement: React.FC = () => {
                                                                                     handleCellClick(loc);
                                                                                 }}
                                                                             >
-                                                                                <Edit2 size={12} /> Edit
+                                                                                <Edit2 size={14} /> Edit
                                                                             </button>
                                                                         )}
                                                                         <div className={styles.cellEmptyLabel}>Empty Location</div>

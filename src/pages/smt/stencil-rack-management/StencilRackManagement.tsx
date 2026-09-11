@@ -512,7 +512,7 @@ const StencilRackManagement: React.FC = () => {
                                 <table className={styles.matrixTable}>
                                     <thead>
                                         <tr>
-                                            <th></th>
+                                            <th className={styles.cornerHeader}></th>
                                             {Array.from({ length: selectedRack.columns }, (_, i) => (
                                                 <th key={i}>C{i + 1}</th>
                                             ))}
@@ -544,31 +544,64 @@ const StencilRackManagement: React.FC = () => {
                                                                 className={`${styles.matrixCell} ${cellClass}`}
                                                             >
                                                                 {loc.status !== 'EMPTY' ? (
-                                                                    <div className={styles.cellCardOccupied}>
-                                                                        {canEditLocations && (
-                                                                            <button 
-                                                                                type="button" 
-                                                                                className={styles.cellEditBtn}
-                                                                                title="Edit Stencil Location"
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    if (selectedRack.status === 'INACTIVE') {
-                                                                                        showToast('This rack is INACTIVE. Grid edits are locked.', 'error');
-                                                                                        return;
-                                                                                    }
-                                                                                    handleCellClick(loc);
-                                                                                }}
+                                                                    <div 
+                                                                        className={styles.cellCardOccupied}
+                                                                        onClick={() => {
+                                                                            if (canEditLocations) {
+                                                                                if (selectedRack.status === 'INACTIVE') {
+                                                                                    showToast('This rack is INACTIVE. Grid edits are locked.', 'error');
+                                                                                    return;
+                                                                                }
+                                                                                handleCellClick(loc);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        {/* Top Row: Stencil Number (Left Upper) & Edit Button (Right Upper) */}
+                                                                        <div className={styles.cellCardTopRow}>
+                                                                            <span 
+                                                                                className={styles.cellRackNumber} 
+                                                                                title={`Stencil Number: ${loc.stencil_rack_number || '-'}`}
                                                                             >
-                                                                                <Edit2 size={14} /> Edit
-                                                                            </button>
-                                                                        )}
-                                                                        <div className={styles.cellRackNumber}>{loc.stencil_rack_number}</div>
-                                                                        <div className={styles.cellJobNumber}>{loc.job_number}</div>
-                                                                        {loc.stencil_name && (
-                                                                            <div className={styles.cellStencilName} title={loc.stencil_name}>
-                                                                                {loc.stencil_name}
+                                                                                {loc.stencil_rack_number || '-'}
+                                                                            </span>
+                                                                            {canEditLocations && (
+                                                                                <button 
+                                                                                    type="button" 
+                                                                                    className={styles.cellEditBtn}
+                                                                                    title="Edit Stencil Location"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        if (selectedRack.status === 'INACTIVE') {
+                                                                                            showToast('This rack is INACTIVE. Grid edits are locked.', 'error');
+                                                                                            return;
+                                                                                        }
+                                                                                        handleCellClick(loc);
+                                                                                    }}
+                                                                                >
+                                                                                    <Edit2 size={12} /> Edit
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {/* Middle Body: Job Number & Stencil Name */}
+                                                                        <div className={styles.cellCardBody}>
+                                                                            <div 
+                                                                                className={styles.cellJobNumber} 
+                                                                                title={`Job Number: ${loc.job_number || '-'}`}
+                                                                            >
+                                                                                {loc.job_number || '-'}
                                                                             </div>
-                                                                        )}
+                                                                            {loc.stencil_name && (
+                                                                                <div 
+                                                                                    className={styles.cellStencilName} 
+                                                                                    title={`Stencil Name: ${loc.stencil_name}`}
+                                                                                >
+                                                                                    {loc.stencil_name}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {/* Bottom Row: Status Badge */}
                                                                         <div className={styles.cellStatusBadgeWrapper}>
                                                                             <span className={`${styles.statusBadge} ${loc.status === 'STORED' ? styles.statusStored : styles.statusCheckedOut}`}>
                                                                                 {loc.status}
@@ -576,25 +609,54 @@ const StencilRackManagement: React.FC = () => {
                                                                         </div>
                                                                     </div>
                                                                 ) : (
-                                                                    <div className={styles.cellCardEmpty}>
-                                                                        {canEditLocations && (
-                                                                            <button 
-                                                                                type="button" 
-                                                                                className={styles.cellEditBtn}
-                                                                                title="Edit Stencil Location"
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    if (selectedRack.status === 'INACTIVE') {
-                                                                                        showToast('This rack is INACTIVE. Grid edits are locked.', 'error');
-                                                                                        return;
-                                                                                    }
-                                                                                    handleCellClick(loc);
-                                                                                }}
+                                                                    <div 
+                                                                        className={styles.cellCardEmpty}
+                                                                        onClick={() => {
+                                                                            if (canEditLocations) {
+                                                                                if (selectedRack.status === 'INACTIVE') {
+                                                                                    showToast('This rack is INACTIVE. Grid edits are locked.', 'error');
+                                                                                    return;
+                                                                                }
+                                                                                handleCellClick(loc);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        {/* Top Row: Location Code (Left Upper) & Edit Button (Right Upper) */}
+                                                                        <div className={styles.cellCardTopRow}>
+                                                                            <span 
+                                                                                className={styles.cellEmptyCoordinate} 
+                                                                                title={`Location: ${loc.location_code}`}
                                                                             >
-                                                                                <Edit2 size={14} /> Edit
-                                                                            </button>
-                                                                        )}
-                                                                        <div className={styles.cellEmptyLabel}>Empty Location</div>
+                                                                                {loc.location_code}
+                                                                            </span>
+                                                                            {canEditLocations && (
+                                                                                <button 
+                                                                                    type="button" 
+                                                                                    className={styles.cellEditBtn}
+                                                                                    title="Assign Stencil Location"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        if (selectedRack.status === 'INACTIVE') {
+                                                                                            showToast('This rack is INACTIVE. Grid edits are locked.', 'error');
+                                                                                            return;
+                                                                                        }
+                                                                                        handleCellClick(loc);
+                                                                                    }}
+                                                                                >
+                                                                                    <Edit2 size={12} /> Edit
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+
+                                                                        <div className={styles.cellCardBody}>
+                                                                            <div className={styles.cellEmptyLabel}>Empty Location</div>
+                                                                        </div>
+
+                                                                        <div className={styles.cellStatusBadgeWrapper}>
+                                                                            <span className={`${styles.statusBadge} ${styles.statusEmpty}`}>
+                                                                                EMPTY
+                                                                            </span>
+                                                                        </div>
                                                                     </div>
                                                                 )}
                                                             </td>

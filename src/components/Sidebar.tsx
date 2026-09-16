@@ -72,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     // Module visibility checks
     const canViewAdminPanel = hasPermission('admin_panel');
     
-    const canViewSmtModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('smt_') && p.can_view);
+    const canViewSmtModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('smt_') && p.permission_key !== 'smt_work_order' && p.can_view);
     const canViewBackendModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('backend_') && p.can_view);
     const canViewPreTestingModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('pre_') && p.can_view);
     const canViewInventoryModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('inv_') && p.can_view);
@@ -80,7 +80,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     useEffect(() => {
         if (location.pathname.startsWith('/pre-testing')) setExpandedModule('pre-testing');
         else if (location.pathname.startsWith('/smt')) {
-            setExpandedModule('smt');
+            if (location.pathname !== '/smt/work-order') {
+                setExpandedModule('smt');
+            }
 
             if (location.pathname.startsWith('/smt/stencil')) {
                 setIsStencilMgmtExpanded(true);
@@ -151,6 +153,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                 </div>
             )}
 
+            {hasPermission('smt_work_order') && (
+                <div
+                    className={`${styles.menuItem} ${isActive('/smt/work-order') ? styles.active : ''}`}
+                    onClick={() => navigate('/smt/work-order')}
+                    title="Work Order"
+                >
+                    <span className={styles.menuIcon}>
+                        <ClipboardList size={20} />
+                    </span>
+                    <span className={styles.menuText}>Work Order</span>
+                </div>
+            )}
+
             {/* SMT Module */}
             {canViewSmtModule && (
                 <div className={styles.moduleWrapper}>
@@ -168,16 +183,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
 
                     {expandedModule === 'smt' && isExpanded && (
                         <div className={styles.submenu}>
-                            {hasPermission('smt_work_order') && (
-                                <div
-                                    className={`${styles.submenuItem} ${isActive('/smt/work-order') ? styles.activeSubmenu : ''}`}
-                                    onClick={() => navigate('/smt/work-order')}
-                                >
-                                    <span className={styles.menuIcon}>
-                                        <ClipboardList size={18} />
-                                    </span> Work Order
-                                </div>
-                            )}
                             {hasPermission('smt_qms') && (
                                 <div
                                     className={`${styles.submenuItem} ${isActive('/smt/qms') ? styles.activeSubmenu : ''}`}

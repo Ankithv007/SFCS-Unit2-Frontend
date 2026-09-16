@@ -5,13 +5,13 @@ import {
     Search, Package, CheckCircle, AlertTriangle,
     Clock, Activity, Zap, ArrowDown, RotateCcw, ChevronRight,
     User, Calendar, FileText, Wrench, MapPin, TrendingUp, Download,
-    Filter
+    Filter, Layers
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { useAuth } from '../../hooks/useAuth';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+
 
 interface ScanEntry {
     station: string;
@@ -36,6 +36,8 @@ interface TrackResult {
     customer_name: string;
     model: string;
     quantity: number;
+    has_smt?: boolean;
+    has_backend?: boolean;
     current_stage: string;
     current_status: string;
     failed_stage: string | null;
@@ -48,6 +50,7 @@ interface TrackResult {
     total_reworks: number;
     total_debugs: number;
     scan_history: ScanEntry[];
+    smt_scan_history?: any[];
     selected_stages?: any;
     active_route?: Array<{
         id: number;
@@ -57,7 +60,6 @@ interface TrackResult {
     }>;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const PRODUCTION_PIPELINE = [
     { code: 'PTH', name: 'Pre-Soldering', label: 'PTH' },
@@ -70,6 +72,8 @@ const PRODUCTION_PIPELINE = [
     { code: 'QI', name: 'Quality Inspection', label: 'QI' },
     { code: 'PACKING', name: 'Packing', label: 'Packing' }
 ];
+
+const SMT_PIPELINE_STAGES = ['Serial Number', 'Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
 
 const fmt = (ts: string | null | undefined) =>
     ts ? new Date(ts).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }) : '—';
@@ -196,7 +200,8 @@ const TrackItems: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [appeared, setAppeared] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
-    
+    const [selectedPipelineView, setSelectedPipelineView] = useState<'backend' | 'smt'>('backend');
+
     // Filter State
     const [filterDate, setFilterDate] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
@@ -208,9 +213,9 @@ const TrackItems: React.FC = () => {
     const inputRef = useRef<HTMLInputElement>(null);
     const printRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => { 
-        inputRef.current?.focus(); 
-        
+    useEffect(() => {
+        inputRef.current?.focus();
+
         const fetchWOs = async () => {
             try {
                 const res = await apiFetch('/api/backend/work-order?all=true');
@@ -310,9 +315,9 @@ const TrackItems: React.FC = () => {
         }
 
         // 1. Get all scan history entries for this stage
-        const entries = data.scan_history.filter(h => 
-            h.station === stage.name || 
-            h.station === stage.code || 
+        const entries = data.scan_history.filter(h =>
+            h.station === stage.name ||
+            h.station === stage.code ||
             h.station === stage.label
         );
 
@@ -423,7 +428,7 @@ const TrackItems: React.FC = () => {
                     </div>
                 </div>
                 {(data || woData) && (
-                    <button 
+                    <button
                         type="button"
                         onClick={handleDownloadPdf}
                         disabled={isDownloading}
@@ -446,12 +451,12 @@ const TrackItems: React.FC = () => {
             <div className={styles.searchPanel}>
                 <form onSubmit={handleSearch} className={styles.searchForm}>
                     <div className={styles.searchInputWrap} style={{ display: 'flex', gap: '0', padding: '0', border: 'none', background: 'transparent' }}>
-                        <select 
+                        <select
                             value={searchType}
                             onChange={(e) => setSearchType(e.target.value as 'serial' | 'wo')}
-                            style={{ 
-                                padding: '12px 16px', 
-                                border: '2px solid #e2e8f0', 
+                            style={{
+                                padding: '12px 16px',
+                                border: '2px solid #e2e8f0',
                                 borderRight: 'none',
                                 borderRadius: '12px 0 0 12px',
                                 background: '#f8fafc',
@@ -470,9 +475,9 @@ const TrackItems: React.FC = () => {
                             {searchType === 'serial' ? (
                                 <input
                                     ref={inputRef}
-                                    style={{ 
-                                        width: '100%', 
-                                        padding: '16px 16px 16px 48px', 
+                                    style={{
+                                        width: '100%',
+                                        padding: '16px 16px 16px 48px',
                                         border: '2px solid #e2e8f0',
                                         borderRadius: '0 12px 12px 0',
                                         fontSize: '15px',
@@ -485,9 +490,9 @@ const TrackItems: React.FC = () => {
                                 />
                             ) : (
                                 <select
-                                    style={{ 
-                                        width: '100%', 
-                                        padding: '16px 16px 16px 48px', 
+                                    style={{
+                                        width: '100%',
+                                        padding: '16px 16px 16px 48px',
                                         border: '2px solid #e2e8f0',
                                         borderRadius: '0 12px 12px 0',
                                         fontSize: '15px',
@@ -530,370 +535,474 @@ const TrackItems: React.FC = () => {
                 <>
                     <div className={`${styles.resultsWrap} ${appeared ? styles.revealed : ''}`} style={{ padding: '20px', background: '#fff', borderRadius: '12px' }}>
 
-                    {/* ── Summary Cards Row ── */}
-                    <div className={styles.summaryRow}>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
-                                <Package size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>PCB Barcode</div>
-                                <div className={styles.summaryValue}>{data.barcode}</div>
-                            </div>
-                        </div>
-                        {data.unit_serial_number && (
+                        {/* ── Summary Cards Row ── */}
+                        <div className={styles.summaryRow}>
                             <div className={styles.summaryCard}>
-                                <div className={styles.summaryIcon} style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
                                     <Package size={22} />
                                 </div>
                                 <div>
-                                    <div className={styles.summaryLabel}>Unit Serial No</div>
-                                    <div className={styles.summaryValue} style={{ color: '#22c55e' }}>{data.unit_serial_number}</div>
+                                    <div className={styles.summaryLabel}>PCB Barcode</div>
+                                    <div className={styles.summaryValue}>{data.barcode}</div>
                                 </div>
                             </div>
-                        )}
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}>
-                                <FileText size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Work Order</div>
-                                <div className={styles.summaryValue} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    {data.wo_number}
-                                    {data.wo_number && data.wo_number !== '-' && (
-                                        <button 
-                                            onClick={() => {
-                                                setSearchType('wo');
-                                                setQuery(data.wo_number);
-                                                handleSearch(undefined, data.wo_number, 'wo');
-                                            }}
-                                            title="Track this Work Order"
-                                            style={{ 
-                                                background: '#f8fafc', border: '1px solid #cbd5e1', 
-                                                borderRadius: '4px', cursor: 'pointer', padding: '4px', 
-                                                display: 'flex', alignItems: 'center', color: '#3b82f6',
-                                                transition: 'all 0.2s'
-                                            }}
-                                            onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                                            onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
-                                        >
-                                            <Search size={14} />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
-                                <TrendingUp size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Model</div>
-                                <div className={styles.summaryValue}>{data.model}</div>
-                            </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: statusBg(data.current_status), color: statusColor(data.current_status) }}>
-                                <MapPin size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Current Stage</div>
-                                <div className={styles.summaryValue}>{data.current_stage}</div>
-                            </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: statusBg(data.current_status), color: statusColor(data.current_status) }}>
-                                <Activity size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Status</div>
-                                <StatusBadge status={data.current_status} />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ── Stats Row ── */}
-                    <div className={styles.statsRow}>
-                        <div className={styles.statPill} style={{ '--c': '#ef4444' } as React.CSSProperties}>
-                            <span className={styles.statNum}>{data.total_failures}</span>
-                            <span className={styles.statLbl}>Total Failures</span>
-                        </div>
-                        <div className={styles.statPill} style={{ '--c': '#f59e0b' } as React.CSSProperties}>
-                            <span className={styles.statNum}>{data.total_reworks}</span>
-                            <span className={styles.statLbl}>Rework Repairs</span>
-                        </div>
-                        <div className={styles.statPill} style={{ '--c': '#ef4444' } as React.CSSProperties}>
-                            <span className={styles.statNum}>{data.total_debugs}</span>
-                            <span className={styles.statLbl}>Debug Repairs</span>
-                        </div>
-                        <div className={styles.finalStatus} style={{ background: statusBg(data.current_status), borderColor: `${statusColor(data.current_status)}44`, color: statusColor(data.current_status) }}>
-                            <Zap size={16} />
-                            {data.final_status_label}
-                        </div>
-                    </div>
-
-                    {/* ── Main two-column layout ── */}
-                    <div className={styles.mainGrid}>
-
-                        {/* LEFT: Pipeline Flow */}
-                        <div className={styles.pipelinePanel}>
-                            <h3 className={styles.panelTitle}><ChevronRight size={18} /> Production Pipeline</h3>
-
-                            <div className={styles.pipeline}>
-                                {/* Work Order node */}
-                                <div className={styles.pipelineNode}>
-                                    <div className={styles.pipelineNodeDot} style={{ background: '#3b82f6', boxShadow: '0 0 0 4px rgba(59,130,246,0.2)' }}>
-                                        <Package size={14} />
+                            {data.unit_serial_number && (
+                                <div className={styles.summaryCard}>
+                                    <div className={styles.summaryIcon} style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>
+                                        <Package size={22} />
                                     </div>
-                                    <div className={styles.pipelineNodeLabel}>Work Order</div>
-                                    <StatusBadge status="ACCEPTED" small />
-                                </div>
-                                <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
-
-                                 {PRODUCTION_PIPELINE.map((stage, idx) => {
-                                     const stStatus = getStageStatus(stage);
-                                     const isSkipped = stStatus === 'SKIPPED';
-                                     const isCurrent = !isSkipped && stStatus === 'IN_PROGRESS';
-                                     const visited = !isSkipped && stStatus !== 'pending';
-                                     const color = statusColor(stStatus);
-                                     const entries = data.scan_history.filter(h => 
-                                         h.station === stage.name || 
-                                         h.station === stage.code || 
-                                         h.station === stage.label
-                                     );
-                                     const isLast = idx === PRODUCTION_PIPELINE.length - 1;
-
-                                     return (
-                                         <React.Fragment key={stage.code}>
-                                             <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''} ${isSkipped ? styles.pipelineNodeSkipped : ''}`}>
-                                                 <div className={styles.pipelineNodeDot} style={{
-                                                     background: isSkipped ? '#f1f5f9' : color,
-                                                     color: isSkipped ? '#94a3b8' : '#ffffff',
-                                                     border: isSkipped ? '1px dashed #cbd5e1' : 'none',
-                                                     boxShadow: isCurrent 
-                                                         ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` 
-                                                         : (isSkipped ? 'none' : `0 0 0 4px ${color}22`),
-                                                 }}>
-                                                     <StationIcon station={stage.code} />
-                                                 </div>
-                                                 <div className={styles.pipelineNodeLabel} style={{ color: isSkipped ? '#94a3b8' : (visited ? '#1e293b' : '#94a3b8') }}>
-                                                     {stage.label}
-                                                     {isCurrent && <span className={styles.liveTag}>LIVE</span>}
-                                                 </div>
-                                                 {isSkipped ? (
-                                                     <StatusBadge status="SKIPPED" small />
-                                                 ) : visited ? (
-                                                     <StatusBadge status={stStatus} small />
-                                                 ) : (
-                                                     <span className={styles.pendingTag}>Pending</span>
-                                                 )}
-                                                 {entries.length > 1 && !isSkipped && (
-                                                     <span className={styles.rescannedTag}>×{entries.length} scans</span>
-                                                 )}
-                                             </div>
-
-                                             {/* Repair branch nodes */}
-                                             {!isSkipped && entries.some(e => e.status === 'REWORK') && (() => {
-                                                 const isActive = data.current_stage === 'Rework';
-                                                 return (
-                                                     <div className={styles.repairBranch}>
-                                                         <div className={styles.branchLine} />
-                                                         <div className={styles.branchNode} style={{ 
-                                                             background: isActive ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.08)', 
-                                                             borderColor: isActive ? '#f59e0b' : '#10b98144' 
-                                                         }}>
-                                                             <RotateCcw size={12} style={{ color: isActive ? '#f59e0b' : '#10b981' }} />
-                                                             <span style={{ color: isActive ? '#f59e0b' : '#10b981', fontWeight: 700 }}>
-                                                                 {isActive ? 'REWORK (ACTIVE)' : 'REWORK (PASSED)'}
-                                                             </span>
-                                                             <span style={{ color: '#64748b', fontSize: '0.7rem' }}>
-                                                                 {isActive ? 'in repair queue' : 'repaired'}
-                                                             </span>
-                                                         </div>
-                                                     </div>
-                                                 );
-                                             })()}
-
-                                             {!isSkipped && entries.some(e => e.status === 'DEBUG') && (() => {
-                                                 const isActive = data.current_stage === 'Debug';
-                                                 return (
-                                                     <div className={styles.repairBranch}>
-                                                         <div className={styles.branchLine} />
-                                                         <div className={styles.branchNode} style={{ 
-                                                             background: isActive ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.08)', 
-                                                             borderColor: isActive ? '#ef4444' : '#10b98144' 
-                                                         }}>
-                                                             <Wrench size={12} style={{ color: isActive ? '#ef4444' : '#10b981' }} />
-                                                             <span style={{ color: isActive ? '#ef4444' : '#10b981', fontWeight: 700 }}>
-                                                                 {isActive ? 'DEBUG (ACTIVE)' : 'DEBUG (PASSED)'}
-                                                             </span>
-                                                             <span style={{ color: '#64748b', fontSize: '0.7rem' }}>
-                                                                 {isActive ? 'in debug queue' : 'repaired'}
-                                                             </span>
-                                                         </div>
-                                                     </div>
-                                                 );
-                                             })()}
-
-                                             {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
-                                         </React.Fragment>
-                                     );
-                                 })}
-                            </div>
-
-                            {/* Lifecycle Timestamps */}
-                            <div className={styles.lifecycleBox}>
-                                <h4 className={styles.lifecycleTitle}>Repair Lifecycle Timestamps</h4>
-                                <div className={styles.lifecycleGrid}>
-                                    <div className={styles.lifecycleItem}>
-                                        <AlertTriangle size={14} style={{ color: '#ef4444' }} />
-                                        <div>
-                                            <div className={styles.lifecycleLabel}>Failure Detected</div>
-                                            <div className={styles.lifecycleVal}>{fmt(data.failure_created_at)}</div>
-                                        </div>
+                                    <div>
+                                        <div className={styles.summaryLabel}>Unit Serial No</div>
+                                        <div className={styles.summaryValue} style={{ color: '#22c55e' }}>{data.unit_serial_number}</div>
                                     </div>
-                                    <div className={styles.lifecycleItem}>
-                                        <Wrench size={14} style={{ color: '#f59e0b' }} />
-                                        <div>
-                                            <div className={styles.lifecycleLabel}>Repair Completed</div>
-                                            <div className={styles.lifecycleVal}>{fmt(data.repair_completed_at)}</div>
-                                        </div>
-                                    </div>
-                                    <div className={styles.lifecycleItem}>
-                                        <CheckCircle size={14} style={{ color: '#10b981' }} />
-                                        <div>
-                                            <div className={styles.lifecycleLabel}>Revalidated & Passed</div>
-                                            <div className={styles.lifecycleVal}>{fmt(data.revalidated_passed_at)}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* RIGHT: Timeline */}
-                        <div className={styles.timelinePanel}>
-                            <h3 className={styles.panelTitle}><Clock size={18} /> Full Event Timeline</h3>
-
-                            {data.scan_history.length === 0 ? (
-                                <div className={styles.emptyTimeline}>
-                                    <Clock size={40} />
-                                    <p>No scan events recorded yet.</p>
-                                </div>
-                            ) : (
-                                <div className={styles.timeline}>
-                                    {data.scan_history.map((entry, idx) => {
-                                        const isRepair = entry.station === 'Rework' || entry.station === 'Debug';
-                                        const color = statusColor(entry.status);
-                                        return (
-                                            <div
-                                                key={idx}
-                                                className={`${styles.timelineItem} ${isRepair ? styles.timelineRepair : ''}`}
-                                                style={{ '--c': color } as React.CSSProperties}
-                                            >
-                                                <div className={styles.timelineDot} style={{ background: color, boxShadow: `0 0 0 4px ${color}22` }}>
-                                                    <StationIcon station={entry.station} />
-                                                </div>
-
-                                                <div className={styles.timelineCard}>
-                                                    <div className={styles.timelineCardHeader}>
-                                                        <div className={styles.timelineCardTitle}>
-                                                            <span className={styles.timelineStation}>{entry.station}</span>
-                                                            <StatusBadge status={entry.status} small />
-                                                        </div>
-                                                        <div className={styles.timelineCardTime}>
-                                                            <Calendar size={12} />
-                                                            {fmt(entry.scanned_at)}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className={styles.timelineCardBody}>
-                                                        <div className={styles.timelineDetail}>
-                                                            <User size={12} />
-                                                            <span><strong>Operator:</strong> {entry.scanned_by}</span>
-                                                        </div>
-
-                                                        {entry.remarks && (
-                                                            <div className={styles.timelineDetail}>
-                                                                <FileText size={12} />
-                                                                <span><strong>Failure Remark:</strong> {entry.remarks}</span>
-                                                            </div>
-                                                        )}
-
-                                                        {entry.failed_remarks && entry.failed_remarks !== '-' && (
-                                                            <div className={styles.timelineDetail}>
-                                                                <AlertTriangle size={12} style={{ color: '#ef4444' }} />
-                                                                <span><strong>Original Failure:</strong> {entry.failed_remarks}</span>
-                                                            </div>
-                                                        )}
-
-                                                        {entry.repair_remark && (
-                                                            <div className={`${styles.timelineDetail} ${styles.repairDetail}`}>
-                                                                <Wrench size={12} style={{ color: '#10b981' }} />
-                                                                <span><strong>Repair Note:</strong> {entry.repair_remark}</span>
-                                                            </div>
-                                                        )}
-
-
-
-                                                        {entry.resolution_remarks && entry.resolution_remarks !== 'Fixed' && (
-                                                            <div className={styles.timelineDetail}>
-                                                                <CheckCircle size={12} style={{ color: '#10b981' }} />
-                                                                <span><strong>Resolution:</strong> {entry.resolution_remarks}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
                                 </div>
                             )}
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}>
+                                    <FileText size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Work Order</div>
+                                    <div className={styles.summaryValue} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        {data.wo_number}
+                                        {data.wo_number && data.wo_number !== '-' && (
+                                            <button
+                                                onClick={() => {
+                                                    setSearchType('wo');
+                                                    setQuery(data.wo_number);
+                                                    handleSearch(undefined, data.wo_number, 'wo');
+                                                }}
+                                                title="Track this Work Order"
+                                                style={{
+                                                    background: '#f8fafc', border: '1px solid #cbd5e1',
+                                                    borderRadius: '4px', cursor: 'pointer', padding: '4px',
+                                                    display: 'flex', alignItems: 'center', color: '#3b82f6',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                                                onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                                            >
+                                                <Search size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
+                                    <TrendingUp size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Model</div>
+                                    <div className={styles.summaryValue}>{data.model}</div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: statusBg(data.current_status), color: statusColor(data.current_status) }}>
+                                    <MapPin size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Current Stage</div>
+                                    <div className={styles.summaryValue}>{data.current_stage}</div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: statusBg(data.current_status), color: statusColor(data.current_status) }}>
+                                    <Activity size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Status</div>
+                                    <StatusBadge status={data.current_status} />
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>
+                                    <Layers size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Process Selection</div>
+                                    <div className={styles.summaryValue}>
+                                        <span style={{
+                                            background: 'rgba(99,102,241,0.12)',
+                                            color: '#6366f1',
+                                            border: '1px solid rgba(99,102,241,0.3)',
+                                            borderRadius: '9999px',
+                                            padding: '2px 10px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            letterSpacing: '0.03em',
+                                            display: 'inline-block'
+                                        }}>
+                                            {data.has_smt && data.has_backend ? 'SMT + Backend' : data.has_smt ? 'SMT' : 'Backend'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* ── Audit Table ── */}
-                    <div className={styles.auditPanel}>
-                        <h3 className={styles.panelTitle}><Activity size={18} /> Full Audit Log</h3>
-                        <div className={styles.tableWrap}>
-                            <table className={styles.auditTable}>
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Stage</th>
-                                        <th>Action</th>
-                                        <th>Operator</th>
-                                        <th>Date & Time</th>
-                                        <th>Failure Remark</th>
-                                        <th>Repair Note</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {data.scan_history.length === 0 ? (
-                                        <tr><td colSpan={7} className={styles.emptyRow}>No records.</td></tr>
-                                    ) : data.scan_history.map((row, idx) => (
-                                        <tr key={idx} className={row.station === 'Rework' || row.station === 'Debug' ? styles.repairRow : ''}>
-                                            <td className={styles.auditIdx}>{idx + 1}</td>
-                                            <td><strong>{row.station}</strong></td>
-                                            <td><StatusBadge status={row.status} small /></td>
-                                            <td>{row.scanned_by}</td>
-                                            <td className={styles.auditTime}>{fmt(row.scanned_at)}</td>
-                                            <td className={styles.remarkCell}>{row.remarks || row.failed_remarks || '—'}</td>
-                                            <td className={styles.remarkCell}>{row.repair_remark || '—'}</td>
+                        {/* ── Stats Row ── */}
+                        <div className={styles.statsRow}>
+                            <div className={styles.statPill} style={{ '--c': '#ef4444' } as React.CSSProperties}>
+                                <span className={styles.statNum}>{data.total_failures}</span>
+                                <span className={styles.statLbl}>Total Failures</span>
+                            </div>
+                            <div className={styles.statPill} style={{ '--c': '#f59e0b' } as React.CSSProperties}>
+                                <span className={styles.statNum}>{data.total_reworks}</span>
+                                <span className={styles.statLbl}>Rework Repairs</span>
+                            </div>
+                            <div className={styles.statPill} style={{ '--c': '#ef4444' } as React.CSSProperties}>
+                                <span className={styles.statNum}>{data.total_debugs}</span>
+                                <span className={styles.statLbl}>Debug Repairs</span>
+                            </div>
+                            <div className={styles.finalStatus} style={{ background: statusBg(data.current_status), borderColor: `${statusColor(data.current_status)}44`, color: statusColor(data.current_status) }}>
+                                <Zap size={16} />
+                                {data.final_status_label}
+                            </div>
+                        </div>
+
+                        {/* ── Main two-column layout ── */}
+                        <div className={styles.mainGrid}>
+
+                            {/* LEFT: Pipeline Flow */}
+                            <div className={styles.pipelinePanel}>
+                                <div style={{ marginBottom: '1.25rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.875rem' }}>
+                                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                        <ChevronRight size={18} /> Production Pipeline
+                                    </h3>
+                                    {(data.has_smt && data.has_backend) && (
+                                        <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', marginTop: '10px', border: '1px solid #e2e8f0' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedPipelineView('backend')}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '6px 10px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 700,
+                                                    borderRadius: '6px',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    background: selectedPipelineView === 'backend' ? '#3b82f6' : 'transparent',
+                                                    color: selectedPipelineView === 'backend' ? '#ffffff' : '#64748b',
+                                                    boxShadow: selectedPipelineView === 'backend' ? '0 1px 3px rgba(59,130,246,0.3)' : 'none',
+                                                    transition: 'all 0.2s',
+                                                    textAlign: 'center'
+                                                }}
+                                            >
+                                                Backend Pipeline
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedPipelineView('smt')}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '6px 10px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 700,
+                                                    borderRadius: '6px',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    background: selectedPipelineView === 'smt' ? '#3b82f6' : 'transparent',
+                                                    color: selectedPipelineView === 'smt' ? '#ffffff' : '#64748b',
+                                                    boxShadow: selectedPipelineView === 'smt' ? '0 1px 3px rgba(59,130,246,0.3)' : 'none',
+                                                    transition: 'all 0.2s',
+                                                    textAlign: 'center'
+                                                }}
+                                            >
+                                                SMT Pipeline
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {selectedPipelineView === 'smt' ? (
+                                    <div className={styles.pipeline}>
+                                        {SMT_PIPELINE_STAGES.map((stage, idx) => {
+                                            const smtHistory = data.smt_scan_history || [];
+                                            const entries = smtHistory.filter((h: any) => h.process_step === stage);
+                                            const visited = entries.length > 0;
+                                            const stStatus = visited ? entries[entries.length - 1].status : 'pending';
+                                            const color = visited ? statusColor(stStatus) : '#cbd5e1';
+                                            const isLast = idx === SMT_PIPELINE_STAGES.length - 1;
+
+                                            return (
+                                                <React.Fragment key={stage}>
+                                                    <div className={styles.pipelineNode}>
+                                                        <div className={styles.pipelineNodeDot} style={{ background: color, boxShadow: `0 0 0 4px ${color}22` }}>
+                                                            <Zap size={16} />
+                                                        </div>
+                                                        <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
+                                                            {stage}
+                                                        </div>
+                                                        {visited ? (
+                                                            <StatusBadge status={stStatus} small />
+                                                        ) : (
+                                                            <span className={styles.pendingTag}>{stage === 'Rework' ? 'NA' : 'Pending'}</span>
+                                                        )}
+                                                        {entries.length > 1 && <span className={styles.rescannedTag}>×{entries.length} scans</span>}
+                                                    </div>
+                                                    {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className={styles.pipeline}>
+                                        {/* Work Order node */}
+                                        <div className={styles.pipelineNode}>
+                                            <div className={styles.pipelineNodeDot} style={{ background: '#3b82f6', boxShadow: '0 0 0 4px rgba(59,130,246,0.2)' }}>
+                                                <Package size={14} />
+                                            </div>
+                                            <div className={styles.pipelineNodeLabel}>Work Order</div>
+                                            <StatusBadge status="ACCEPTED" small />
+                                        </div>
+                                        <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
+
+                                        {PRODUCTION_PIPELINE.map((stage, idx) => {
+                                            const stStatus = getStageStatus(stage);
+                                            const isSkipped = stStatus === 'SKIPPED';
+                                            const isCurrent = !isSkipped && stStatus === 'IN_PROGRESS';
+                                            const visited = !isSkipped && stStatus !== 'pending';
+                                            const color = statusColor(stStatus);
+                                            const entries = data.scan_history.filter(h =>
+                                                h.station === stage.name ||
+                                                h.station === stage.code ||
+                                                h.station === stage.label
+                                            );
+                                            const isLast = idx === PRODUCTION_PIPELINE.length - 1;
+
+                                            return (
+                                                <React.Fragment key={stage.code}>
+                                                    <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''} ${isSkipped ? styles.pipelineNodeSkipped : ''}`}>
+                                                        <div className={styles.pipelineNodeDot} style={{
+                                                            background: isSkipped ? '#f1f5f9' : color,
+                                                            color: isSkipped ? '#94a3b8' : '#ffffff',
+                                                            border: isSkipped ? '1px dashed #cbd5e1' : 'none',
+                                                            boxShadow: isCurrent
+                                                                ? `0 0 0 6px ${color}33, 0 0 20px ${color}44`
+                                                                : (isSkipped ? 'none' : `0 0 0 4px ${color}22`),
+                                                        }}>
+                                                            <StationIcon station={stage.code} />
+                                                        </div>
+                                                        <div className={styles.pipelineNodeLabel} style={{ color: isSkipped ? '#94a3b8' : (visited ? '#1e293b' : '#94a3b8') }}>
+                                                            {stage.label}
+                                                            {isCurrent && <span className={styles.liveTag}>LIVE</span>}
+                                                        </div>
+                                                        {isSkipped ? (
+                                                            <StatusBadge status="SKIPPED" small />
+                                                        ) : visited ? (
+                                                            <StatusBadge status={stStatus} small />
+                                                        ) : (
+                                                            <span className={styles.pendingTag}>Pending</span>
+                                                        )}
+                                                        {entries.length > 1 && !isSkipped && (
+                                                            <span className={styles.rescannedTag}>×{entries.length} scans</span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Repair branch nodes */}
+                                                    {!isSkipped && entries.some(e => e.status === 'REWORK') && (() => {
+                                                        const isActive = data.current_stage === 'Rework';
+                                                        return (
+                                                            <div className={styles.repairBranch}>
+                                                                <div className={styles.branchLine} />
+                                                                <div className={styles.branchNode} style={{
+                                                                    background: isActive ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.08)',
+                                                                    borderColor: isActive ? '#f59e0b' : '#10b98144'
+                                                                }}>
+                                                                    <RotateCcw size={12} style={{ color: isActive ? '#f59e0b' : '#10b981' }} />
+                                                                    <span style={{ color: isActive ? '#f59e0b' : '#10b981', fontWeight: 700 }}>
+                                                                        {isActive ? 'REWORK (ACTIVE)' : 'REWORK (PASSED)'}
+                                                                    </span>
+                                                                    <span style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                                                        {isActive ? 'in repair queue' : 'repaired'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+
+                                                    {!isSkipped && entries.some(e => e.status === 'DEBUG') && (() => {
+                                                        const isActive = data.current_stage === 'Debug';
+                                                        return (
+                                                            <div className={styles.repairBranch}>
+                                                                <div className={styles.branchLine} />
+                                                                <div className={styles.branchNode} style={{
+                                                                    background: isActive ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.08)',
+                                                                    borderColor: isActive ? '#ef4444' : '#10b98144'
+                                                                }}>
+                                                                    <Wrench size={12} style={{ color: isActive ? '#ef4444' : '#10b981' }} />
+                                                                    <span style={{ color: isActive ? '#ef4444' : '#10b981', fontWeight: 700 }}>
+                                                                        {isActive ? 'DEBUG (ACTIVE)' : 'DEBUG (PASSED)'}
+                                                                    </span>
+                                                                    <span style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                                                        {isActive ? 'in debug queue' : 'repaired'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+
+                                                    {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {/* Lifecycle Timestamps */}
+                                <div className={styles.lifecycleBox}>
+                                    <h4 className={styles.lifecycleTitle}>Repair Lifecycle Timestamps</h4>
+                                    <div className={styles.lifecycleGrid}>
+                                        <div className={styles.lifecycleItem}>
+                                            <AlertTriangle size={14} style={{ color: '#ef4444' }} />
+                                            <div>
+                                                <div className={styles.lifecycleLabel}>Failure Detected</div>
+                                                <div className={styles.lifecycleVal}>{fmt(data.failure_created_at)}</div>
+                                            </div>
+                                        </div>
+                                        <div className={styles.lifecycleItem}>
+                                            <Wrench size={14} style={{ color: '#f59e0b' }} />
+                                            <div>
+                                                <div className={styles.lifecycleLabel}>Repair Completed</div>
+                                                <div className={styles.lifecycleVal}>{fmt(data.repair_completed_at)}</div>
+                                            </div>
+                                        </div>
+                                        <div className={styles.lifecycleItem}>
+                                            <CheckCircle size={14} style={{ color: '#10b981' }} />
+                                            <div>
+                                                <div className={styles.lifecycleLabel}>Revalidated & Passed</div>
+                                                <div className={styles.lifecycleVal}>{fmt(data.revalidated_passed_at)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* RIGHT: Timeline */}
+                            <div className={styles.timelinePanel}>
+                                <h3 className={styles.panelTitle}><Clock size={18} /> Full Event Timeline</h3>
+
+                                {data.scan_history.length === 0 ? (
+                                    <div className={styles.emptyTimeline}>
+                                        <Clock size={40} />
+                                        <p>No scan events recorded yet.</p>
+                                    </div>
+                                ) : (
+                                    <div className={styles.timeline}>
+                                        {data.scan_history.map((entry, idx) => {
+                                            const isRepair = entry.station === 'Rework' || entry.station === 'Debug';
+                                            const color = statusColor(entry.status);
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className={`${styles.timelineItem} ${isRepair ? styles.timelineRepair : ''}`}
+                                                    style={{ '--c': color } as React.CSSProperties}
+                                                >
+                                                    <div className={styles.timelineDot} style={{ background: color, boxShadow: `0 0 0 4px ${color}22` }}>
+                                                        <StationIcon station={entry.station} />
+                                                    </div>
+
+                                                    <div className={styles.timelineCard}>
+                                                        <div className={styles.timelineCardHeader}>
+                                                            <div className={styles.timelineCardTitle}>
+                                                                <span className={styles.timelineStation}>{entry.station}</span>
+                                                                <StatusBadge status={entry.status} small />
+                                                            </div>
+                                                            <div className={styles.timelineCardTime}>
+                                                                <Calendar size={12} />
+                                                                {fmt(entry.scanned_at)}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className={styles.timelineCardBody}>
+                                                            <div className={styles.timelineDetail}>
+                                                                <User size={12} />
+                                                                <span><strong>Operator:</strong> {entry.scanned_by}</span>
+                                                            </div>
+
+                                                            {entry.remarks && (
+                                                                <div className={styles.timelineDetail}>
+                                                                    <FileText size={12} />
+                                                                    <span><strong>Failure Remark:</strong> {entry.remarks}</span>
+                                                                </div>
+                                                            )}
+
+                                                            {entry.failed_remarks && entry.failed_remarks !== '-' && (
+                                                                <div className={styles.timelineDetail}>
+                                                                    <AlertTriangle size={12} style={{ color: '#ef4444' }} />
+                                                                    <span><strong>Original Failure:</strong> {entry.failed_remarks}</span>
+                                                                </div>
+                                                            )}
+
+                                                            {entry.repair_remark && (
+                                                                <div className={`${styles.timelineDetail} ${styles.repairDetail}`}>
+                                                                    <Wrench size={12} style={{ color: '#10b981' }} />
+                                                                    <span><strong>Repair Note:</strong> {entry.repair_remark}</span>
+                                                                </div>
+                                                            )}
+
+
+
+                                                            {entry.resolution_remarks && entry.resolution_remarks !== 'Fixed' && (
+                                                                <div className={styles.timelineDetail}>
+                                                                    <CheckCircle size={12} style={{ color: '#10b981' }} />
+                                                                    <span><strong>Resolution:</strong> {entry.resolution_remarks}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* ── Audit Table ── */}
+                        <div className={styles.auditPanel}>
+                            <h3 className={styles.panelTitle}><Activity size={18} /> Full Audit Log</h3>
+                            <div className={styles.tableWrap}>
+                                <table className={styles.auditTable}>
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Stage</th>
+                                            <th>Action</th>
+                                            <th>Operator</th>
+                                            <th>Date & Time</th>
+                                            <th>Failure Remark</th>
+                                            <th>Repair Note</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {data.scan_history.length === 0 ? (
+                                            <tr><td colSpan={7} className={styles.emptyRow}>No records.</td></tr>
+                                        ) : data.scan_history.map((row, idx) => (
+                                            <tr key={idx} className={row.station === 'Rework' || row.station === 'Debug' ? styles.repairRow : ''}>
+                                                <td className={styles.auditIdx}>{idx + 1}</td>
+                                                <td><strong>{row.station}</strong></td>
+                                                <td><StatusBadge status={row.status} small /></td>
+                                                <td>{row.scanned_by}</td>
+                                                <td className={styles.auditTime}>{fmt(row.scanned_at)}</td>
+                                                <td className={styles.remarkCell}>{row.remarks || row.failed_remarks || '—'}</td>
+                                                <td className={styles.remarkCell}>{row.repair_remark || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </>
-        )}
+                </>
+            )}
 
             {/* ── WO Results ── */}
             {woData && (
                 <>
                     <div className={`${styles.resultsWrap} ${appeared ? styles.revealed : ''}`} style={{ padding: '20px', background: '#fff', borderRadius: '12px' }}>
-                        
+
                         {/* Summary for WO */}
                         <div className={styles.summaryRow}>
                             <div className={styles.summaryCard}>
@@ -981,12 +1090,12 @@ const TrackItems: React.FC = () => {
                                                 <td style={{ padding: '12px 16px', fontWeight: 600, color: '#334155' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                                                         {s.serial_number}
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleTrackSerial(s.serial_number)}
                                                             title="Track this Serial Number"
-                                                            style={{ 
-                                                                background: '#f8fafc', border: '1px solid #cbd5e1', 
-                                                                borderRadius: '4px', cursor: 'pointer', padding: '4px', 
+                                                            style={{
+                                                                background: '#f8fafc', border: '1px solid #cbd5e1',
+                                                                borderRadius: '4px', cursor: 'pointer', padding: '4px',
                                                                 display: 'flex', alignItems: 'center', color: '#3b82f6',
                                                                 transition: 'all 0.2s'
                                                             }}
@@ -1007,12 +1116,12 @@ const TrackItems: React.FC = () => {
                                                     </td>
                                                 ))}
                                                 <td style={{ padding: '12px 16px' }}>
-                                                    <span style={{ 
-                                                        fontSize: '10px', 
-                                                        background: s.final_status_label === 'Completed' ? '#dcfce7' : '#fef3c7', 
-                                                        border: `1px solid ${s.final_status_label === 'Completed' ? '#86efac' : '#fde68a'}`, 
-                                                        padding: '4px 8px', 
-                                                        borderRadius: '4px', 
+                                                    <span style={{
+                                                        fontSize: '10px',
+                                                        background: s.final_status_label === 'Completed' ? '#dcfce7' : '#fef3c7',
+                                                        border: `1px solid ${s.final_status_label === 'Completed' ? '#86efac' : '#fde68a'}`,
+                                                        padding: '4px 8px',
+                                                        borderRadius: '4px',
                                                         color: s.final_status_label === 'Completed' ? '#166534' : '#92400e',
                                                         fontWeight: 600
                                                     }}>
@@ -1029,14 +1138,14 @@ const TrackItems: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-                            
+
                             {totalPages > 1 && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 16px' }}>
                                     <div style={{ fontSize: '12px', color: '#64748b' }}>
                                         Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredSerials.length)} of {filteredSerials.length} entries
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button 
+                                        <button
                                             onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                             disabled={currentPage === 1}
                                             style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', background: currentPage === 1 ? '#f8fafc' : '#fff', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600 }}
@@ -1046,7 +1155,7 @@ const TrackItems: React.FC = () => {
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', fontSize: '12px', fontWeight: 600, color: '#334155', background: '#f1f5f9', borderRadius: '4px' }}>
                                             Page {currentPage} of {totalPages}
                                         </div>
-                                        <button 
+                                        <button
                                             onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                             disabled={currentPage === totalPages}
                                             style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', background: currentPage === totalPages ? '#f8fafc' : '#fff', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600 }}
@@ -1064,17 +1173,17 @@ const TrackItems: React.FC = () => {
 
             {/* Dedicated Hidden Printable PDF Section */}
             {(data || woData) && (
-                <div 
-                    ref={printRef} 
-                    id="hidden-pdf-report" 
-                    style={{ 
-                        position: 'absolute', 
-                        left: '-9999px', 
-                        top: '-9999px', 
-                        width: '800px', 
-                        background: '#ffffff', 
-                        padding: '40px', 
-                        color: '#1e293b', 
+                <div
+                    ref={printRef}
+                    id="hidden-pdf-report"
+                    style={{
+                        position: 'absolute',
+                        left: '-9999px',
+                        top: '-9999px',
+                        width: '800px',
+                        background: '#ffffff',
+                        padding: '40px',
+                        color: '#1e293b',
                         fontFamily: 'system-ui, -apple-system, sans-serif',
                         boxSizing: 'border-box'
                     }}
@@ -1098,14 +1207,14 @@ const TrackItems: React.FC = () => {
                     {data && (
                         <>
                             {/* PDF Metadata Grid (PCB Barcode, Work Order, Model, Current Stage) */}
-                            <div style={{ 
-                                display: 'grid', 
-                                gridTemplateColumns: '1fr 1fr', 
-                                gap: '12px 24px', 
-                                marginBottom: '30px', 
-                                background: '#f8fafc', 
-                                padding: '16px', 
-                                borderRadius: '8px', 
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 1fr',
+                                gap: '12px 24px',
+                                marginBottom: '30px',
+                                background: '#f8fafc',
+                                padding: '16px',
+                                borderRadius: '8px',
                                 border: '1px solid #e2e8f0',
                                 fontSize: '12px'
                             }}>
@@ -1162,9 +1271,9 @@ const TrackItems: React.FC = () => {
                                         data.scan_history.map((row, idx) => {
                                             const isRepair = row.station === 'Rework' || row.station === 'Debug';
                                             return (
-                                                <tr 
-                                                    key={idx} 
-                                                    style={{ 
+                                                <tr
+                                                    key={idx}
+                                                    style={{
                                                         background: isRepair ? '#fffbeb' : idx % 2 === 0 ? '#ffffff' : '#f8fafc',
                                                         color: '#1e293b'
                                                     }}
@@ -1205,14 +1314,14 @@ const TrackItems: React.FC = () => {
                     {woData && (
                         <>
                             {/* PDF Metadata Grid for WO */}
-                            <div style={{ 
-                                display: 'grid', 
-                                gridTemplateColumns: '1fr 1fr 1fr', 
-                                gap: '12px 24px', 
-                                marginBottom: '30px', 
-                                background: '#f8fafc', 
-                                padding: '16px', 
-                                borderRadius: '8px', 
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 1fr 1fr',
+                                gap: '12px 24px',
+                                marginBottom: '30px',
+                                background: '#f8fafc',
+                                padding: '16px',
+                                borderRadius: '8px',
                                 border: '1px solid #e2e8f0',
                                 fontSize: '12px'
                             }}>

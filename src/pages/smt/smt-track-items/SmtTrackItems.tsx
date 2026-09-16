@@ -4,7 +4,7 @@ import styles from './SmtTrackItems.module.css';
 import {
     Search, Package, AlertTriangle,
     Clock, Activity, Zap, ArrowDown, RotateCcw, ChevronRight,
-    FileText, TrendingUp, Download, Cpu, MapPin, Filter, Eye
+    FileText, TrendingUp, Download, Cpu, MapPin, Filter, Eye, Layers
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -31,6 +31,8 @@ interface SmtTrackResult {
     quantity: number;
     line_id: string;
     sides: string;
+    has_smt?: boolean;
+    has_backend?: boolean;
     current_stage: string;
     current_status: string;
     final_status_label: string;
@@ -39,11 +41,24 @@ interface SmtTrackResult {
     total_reworks: number;
     total_passed: number;
     scan_history: ScanEntry[];
+    backend_scan_history?: any[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const SMT_PIPELINE = ['Serial Number', 'Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
+
+const BACKEND_PIPELINE = [
+    { code: 'PTH', name: 'Pre-Soldering', label: 'PTH' },
+    { code: 'VI', name: 'Visual Inspection', label: 'VI' },
+    { code: 'QA', name: 'Quality Assurance', label: 'QA' },
+    { code: 'FLASHING', name: 'Flashing', label: 'Flashing' },
+    { code: 'PCBA_FCT', name: 'PCBA FCT', label: 'PCBA-FCT' },
+    { code: 'ASSEMBLY', name: 'Assembly', label: 'Assembly' },
+    { code: 'UNIT_TESTING', name: 'Unit Testing', label: 'Unit Testing' },
+    { code: 'QI', name: 'Quality Inspection', label: 'QI' },
+    { code: 'PACKING', name: 'Packing', label: 'Packing' }
+];
 
 const STAGE_ROUTES: Record<string, string> = {
     'Serial Number': '/smt/serial-number',
@@ -107,6 +122,7 @@ const SmtTrackItems: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [appeared, setAppeared] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [selectedPipelineView, setSelectedPipelineView] = useState<'smt' | 'backend'>('smt');
     
     const navigate = useNavigate();
     const { showToast } = useToast();
@@ -477,6 +493,29 @@ const SmtTrackItems: React.FC = () => {
                             </div>
                         </div>
                         <div className={styles.summaryCard}>
+                            <div className={styles.summaryIcon} style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>
+                                <Layers size={22} />
+                            </div>
+                            <div>
+                                <div className={styles.summaryLabel}>Process Selection</div>
+                                <div className={styles.summaryValue}>
+                                    <span style={{
+                                        background: 'rgba(99,102,241,0.12)',
+                                        color: '#6366f1',
+                                        border: '1px solid rgba(99,102,241,0.3)',
+                                        borderRadius: '9999px',
+                                        padding: '2px 10px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 700,
+                                        letterSpacing: '0.03em',
+                                        display: 'inline-block'
+                                    }}>
+                                        SMT
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className={styles.summaryCard}>
                             <div className={styles.summaryIcon} style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
                                 <Zap size={22} />
                             </div>
@@ -532,10 +571,94 @@ const SmtTrackItems: React.FC = () => {
 
                         {/* LEFT: Pipeline Flow */}
                         <div className={styles.pipelinePanel}>
-                            <h3 className={styles.panelTitle}><ChevronRight size={18} /> SMT Production Pipeline</h3>
+                            <div style={{ marginBottom: '1.25rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <ChevronRight size={18} /> Production Pipeline
+                                </h3>
+                                {(data.has_smt && data.has_backend) && (
+                                    <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', marginTop: '10px', border: '1px solid #e2e8f0' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPipelineView('smt')}
+                                            style={{
+                                                flex: 1,
+                                                padding: '6px 10px',
+                                                fontSize: '11px',
+                                                fontWeight: 700,
+                                                borderRadius: '6px',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                background: selectedPipelineView === 'smt' ? '#3b82f6' : 'transparent',
+                                                color: selectedPipelineView === 'smt' ? '#ffffff' : '#64748b',
+                                                boxShadow: selectedPipelineView === 'smt' ? '0 1px 3px rgba(59,130,246,0.3)' : 'none',
+                                                transition: 'all 0.2s',
+                                                textAlign: 'center'
+                                            }}
+                                        >
+                                            SMT Pipeline
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPipelineView('backend')}
+                                            style={{
+                                                flex: 1,
+                                                padding: '6px 10px',
+                                                fontSize: '11px',
+                                                fontWeight: 700,
+                                                borderRadius: '6px',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                background: selectedPipelineView === 'backend' ? '#3b82f6' : 'transparent',
+                                                color: selectedPipelineView === 'backend' ? '#ffffff' : '#64748b',
+                                                boxShadow: selectedPipelineView === 'backend' ? '0 1px 3px rgba(59,130,246,0.3)' : 'none',
+                                                transition: 'all 0.2s',
+                                                textAlign: 'center'
+                                            }}
+                                        >
+                                            Backend Pipeline
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
 
-                            {/* TOP/BOTTOM dual pipeline */}
-                            {(() => {
+                            {selectedPipelineView === 'backend' ? (
+                                <div className={styles.pipeline}>
+                                    {BACKEND_PIPELINE.map((stage, idx) => {
+                                        const bHistory = data.backend_scan_history || [];
+                                        const entries = bHistory.filter((h: any) => 
+                                            (h.station || '').toUpperCase() === stage.name.toUpperCase() || 
+                                            (h.station || '').toUpperCase() === stage.code.toUpperCase() ||
+                                            (h.station || '').toUpperCase() === stage.label.toUpperCase()
+                                        );
+                                        const visited = entries.length > 0;
+                                        const stStatus = visited ? entries[entries.length - 1].status : 'pending';
+                                        const color = visited ? statusColor(stStatus) : '#cbd5e1';
+                                        const isLast = idx === BACKEND_PIPELINE.length - 1;
+
+                                        return (
+                                            <React.Fragment key={stage.code}>
+                                                <div className={styles.pipelineNode}>
+                                                    <div className={styles.pipelineNodeDot} style={{ background: color, boxShadow: `0 0 0 4px ${color}22` }}>
+                                                        <Zap size={16} />
+                                                    </div>
+                                                    <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
+                                                        {stage.name}
+                                                    </div>
+                                                    {visited ? (
+                                                        <StatusBadge status={stStatus} small />
+                                                    ) : (
+                                                        <span className={styles.pendingTag}>Pending</span>
+                                                    )}
+                                                    {entries.length > 1 && <span className={styles.rescannedTag}>×{entries.length} scans</span>}
+                                                </div>
+                                                {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                            /* TOP/BOTTOM dual pipeline */
+                            (() => {
                                 const isDoubleSided = (data.sides || '').toLowerCase().includes('/');
                                 const SIDE_STAGES = ['Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework'];
 
@@ -653,7 +776,8 @@ const SmtTrackItems: React.FC = () => {
                                         })}
                                     </div>
                                 );
-                            })()}
+                            })()
+                            )}
                         </div>
 
                         {/* RIGHT: Scan History Table */}
@@ -748,6 +872,29 @@ const SmtTrackItems: React.FC = () => {
                                 <div>
                                     <div className={styles.summaryLabel}>Line ID</div>
                                     <div className={styles.summaryValue}>{woData.line_id}</div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>
+                                    <Layers size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Process Selection</div>
+                                    <div className={styles.summaryValue}>
+                                        <span style={{
+                                            background: 'rgba(99,102,241,0.12)',
+                                            color: '#6366f1',
+                                            border: '1px solid rgba(99,102,241,0.3)',
+                                            borderRadius: '9999px',
+                                            padding: '2px 10px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            letterSpacing: '0.03em',
+                                            display: 'inline-block'
+                                        }}>
+                                            SMT
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                             <div className={styles.summaryCard}>

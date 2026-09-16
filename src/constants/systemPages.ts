@@ -14,6 +14,9 @@ export const systemPagesConfig: SystemPageRoute[] = [
     { permission_key: 'dashboard', module_name: 'Dashboard', page_name: 'Dashboard', route_path: '/dashboard', display_order: 1, page_type: 'PAGE', icon: 'LayoutDashboard' },
     { permission_key: 'admin_panel', module_name: 'Administration', page_name: 'Admin Panel', route_path: '/admin-panel', display_order: 2, page_type: 'PAGE', icon: 'Settings' },
 
+    // Work Order
+    { permission_key: 'smt_work_order', module_name: 'Work Order', page_name: 'Work Order', route_path: '/smt/work-order', display_order: 3, page_type: 'PAGE', icon: 'Clipboard' },
+
     // QC Inspection
     { permission_key: 'qc_inspection', module_name: 'QC Inspection', page_name: 'QC Inspection', route_path: '/qc-inspection', display_order: 10, page_type: 'PAGE', icon: 'ClipboardCheck', parent_module: 'QC Inspection' },
     { permission_key: 'qc_shifts', module_name: 'QC Inspection', page_name: 'Shift Management', route_path: '/qc-inspection/shifts', display_order: 11, page_type: 'PAGE', icon: 'Clock', parent_module: 'QC Inspection' },
@@ -40,7 +43,6 @@ export const systemPagesConfig: SystemPageRoute[] = [
 
     // SMT Module
     { permission_key: 'smt_dashboard', module_name: 'SMT', page_name: 'SMT Dashboard', route_path: '/smt', display_order: 50, page_type: 'PAGE', icon: 'Cpu', parent_module: 'SMT' },
-    { permission_key: 'smt_work_order', module_name: 'SMT', page_name: 'Work Order', route_path: '/smt/work-order', display_order: 51, page_type: 'PAGE', icon: 'Clipboard', parent_module: 'SMT' },
     { permission_key: 'smt_work_order_history', module_name: 'SMT', page_name: 'Work Order History', route_path: '/smt/workorder-history', display_order: 52, page_type: 'PAGE', icon: 'History', parent_module: 'SMT' },
     { permission_key: 'smt_serial_number', module_name: 'SMT', page_name: 'Serial Number', route_path: '/smt/serial-number', display_order: 53, page_type: 'PAGE', icon: 'Barcode', parent_module: 'SMT' },
     { permission_key: 'smt_printing', module_name: 'SMT', page_name: 'Printing', route_path: '/smt/printing', display_order: 54, page_type: 'PAGE', icon: 'Printer', parent_module: 'SMT' },

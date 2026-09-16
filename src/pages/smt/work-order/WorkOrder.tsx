@@ -91,6 +91,8 @@ export const WorkOrder: React.FC = () => {
     const [selectedStages, setSelectedStages] = useState<string[]>(ALL_STAGES);
     const [customerName, setCustomerName] = useState('');
     const [modelName, setModelName] = useState('');
+    const [hasSmt, setHasSmt] = useState<boolean>(true);
+    const [hasBackend, setHasBackend] = useState<boolean>(true);
     const [error, setError] = useState('');
     const [editingWorkOrderId, setEditingWorkOrderId] = useState<string | null>(null);
     const [viewDetailWo, setViewDetailWo] = useState<any | null>(null);
@@ -393,6 +395,8 @@ export const WorkOrder: React.FC = () => {
         setSelectedStages(ALL_STAGES);
         setCustomerName('');
         setModelName('');
+        setHasSmt(true);
+        setHasBackend(true);
         setCreatedBy(currentUserName);
         setSelectedFile(null);
         if (fileInputRef.current) {
@@ -414,6 +418,8 @@ export const WorkOrder: React.FC = () => {
         setQuantity(wo.quantity.toString());
         setCustomerName(wo.customer_name || wo.customerName || '');
         setModelName(wo.model_name || wo.modelName || wo.model || '');
+        setHasSmt(wo.has_smt !== false && wo.hasSmt !== false);
+        setHasBackend(wo.has_backend !== false && wo.hasBackend !== false);
         setSelectedStages(
             Array.isArray(wo.selected_stages) 
                 ? wo.selected_stages 
@@ -493,13 +499,20 @@ export const WorkOrder: React.FC = () => {
             return;
         }
 
-        if (selectedStages.length === 0) {
-            setError('At least one process stage must be selected.');
+        if (!hasSmt && !hasBackend) {
+            setError('At least one process route (SMT or Backend) must be enabled.');
+            return;
+        }
+
+        if (hasBackend && selectedStages.length === 0) {
+            setError('At least one backend process stage must be selected when Backend is enabled. (Uncheck the "Backend" checkbox above if this Work Order is SMT only).');
             return;
         }
 
         setError('');
         setIsCreating(true);
+
+        const activeBackendStages = hasBackend ? selectedStages : [];
 
         const payload: any = {
             work_order_id: finalWorkOrderId,
@@ -519,8 +532,12 @@ export const WorkOrder: React.FC = () => {
             model_name: modelName.trim(),
             modelName: modelName.trim(),
             model: modelName.trim(),
-            selected_stages: selectedStages,
-            selectedStages: selectedStages
+            has_smt: hasSmt,
+            hasSmt: hasSmt,
+            has_backend: hasBackend,
+            hasBackend: hasBackend,
+            selected_stages: activeBackendStages,
+            selectedStages: activeBackendStages
         };
 
         if (selectedFile) {
@@ -984,6 +1001,35 @@ export const WorkOrder: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
+
+                                {/* --- SMT Option Tickbox (Below Upload PO Document box) --- */}
+                                <div style={{
+                                    marginTop: '0.75rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.6rem',
+                                    padding: '0.55rem 0.85rem',
+                                    backgroundColor: hasSmt ? '#eff6ff' : '#f8fafc',
+                                    borderRadius: '0.5rem',
+                                    border: `1.5px solid ${hasSmt ? '#2563eb' : '#cbd5e1'}`,
+                                    transition: 'all 0.15s ease'
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        id="hasSmtCheckbox"
+                                        checked={hasSmt}
+                                        onChange={(e) => setHasSmt(e.target.checked)}
+                                        style={{
+                                            width: '18px',
+                                            height: '18px',
+                                            cursor: 'pointer',
+                                            accentColor: '#2563eb'
+                                        }}
+                                    />
+                                    <label htmlFor="hasSmtCheckbox" style={{ fontSize: '0.9rem', fontWeight: 700, color: hasSmt ? '#1d4ed8' : '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <span>⚡</span> SMT
+                                    </label>
+                                </div>
                             </div>
 
                             {/* Right Column: Remark */}
@@ -1026,9 +1072,38 @@ export const WorkOrder: React.FC = () => {
                                 alignItems: 'center',
                                 marginBottom: '0.75rem',
                                 flexWrap: 'wrap',
-                                gap: '0.5rem'
+                                gap: '0.75rem'
                             }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                    {/* Backend Tickbox Option right before words Backend Process Routing */}
+                                    <label style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.4rem',
+                                        cursor: 'pointer',
+                                        userSelect: 'none',
+                                        backgroundColor: hasBackend ? '#eff6ff' : '#f1f5f9',
+                                        padding: '0.4rem 0.75rem',
+                                        borderRadius: '0.5rem',
+                                        border: `1.5px solid ${hasBackend ? '#2563eb' : '#cbd5e1'}`,
+                                        transition: 'all 0.15s ease'
+                                    }}>
+                                        <input
+                                            type="checkbox"
+                                            id="hasBackendCheckbox"
+                                            checked={hasBackend}
+                                            onChange={(e) => setHasBackend(e.target.checked)}
+                                            style={{
+                                                width: '18px',
+                                                height: '18px',
+                                                accentColor: '#2563eb',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: hasBackend ? '#1d4ed8' : '#64748b' }}>
+                                            Backend
+                                        </span>
+                                    </label>
                                     <span style={{ fontSize: '1.2rem' }}>🔀</span>
                                     <div>
                                         <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1e293b' }}>
@@ -1042,6 +1117,7 @@ export const WorkOrder: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={handleToggleAllStages}
+                                    disabled={!hasBackend}
                                     style={{
                                         display: 'inline-flex',
                                         alignItems: 'center',
@@ -1049,11 +1125,12 @@ export const WorkOrder: React.FC = () => {
                                         padding: '0.35rem 0.75rem',
                                         fontSize: '0.8rem',
                                         fontWeight: 600,
-                                        color: '#dc2626',
-                                        backgroundColor: '#fef2f2',
-                                        border: '1px solid #fca5a5',
+                                        color: hasBackend ? '#dc2626' : '#94a3b8',
+                                        backgroundColor: hasBackend ? '#fef2f2' : '#f1f5f9',
+                                        border: `1px solid ${hasBackend ? '#fca5a5' : '#cbd5e1'}`,
                                         borderRadius: '0.375rem',
-                                        cursor: 'pointer',
+                                        cursor: hasBackend ? 'pointer' : 'not-allowed',
+                                        opacity: hasBackend ? 1 : 0.6,
                                         transition: 'all 0.15s ease'
                                     }}
                                 >
@@ -1062,16 +1139,20 @@ export const WorkOrder: React.FC = () => {
                                 </button>
                             </div>
 
-                            {/* Stage Pills / Chips (Strictly Horizontal Flow) */}
+                            {/* Stage Pills / Chips (Strictly Horizontal Flow with Lockout Support) */}
                             <div style={{
                                 display: 'flex',
                                 flexWrap: 'wrap',
                                 gap: '0.75rem',
                                 marginTop: '0.75rem',
-                                alignItems: 'center'
+                                alignItems: 'center',
+                                opacity: hasBackend ? 1 : 0.45,
+                                pointerEvents: hasBackend ? 'auto' : 'none',
+                                filter: hasBackend ? 'none' : 'grayscale(100%)',
+                                transition: 'all 0.2s ease'
                             }}>
                                 {ALL_STAGES.map(stage => {
-                                    const isSelected = selectedStages.includes(stage);
+                                    const isSelected = hasBackend && selectedStages.includes(stage);
                                     return (
                                         <label
                                             key={stage}
@@ -1083,7 +1164,7 @@ export const WorkOrder: React.FC = () => {
                                                 borderRadius: '0.5rem',
                                                 fontSize: '0.875rem',
                                                 fontWeight: 600,
-                                                cursor: 'pointer',
+                                                cursor: hasBackend ? 'pointer' : 'not-allowed',
                                                 userSelect: 'none',
                                                 transition: 'all 0.15s ease-in-out',
                                                 backgroundColor: isSelected ? '#eff6ff' : '#f8fafc',
@@ -1095,12 +1176,13 @@ export const WorkOrder: React.FC = () => {
                                             <input
                                                 type="checkbox"
                                                 checked={isSelected}
+                                                disabled={!hasBackend}
                                                 onChange={() => handleStageToggle(stage)}
                                                 style={{
                                                     width: '16px',
                                                     height: '16px',
                                                     accentColor: '#2563eb',
-                                                    cursor: 'pointer'
+                                                    cursor: hasBackend ? 'pointer' : 'not-allowed'
                                                 }}
                                             />
                                             <span>{stage}</span>
@@ -1110,54 +1192,72 @@ export const WorkOrder: React.FC = () => {
                             </div>
 
                             {/* Visual Configured Process Route */}
-                            {selectedStages.length > 0 ? (
-                                <div style={{
-                                    marginTop: '0.85rem',
-                                    padding: '0.65rem 0.9rem',
-                                    background: '#f0fdf4',
-                                    borderRadius: '0.5rem',
-                                    border: '1px solid #bbf7d0',
-                                    fontSize: '0.85rem'
-                                }}>
-                                    <div style={{ fontWeight: 700, color: '#166534', marginBottom: '0.35rem' }}>
-                                        Configured Process Route ({ALL_STAGES.filter(s => selectedStages.includes(s)).length} stages active):
+                            {hasBackend ? (
+                                selectedStages.length > 0 ? (
+                                    <div style={{
+                                        marginTop: '0.85rem',
+                                        padding: '0.65rem 0.9rem',
+                                        background: '#f0fdf4',
+                                        borderRadius: '0.5rem',
+                                        border: '1px solid #bbf7d0',
+                                        fontSize: '0.85rem'
+                                    }}>
+                                        <div style={{ fontWeight: 700, color: '#166534', marginBottom: '0.35rem' }}>
+                                            Configured Process Route ({ALL_STAGES.filter(s => selectedStages.includes(s)).length} stages active):
+                                        </div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem' }}>
+                                            {ALL_STAGES.filter(s => selectedStages.includes(s)).map((st, idx, arr) => (
+                                                <React.Fragment key={st}>
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.25rem',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '4px',
+                                                        backgroundColor: '#dcfce7',
+                                                        color: '#166534',
+                                                        fontWeight: 600,
+                                                        fontSize: '0.8rem',
+                                                        border: '1px solid #86efac'
+                                                    }}>
+                                                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>{idx + 1}.</span> {st}
+                                                    </span>
+                                                    {idx < arr.length - 1 && (
+                                                        <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '0.9rem' }}>→</span>
+                                                    )}
+                                                </React.Fragment>
+                                            ))}
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem' }}>
-                                        {ALL_STAGES.filter(s => selectedStages.includes(s)).map((st, idx, arr) => (
-                                            <React.Fragment key={st}>
-                                                <span style={{
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.25rem',
-                                                    padding: '2px 8px',
-                                                    borderRadius: '4px',
-                                                    backgroundColor: '#dcfce7',
-                                                    color: '#166534',
-                                                    fontWeight: 600,
-                                                    fontSize: '0.8rem',
-                                                    border: '1px solid #86efac'
-                                                }}>
-                                                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>{idx + 1}.</span> {st}
-                                                </span>
-                                                {idx < arr.length - 1 && (
-                                                    <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '0.9rem' }}>→</span>
-                                                )}
-                                            </React.Fragment>
-                                        ))}
+                                ) : (
+                                    <div style={{
+                                        marginTop: '0.85rem',
+                                        padding: '0.65rem 0.9rem',
+                                        background: '#fef2f2',
+                                        borderRadius: '0.5rem',
+                                        border: '1px solid #fecaca',
+                                        fontSize: '0.85rem',
+                                        color: '#b91c1c',
+                                        fontWeight: 600
+                                    }}>
+                                        ⚠️ At least one stage must be selected for Backend Process Routing.
                                     </div>
-                                </div>
+                                )
                             ) : (
                                 <div style={{
                                     marginTop: '0.85rem',
                                     padding: '0.65rem 0.9rem',
-                                    background: '#fef2f2',
+                                    background: '#f8fafc',
                                     borderRadius: '0.5rem',
-                                    border: '1px solid #fecaca',
+                                    border: '1px solid #e2e8f0',
                                     fontSize: '0.85rem',
-                                    color: '#b91c1c',
-                                    fontWeight: 600
+                                    color: '#64748b',
+                                    fontWeight: 600,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem'
                                 }}>
-                                    ⚠️ At least one stage must be selected for the Work Order.
+                                    🔒 Backend option is unticked. Backend stage selection is locked out for this Work Order.
                                 </div>
                             )}
                         </div>
@@ -1584,6 +1684,32 @@ export const WorkOrder: React.FC = () => {
                                         <div className={styles.detailItem}>
                                             <span className={styles.detailLabel}>Model Name</span>
                                             <span className={styles.detailValue} style={{ fontWeight: 600 }}>{viewDetailWo.model_name || '-'}</span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>SMT Process</span>
+                                            <span className={styles.detailValue} style={{
+                                                fontWeight: 700,
+                                                color: viewDetailWo.has_smt !== false && viewDetailWo.hasSmt !== false ? '#166534' : '#991b1b',
+                                                backgroundColor: viewDetailWo.has_smt !== false && viewDetailWo.hasSmt !== false ? '#dcfce7' : '#fee2e2',
+                                                padding: '2px 8px',
+                                                borderRadius: '4px',
+                                                fontSize: '0.8rem'
+                                            }}>
+                                                {viewDetailWo.has_smt !== false && viewDetailWo.hasSmt !== false ? '⚡ Enabled' : '🚫 Disabled'}
+                                            </span>
+                                        </div>
+                                        <div className={styles.detailItem}>
+                                            <span className={styles.detailLabel}>Backend Process</span>
+                                            <span className={styles.detailValue} style={{
+                                                fontWeight: 700,
+                                                color: viewDetailWo.has_backend !== false && viewDetailWo.hasBackend !== false ? '#1d4ed8' : '#991b1b',
+                                                backgroundColor: viewDetailWo.has_backend !== false && viewDetailWo.hasBackend !== false ? '#eff6ff' : '#fee2e2',
+                                                padding: '2px 8px',
+                                                borderRadius: '4px',
+                                                fontSize: '0.8rem'
+                                            }}>
+                                                {viewDetailWo.has_backend !== false && viewDetailWo.hasBackend !== false ? '🔀 Enabled' : '🚫 Disabled'}
+                                            </span>
                                         </div>
                                         <div className={`${styles.detailItem} ${styles.detailItemFullWidth}`} style={{ marginTop: '0.5rem' }}>
                                             <span className={styles.detailLabel}>Configured Process Route</span>

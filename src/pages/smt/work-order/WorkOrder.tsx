@@ -200,53 +200,6 @@ export const WorkOrder: React.FC = () => {
     const [previewData, setPreviewData] = useState<any | null>(null);
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
-    // ── SMT-FG Operator Assignment state ─────────────────────────────────────
-    const [fgOperatorModal, setFgOperatorModal] = useState<{ woId: string; woName: string } | null>(null);
-    const [smtOperators, setSmtOperators] = useState<{ id: number; employee_code: string; employee_name: string }[]>([]);
-    const [fgOpLoading, setFgOpLoading] = useState(false);
-    const [fgOpSaving, setFgOpSaving] = useState(false);
-    const [fgOpSelectedUserId, setFgOpSelectedUserId] = useState<number | null>(null);
-    const [fgOpCurrentAssignment, setFgOpCurrentAssignment] = useState<any | null>(null);
-
-    const handleOpenFgOperatorModal = async (wo: any) => {
-        const woId = wo.work_order_id;
-        setFgOperatorModal({ woId, woName: wo.product_name || woId });
-        setFgOpLoading(true);
-        setFgOpSelectedUserId(null);
-        setFgOpCurrentAssignment(null);
-        try {
-            const [ops, current] = await Promise.all([
-                apiFetch('/api/smt/smt-fg/smt-operators'),
-                apiFetch(`/api/smt/smt-fg/work-orders/${woId}/operator-assignment`),
-            ]);
-            setSmtOperators(Array.isArray(ops) ? ops : []);
-            setFgOpCurrentAssignment(current);
-            if (current?.user_id) setFgOpSelectedUserId(current.user_id);
-        } catch (err: any) {
-            addToast(err.message || 'Failed to load assignment data.', 'error');
-        } finally {
-            setFgOpLoading(false);
-        }
-    };
-
-    const handleSaveFgOperator = async () => {
-        if (!fgOperatorModal || !fgOpSelectedUserId) return;
-        setFgOpSaving(true);
-        try {
-            const result = await apiFetch(`/api/smt/smt-fg/work-orders/${fgOperatorModal.woId}/operator-assignment`, {
-                method: 'POST',
-                body: JSON.stringify({ user_id: fgOpSelectedUserId }),
-            });
-            addToast(result.message || 'SMT-FG operator saved.', 'success');
-            setFgOperatorModal(null);
-        } catch (err: any) {
-            addToast(err.message || 'Failed to save assignment.', 'error');
-        } finally {
-            setFgOpSaving(false);
-        }
-    };
-    // ─────────────────────────────────────────────────────────────────────────
-
     const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastId.current;
         setToasts(prev => [...prev, { id, message, type }]);
@@ -283,7 +236,9 @@ export const WorkOrder: React.FC = () => {
             }
             const responseData = await apiFetch(`/api/smt/work-orders?${queryParams.toString()}`);
             if (responseData.success) {
-                const safeData = Array.isArray(responseData.data) ? responseData.data : [];
+                const safeData = Array.isArray(responseData.data) 
+                    ? responseData.data.filter((wo: any) => wo.has_smt !== false && wo.hasSmt !== false) 
+                    : [];
                 setWorkOrders(safeData.map((wo: any) => ({
                     work_order_id: wo.id || wo.work_order_id,
                     product_name: wo.product_name,
@@ -303,6 +258,8 @@ export const WorkOrder: React.FC = () => {
                     solder_paste_status: wo.solder_paste_status,
                     customer_name: wo.customer_name || wo.customerName || '',
                     model_name: wo.model_name || wo.modelName || wo.model || '',
+                    has_smt: wo.has_smt !== false && wo.hasSmt !== false,
+                    has_backend: wo.has_backend !== false && wo.hasBackend !== false,
                     selected_stages: wo.selected_stages || wo.selectedStages || ALL_STAGES
                 })));
                 setTotalRecords(responseData.total || 0);
@@ -522,17 +479,16 @@ export const WorkOrder: React.FC = () => {
         }
 
         const finalCreatedBy = editingWorkOrderId ? createdBy : (currentUserName || createdBy);
-        if (!productName || !productDescription || !quantity || !panelQuantity || !finalCreatedBy) {
+        if (!productName || !productDescription || !quantity || !finalCreatedBy) {
             setError('All fields are required.');
             return;
         }
-        if (parseInt(quantity) <= 0 || parseInt(panelQuantity) <= 0) {
-            setError('Quantities must be greater than 0.');
+        if (hasSmt && !panelQuantity) {
+            setError('Panel Quantity is required when SMT is enabled.');
             return;
         }
-        
-        if (!sides) {
-            setError('Sides is required.');
+        if (parseInt(quantity) <= 0 || (hasSmt && parseInt(panelQuantity) <= 0)) {
+            setError('Quantities must be greater than 0.');
             return;
         }
 
@@ -547,12 +503,17 @@ export const WorkOrder: React.FC = () => {
         }
 
         if (!hasSmt && !hasBackend) {
-            setError('At least one process route (SMT or Backend) must be enabled.');
+            setError('Please select at least one process: SMT or Backend.');
+            return;
+        }
+
+        if (hasSmt && !sides) {
+            setError('Sides is required when SMT is enabled.');
             return;
         }
 
         if (hasBackend && selectedStages.length === 0) {
-            setError('At least one backend process stage must be selected when Backend is enabled. (Uncheck the "Backend" checkbox above if this Work Order is SMT only).');
+            setError('At least one backend production stage must be selected when Backend is enabled.');
             return;
         }
 
@@ -566,12 +527,12 @@ export const WorkOrder: React.FC = () => {
             po_id: finalPoId,
             remark: remark,
             area_id: 'SMT',
-            line_id: lineId,
+            line_id: hasSmt ? lineId : 'N/A',
             product_name: productName,
             product_description: productDescription,
             quantity: parseInt(quantity),
-            panel_quantity: parseInt(panelQuantity),
-            sides: sides,
+            panel_quantity: hasSmt && panelQuantity ? parseInt(panelQuantity) : parseInt(quantity),
+            sides: hasSmt ? sides : 'N/A',
             priority: priority,
             created_by: finalCreatedBy,
             customer_name: customerName.trim(),
@@ -579,10 +540,10 @@ export const WorkOrder: React.FC = () => {
             model_name: modelName.trim(),
             modelName: modelName.trim(),
             model: modelName.trim(),
-            has_smt: hasSmt,
-            hasSmt: hasSmt,
-            has_backend: hasBackend,
-            hasBackend: hasBackend,
+            has_smt: Boolean(hasSmt),
+            hasSmt: Boolean(hasSmt),
+            has_backend: Boolean(hasBackend),
+            hasBackend: Boolean(hasBackend),
             selected_stages: activeBackendStages,
             selectedStages: activeBackendStages
         };
@@ -768,6 +729,79 @@ export const WorkOrder: React.FC = () => {
 
                     {error && <div style={{ color: 'var(--error-color)', marginBottom: '1rem', fontWeight: 'bold' }}>{error}</div>}
 
+                    {/* --- PROCESS SELECTION BAR --- */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1.25rem',
+                        marginBottom: '1.25rem',
+                        padding: '0.75rem 1.25rem',
+                        backgroundColor: '#f8fafc',
+                        borderRadius: '0.5rem',
+                        border: '1px solid #e2e8f0',
+                        flexWrap: 'wrap'
+                    }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>
+                            Process Selection *:
+                        </span>
+                        <label style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '0.95rem',
+                            color: hasSmt ? '#1d4ed8' : '#64748b',
+                            backgroundColor: hasSmt ? '#eff6ff' : '#ffffff',
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '0.375rem',
+                            border: `1.5px solid ${hasSmt ? '#2563eb' : '#cbd5e1'}`,
+                            transition: 'all 0.15s ease'
+                        }}>
+                            <input
+                                type="checkbox"
+                                id="hasSmtProcessCheckbox"
+                                checked={hasSmt}
+                                onChange={(e) => setHasSmt(e.target.checked)}
+                                style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }}
+                            />
+                            <span>⚡ SMT</span>
+                        </label>
+                        <label style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '0.95rem',
+                            color: hasBackend ? '#1d4ed8' : '#64748b',
+                            backgroundColor: hasBackend ? '#eff6ff' : '#ffffff',
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '0.375rem',
+                            border: `1.5px solid ${hasBackend ? '#2563eb' : '#cbd5e1'}`,
+                            transition: 'all 0.15s ease'
+                        }}>
+                            <input
+                                type="checkbox"
+                                id="hasBackendProcessCheckbox"
+                                checked={hasBackend}
+                                onChange={(e) => setHasBackend(e.target.checked)}
+                                style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }}
+                            />
+                            <span>🔀 Backend</span>
+                        </label>
+                        {!hasSmt && (
+                            <span style={{ fontSize: '0.85rem', color: '#b45309', backgroundColor: '#fef3c7', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fde68a', fontWeight: 600 }}>
+                                ⚠️ SMT process disabled for this Work Order.
+                            </span>
+                        )}
+                        {!hasBackend && (
+                            <span style={{ fontSize: '0.85rem', color: '#b45309', backgroundColor: '#fef3c7', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fde68a', fontWeight: 600 }}>
+                                ⚠️ Backend process disabled for this Work Order.
+                            </span>
+                        )}
+                    </div>
+
                     <div className={styles.formGrid} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
                         {/* --- ROW 1 --- */}
                         <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
@@ -816,12 +850,19 @@ export const WorkOrder: React.FC = () => {
                         </div>
 
                         <div className={styles.inputGroup}>
-                            <label>Line ID *</label>
+                            <label>Line ID {hasSmt ? '*' : '(Disabled)'}</label>
                             <select
                                 value={lineId}
                                 onChange={(e) => setLineId(e.target.value)}
                                 className={styles.select}
-                                style={{ height: '42px', boxSizing: 'border-box' }}
+                                style={{
+                                    height: '42px',
+                                    boxSizing: 'border-box',
+                                    backgroundColor: hasSmt ? '#ffffff' : '#f3f4f6',
+                                    color: hasSmt ? 'inherit' : '#9ca3af',
+                                    cursor: hasSmt ? 'pointer' : 'not-allowed'
+                                }}
+                                disabled={!hasSmt}
                             >
                                 <option value="SMT-1">SMT-1</option>
                                 <option value="SMT-2">SMT-2</option>
@@ -926,15 +967,21 @@ export const WorkOrder: React.FC = () => {
                         </div>
 
                         <div className={styles.inputGroup}>
-                            <label>PCB per Panel *</label>
+                            <label>PCB per Panel {hasSmt ? '*' : '(Disabled)'}</label>
                             <input
                                 type="number"
                                 value={pcbPerPanel}
                                 onChange={(e) => setPcbPerPanel(e.target.value)}
-                                placeholder="e.g. 2"
+                                placeholder={hasSmt ? "e.g. 2" : "N/A"}
                                 min="1"
                                 className={styles.input}
-                                style={{ boxSizing: 'border-box' }}
+                                style={{
+                                    boxSizing: 'border-box',
+                                    backgroundColor: hasSmt ? '#ffffff' : '#f3f4f6',
+                                    color: hasSmt ? 'inherit' : '#9ca3af',
+                                    cursor: hasSmt ? 'text' : 'not-allowed'
+                                }}
+                                disabled={!hasSmt}
                             />
                         </div>
 
@@ -944,7 +991,7 @@ export const WorkOrder: React.FC = () => {
                                 type="number"
                                 value={panelQuantity}
                                 readOnly
-                                placeholder="Calculated Automatically"
+                                placeholder={hasSmt ? "Calculated Automatically" : "N/A"}
                                 className={styles.input}
                                 style={{
                                     boxSizing: 'border-box',
@@ -953,16 +1000,24 @@ export const WorkOrder: React.FC = () => {
                                     cursor: 'not-allowed',
                                     fontWeight: 'bold'
                                 }}
+                                disabled={!hasSmt}
                             />
                         </div>
 
                         <div className={styles.inputGroup}>
-                            <label>Sides *</label>
+                            <label>Sides {hasSmt ? '*' : '(Disabled)'}</label>
                             <select
                                 value={sides}
                                 onChange={(e) => setSides(e.target.value)}
                                 className={styles.select}
-                                style={{ height: '42px', boxSizing: 'border-box' }}
+                                style={{
+                                    height: '42px',
+                                    boxSizing: 'border-box',
+                                    backgroundColor: hasSmt ? '#ffffff' : '#f3f4f6',
+                                    color: hasSmt ? 'inherit' : '#9ca3af',
+                                    cursor: hasSmt ? 'pointer' : 'not-allowed'
+                                }}
+                                disabled={!hasSmt}
                             >
                                 <option value="">Select Sides</option>
                                 <option value="Top">Top</option>
@@ -1304,7 +1359,7 @@ export const WorkOrder: React.FC = () => {
                                     alignItems: 'center',
                                     gap: '0.4rem'
                                 }}>
-                                    🔒 Backend option is unticked. Backend stage selection is locked out for this Work Order.
+                                    🔒 Backend process disabled for this Work Order.
                                 </div>
                             )}
                         </div>
@@ -1478,19 +1533,6 @@ export const WorkOrder: React.FC = () => {
                                                                 {deletingId === wo.work_order_id ? '...' : '🗑️'}
                                                             </button>
                                                         )}
-
-                                                        {/* SMT-FG Operator assignment — Admins only, all sides */}
-                                                        {canAccessPoDocument && (
-                                                            <button
-                                                                onClick={() => handleOpenFgOperatorModal(wo)}
-                                                                className={styles.secondaryButton}
-                                                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', borderColor: '#0891b2', color: '#0891b2' }}
-                                                                title="Assign SMT-FG Operator"
-                                                            >
-                                                                👤 FG Op
-                                                            </button>
-                                                        )}
-
                                                     </div>
                                                 </td>
                                             </tr>
@@ -1964,117 +2006,6 @@ export const WorkOrder: React.FC = () => {
                     </div>
                 </div>
             )}
-
-            {/* ── SMT-FG Operator Assignment Modal ───────────────────────────── */}
-            {fgOperatorModal && (
-                <div
-                    style={{
-                        position: 'fixed', inset: 0, zIndex: 10000,
-                        background: 'rgba(0,0,0,0.55)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
-                    onClick={() => !fgOpSaving && setFgOperatorModal(null)}
-                >
-                    <div
-                        style={{
-                            background: '#fff', borderRadius: '12px',
-                            padding: '2rem', width: '480px', maxWidth: '95vw',
-                            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
-                        }}
-                        onClick={e => e.stopPropagation()}
-                    >
-                        {/* Header */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-                            <div>
-                                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
-                                    👤 Assign SMT-FG Operator
-                                </h3>
-                                <p style={{ margin: '0.25rem 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-                                    Work Order: <strong>{fgOperatorModal.woId}</strong>
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => setFgOperatorModal(null)}
-                                disabled={fgOpSaving}
-                                style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#64748b', lineHeight: 1 }}
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        {/* Current assignment banner */}
-                        {fgOpCurrentAssignment && (
-                            <div style={{
-                                background: '#f0fdf4', border: '1px solid #86efac',
-                                borderRadius: '8px', padding: '0.75rem 1rem',
-                                marginBottom: '1rem', fontSize: '0.875rem', color: '#166534'
-                            }}>
-                                ✅ Currently assigned: <strong>{fgOpCurrentAssignment.employee_name}</strong> ({fgOpCurrentAssignment.employee_code})
-                            </div>
-                        )}
-
-                        {/* Operator dropdown */}
-                        {fgOpLoading ? (
-                            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading operators...</div>
-                        ) : (
-                            <div style={{ marginBottom: '1.25rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
-                                    SMT-FG Operator <span style={{ color: '#ef4444' }}>*</span>
-                                </label>
-                                <select
-                                    value={fgOpSelectedUserId ?? ''}
-                                    onChange={e => setFgOpSelectedUserId(e.target.value ? parseInt(e.target.value) : null)}
-                                    disabled={fgOpSaving}
-                                    style={{
-                                        width: '100%', padding: '0.6rem 0.8rem',
-                                        border: '1.5px solid #d1d5db', borderRadius: '8px',
-                                        fontSize: '0.9rem', color: '#1e293b', background: '#fff',
-                                        outline: 'none', cursor: fgOpSaving ? 'not-allowed' : 'pointer'
-                                    }}
-                                >
-                                    <option value="">-- Select SMT Operator --</option>
-                                    {smtOperators.map(op => (
-                                        <option key={op.id} value={op.id}>
-                                            {op.employee_code} — {op.employee_name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {smtOperators.length === 0 && !fgOpLoading && (
-                                    <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.4rem' }}>
-                                        No active SMT department operators found.
-                                    </p>
-                                )}
-                                <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.4rem' }}>
-                                    Only active employees in the SMT department are listed.
-                                    This operator will be used for all automatic SMT-FG transactions for this Work Order.
-                                </p>
-                            </div>
-                        )}
-
-                        {/* Footer buttons */}
-                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                            <button
-                                onClick={() => setFgOperatorModal(null)}
-                                disabled={fgOpSaving}
-                                className={styles.secondaryButton}
-                                style={{ padding: '0.5rem 1.25rem' }}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSaveFgOperator}
-                                disabled={!fgOpSelectedUserId || fgOpSaving || fgOpLoading}
-                                className={styles.button}
-                                style={{ padding: '0.5rem 1.5rem', opacity: (!fgOpSelectedUserId || fgOpSaving) ? 0.6 : 1 }}
-                            >
-                                {fgOpSaving ? 'Saving...' : 'Save Assignment'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {/* ─────────────────────────────────────────────────────────────── */}
-
         </>
     );
 };

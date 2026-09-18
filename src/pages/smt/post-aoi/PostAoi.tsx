@@ -199,7 +199,59 @@ const PostAoi: React.FC = () => {
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
     // Role helpers
-    const isSuperAdmin = smtUser?.role === 'Super Admin' || user?.role === 'Super Admin';
+    const userRole = (user?.role || smtUser?.role || '').trim().toLowerCase();
+    const canAssignFgOp = userRole === 'super admin' || userRole === 'admin' || 
+                          (smtUser?.role || '').trim().toLowerCase() === 'super admin' || 
+                          (smtUser?.role || '').trim().toLowerCase() === 'admin' || 
+                          smtUser?.userId === 'ADMIN';
+    const isSuperAdmin = userRole === 'super admin' || (smtUser?.role || '').trim().toLowerCase() === 'super admin' || smtUser?.userId === 'ADMIN';
+
+    // ── SMT-FG Operator Assignment state ─────────────────────────────────────
+    const [fgOperatorModal, setFgOperatorModal] = useState<{ woId: string; woName: string; sessionId?: string; side?: string } | null>(null);
+    const [smtOperators, setSmtOperators] = useState<{ id: number; employee_code: string; employee_name: string }[]>([]);
+    const [fgOpLoading, setFgOpLoading] = useState(false);
+    const [fgOpSaving, setFgOpSaving] = useState(false);
+    const [fgOpSelectedUserId, setFgOpSelectedUserId] = useState<number | null>(null);
+    const [fgOpCurrentAssignment, setFgOpCurrentAssignment] = useState<any | null>(null);
+
+    const handleOpenFgOperatorModal = async (row: { work_order_id: string; product_name?: string; id?: string; side?: string }) => {
+        const woId = row.work_order_id;
+        setFgOperatorModal({ woId, woName: row.product_name || woId, sessionId: row.id, side: row.side });
+        setFgOpLoading(true);
+        setFgOpSelectedUserId(null);
+        setFgOpCurrentAssignment(null);
+        try {
+            const [ops, current] = await Promise.all([
+                apiFetch('/api/smt/smt-fg/smt-operators'),
+                apiFetch(`/api/smt/smt-fg/work-orders/${woId}/operator-assignment`),
+            ]);
+            setSmtOperators(Array.isArray(ops) ? ops : []);
+            setFgOpCurrentAssignment(current);
+            if (current?.user_id) setFgOpSelectedUserId(current.user_id);
+        } catch (err: any) {
+            addToast(err.message || 'Failed to load assignment data.', 'error');
+        } finally {
+            setFgOpLoading(false);
+        }
+    };
+
+    const handleSaveFgOperator = async () => {
+        if (!fgOperatorModal || !fgOpSelectedUserId) return;
+        setFgOpSaving(true);
+        try {
+            const result = await apiFetch(`/api/smt/smt-fg/work-orders/${fgOperatorModal.woId}/operator-assignment`, {
+                method: 'POST',
+                body: JSON.stringify({ user_id: fgOpSelectedUserId }),
+            });
+            addToast(result.message || 'SMT-FG operator saved.', 'success');
+            setFgOperatorModal(null);
+        } catch (err: any) {
+            addToast(err.message || 'Failed to save assignment.', 'error');
+        } finally {
+            setFgOpSaving(false);
+        }
+    };
+    // ─────────────────────────────────────────────────────────────────────────
 
     // ─── Initial Load ────────────────────────────────────────────────────────
     useEffect(() => {
@@ -209,7 +261,7 @@ const PostAoi: React.FC = () => {
     }, []);
 
     // Determine if any modal/dialog is currently active
-    const isModalOpen = showAbortModal || !!selectedScanToFail || !!selectedScanToRepair || !!editingScanId || !!selectedQrBarcode || !!viewingRemarkText || showFailedModal;
+    const isModalOpen = showAbortModal || !!selectedScanToFail || !!selectedScanToRepair || !!editingScanId || !!selectedQrBarcode || !!viewingRemarkText || showFailedModal || !!fgOperatorModal;
 
     // Keep scanner input focused if scanning is active, no dialog is open, and search input is not focused
     useEffect(() => {
@@ -1438,7 +1490,7 @@ const PostAoi: React.FC = () => {
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{session.solder_paste_barcode}</td>
                                                     <td>{session.side}</td>
                                                     <td>{getStatusBadge(session.status)}</td>
-                                                    <td style={{ display: 'flex', gap: '8px' }}>
+                                                    <td style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                                         <button
                                                             className={styles.secondaryButton}
                                                             style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', backgroundColor: '#eef2ff', color: '#4338ca', borderColor: '#c7d2fe' }}
@@ -1453,6 +1505,16 @@ const PostAoi: React.FC = () => {
                                                                 onClick={() => handleDeleteSession(session.id, session.work_order_id)}
                                                             >
                                                                 Delete
+                                                            </button>
+                                                        )}
+                                                        {canAssignFgOp && (
+                                                            <button
+                                                                onClick={() => handleOpenFgOperatorModal(session)}
+                                                                className={styles.secondaryButton}
+                                                                style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem', borderColor: '#0891b2', color: '#0891b2' }}
+                                                                title="Assign SMT-FG Operator"
+                                                            >
+                                                                👤 FG Op
                                                             </button>
                                                         )}
                                                     </td>
@@ -1592,7 +1654,7 @@ const PostAoi: React.FC = () => {
                                                     <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
                                                         {session.updated_at ? new Date(session.updated_at).toLocaleString() : new Date(session.created_at).toLocaleString()}
                                                     </td>
-                                                    <td style={{ display: 'flex', gap: '8px' }}>
+                                                    <td style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                                         <button
                                                             className={styles.secondaryButton}
                                                             style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
@@ -1621,6 +1683,16 @@ const PostAoi: React.FC = () => {
                                                                 onClick={() => handleDeleteSession(session.id, session.work_order_id)}
                                                             >
                                                                 Delete
+                                                            </button>
+                                                        )}
+                                                        {canAssignFgOp && (
+                                                            <button
+                                                                onClick={() => handleOpenFgOperatorModal(session)}
+                                                                className={styles.secondaryButton}
+                                                                style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem', borderColor: '#0891b2', color: '#0891b2' }}
+                                                                title="Assign SMT-FG Operator"
+                                                            >
+                                                                👤 FG Op
                                                             </button>
                                                         )}
                                                     </td>
@@ -1681,6 +1753,16 @@ const PostAoi: React.FC = () => {
                         <button className={styles.detailBackButton} onClick={() => { setActiveSession(null); fetchSessionsLists(); }}>
                             ← Back to Session Setup
                         </button>
+                        {canAssignFgOp && activeSession && (
+                            <button
+                                onClick={() => handleOpenFgOperatorModal(activeSession)}
+                                className={styles.secondaryButton}
+                                style={{ padding: '0.45rem 0.9rem', fontSize: '0.85rem', borderColor: '#0891b2', color: '#0891b2', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                title="Assign SMT-FG Operator"
+                            >
+                                👤 FG Op
+                            </button>
+                        )}
                     </div>
 
                     {/* Unified Information Panel */}
@@ -2149,6 +2231,117 @@ const PostAoi: React.FC = () => {
                     onClose={() => setShowFailedModal(false)}
                 />
             )}
+
+            {/* ── SMT-FG Operator Assignment Modal ───────────────────────────── */}
+            {fgOperatorModal && (
+                <div
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 10000,
+                        background: 'rgba(0,0,0,0.55)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                    onClick={() => !fgOpSaving && setFgOperatorModal(null)}
+                >
+                    <div
+                        style={{
+                            background: '#fff', borderRadius: '12px',
+                            padding: '2rem', width: '480px', maxWidth: '95vw',
+                            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                                    👤 Assign SMT-FG Operator
+                                </h3>
+                                <p style={{ margin: '0.25rem 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                                    Work Order: <strong>{fgOperatorModal.woId}</strong>
+                                    {fgOperatorModal.side ? ` (${fgOperatorModal.side})` : ''}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setFgOperatorModal(null)}
+                                disabled={fgOpSaving}
+                                style={{ background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#64748b', lineHeight: 1 }}
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        {/* Current assignment banner */}
+                        {fgOpCurrentAssignment && (
+                            <div style={{
+                                background: '#f0fdf4', border: '1px solid #86efac',
+                                borderRadius: '8px', padding: '0.75rem 1rem',
+                                marginBottom: '1rem', fontSize: '0.875rem', color: '#166534'
+                            }}>
+                                ✅ Currently assigned: <strong>{fgOpCurrentAssignment.employee_name}</strong> ({fgOpCurrentAssignment.employee_code})
+                            </div>
+                        )}
+
+                        {/* Operator dropdown */}
+                        {fgOpLoading ? (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>Loading operators...</div>
+                        ) : (
+                            <div style={{ marginBottom: '1.25rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+                                    SMT-FG Operator <span style={{ color: '#ef4444' }}>*</span>
+                                </label>
+                                <select
+                                    value={fgOpSelectedUserId ?? ''}
+                                    onChange={e => setFgOpSelectedUserId(e.target.value ? parseInt(e.target.value) : null)}
+                                    disabled={fgOpSaving}
+                                    style={{
+                                        width: '100%', padding: '0.6rem 0.8rem',
+                                        border: '1.5px solid #d1d5db', borderRadius: '8px',
+                                        fontSize: '0.9rem', color: '#1e293b', background: '#fff',
+                                        outline: 'none', cursor: fgOpSaving ? 'not-allowed' : 'pointer'
+                                    }}
+                                >
+                                    <option value="">-- Select SMT Operator --</option>
+                                    {smtOperators.map(op => (
+                                        <option key={op.id} value={op.id}>
+                                            {op.employee_code} — {op.employee_name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {smtOperators.length === 0 && !fgOpLoading && (
+                                    <p style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.4rem' }}>
+                                        No active SMT department operators found.
+                                    </p>
+                                )}
+                                <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.4rem' }}>
+                                    Only active employees in the SMT department are listed.
+                                    This operator will be used for all automatic SMT-FG transactions for this Work Order.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Footer buttons */}
+                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={() => setFgOperatorModal(null)}
+                                disabled={fgOpSaving}
+                                className={styles.secondaryButton}
+                                style={{ padding: '0.5rem 1.25rem' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveFgOperator}
+                                disabled={!fgOpSelectedUserId || fgOpSaving || fgOpLoading}
+                                className={styles.button}
+                                style={{ padding: '0.5rem 1.5rem', opacity: (!fgOpSelectedUserId || fgOpSaving) ? 0.6 : 1 }}
+                            >
+                                {fgOpSaving ? 'Saving...' : 'Save Assignment'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* ─────────────────────────────────────────────────────────────── */}
 
             <style>{`
                 @keyframes slideIn {

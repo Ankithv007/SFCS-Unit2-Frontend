@@ -35,6 +35,8 @@ interface WorkOrderRecord {
     updated_by?: string;
     updated_at?: string;
     remark?: string;
+    has_smt?: boolean;
+    has_backend?: boolean;
 }
 
 const ALL_STAGES = ['PTH', 'VI', 'QA', 'Flashing', 'PCBA-FCT', 'Assembly', 'Unit Testing', 'QI', 'Packing'];
@@ -73,17 +75,19 @@ const WorkOrder: React.FC = () => {
             }
             const res = await apiFetch(`/api/backend/work-order?${queryParams.toString()}`);
             if (res && res.data && Array.isArray(res.data)) {
-                setWorkOrders(res.data);
-                const total = typeof res.total === 'number' ? res.total : res.data.length;
+                const backendWos = res.data.filter((wo: any) => wo.has_backend !== false);
+                setWorkOrders(backendWos);
+                const total = typeof res.total === 'number' ? res.total : backendWos.length;
                 setTotalRecords(total);
                 setTotalPages(typeof res.totalPages === 'number' ? res.totalPages : Math.ceil(total / limit) || 1);
                 if (typeof res.page === 'number') {
                     setCurrentPage(res.page);
                 }
             } else if (Array.isArray(res)) {
-                setWorkOrders(res);
-                setTotalRecords(res.length);
-                setTotalPages(Math.ceil(res.length / limit) || 1);
+                const backendWos = res.filter((wo: any) => wo.has_backend !== false);
+                setWorkOrders(backendWos);
+                setTotalRecords(backendWos.length);
+                setTotalPages(Math.ceil(backendWos.length / limit) || 1);
             } else {
                 setWorkOrders([]);
                 setTotalRecords(0);

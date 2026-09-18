@@ -729,79 +729,6 @@ export const WorkOrder: React.FC = () => {
 
                     {error && <div style={{ color: 'var(--error-color)', marginBottom: '1rem', fontWeight: 'bold' }}>{error}</div>}
 
-                    {/* --- PROCESS SELECTION BAR --- */}
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '1.25rem',
-                        marginBottom: '1.25rem',
-                        padding: '0.75rem 1.25rem',
-                        backgroundColor: '#f8fafc',
-                        borderRadius: '0.5rem',
-                        border: '1px solid #e2e8f0',
-                        flexWrap: 'wrap'
-                    }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>
-                            Process Selection *:
-                        </span>
-                        <label style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.4rem',
-                            cursor: 'pointer',
-                            fontWeight: 700,
-                            fontSize: '0.95rem',
-                            color: hasSmt ? '#1d4ed8' : '#64748b',
-                            backgroundColor: hasSmt ? '#eff6ff' : '#ffffff',
-                            padding: '0.35rem 0.75rem',
-                            borderRadius: '0.375rem',
-                            border: `1.5px solid ${hasSmt ? '#2563eb' : '#cbd5e1'}`,
-                            transition: 'all 0.15s ease'
-                        }}>
-                            <input
-                                type="checkbox"
-                                id="hasSmtProcessCheckbox"
-                                checked={hasSmt}
-                                onChange={(e) => setHasSmt(e.target.checked)}
-                                style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }}
-                            />
-                            <span>⚡ SMT</span>
-                        </label>
-                        <label style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.4rem',
-                            cursor: 'pointer',
-                            fontWeight: 700,
-                            fontSize: '0.95rem',
-                            color: hasBackend ? '#1d4ed8' : '#64748b',
-                            backgroundColor: hasBackend ? '#eff6ff' : '#ffffff',
-                            padding: '0.35rem 0.75rem',
-                            borderRadius: '0.375rem',
-                            border: `1.5px solid ${hasBackend ? '#2563eb' : '#cbd5e1'}`,
-                            transition: 'all 0.15s ease'
-                        }}>
-                            <input
-                                type="checkbox"
-                                id="hasBackendProcessCheckbox"
-                                checked={hasBackend}
-                                onChange={(e) => setHasBackend(e.target.checked)}
-                                style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }}
-                            />
-                            <span>🔀 Backend</span>
-                        </label>
-                        {!hasSmt && (
-                            <span style={{ fontSize: '0.85rem', color: '#b45309', backgroundColor: '#fef3c7', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fde68a', fontWeight: 600 }}>
-                                ⚠️ SMT process disabled for this Work Order.
-                            </span>
-                        )}
-                        {!hasBackend && (
-                            <span style={{ fontSize: '0.85rem', color: '#b45309', backgroundColor: '#fef3c7', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fde68a', fontWeight: 600 }}>
-                                ⚠️ Backend process disabled for this Work Order.
-                            </span>
-                        )}
-                    </div>
-
                     <div className={styles.formGrid} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
                         {/* --- ROW 1 --- */}
                         <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
@@ -1103,35 +1030,6 @@ export const WorkOrder: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
-
-                                {/* --- SMT Option Tickbox (Below Upload PO Document box) --- */}
-                                <div style={{
-                                    marginTop: '0.75rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.6rem',
-                                    padding: '0.55rem 0.85rem',
-                                    backgroundColor: hasSmt ? '#eff6ff' : '#f8fafc',
-                                    borderRadius: '0.5rem',
-                                    border: `1.5px solid ${hasSmt ? '#2563eb' : '#cbd5e1'}`,
-                                    transition: 'all 0.15s ease'
-                                }}>
-                                    <input
-                                        type="checkbox"
-                                        id="hasSmtCheckbox"
-                                        checked={hasSmt}
-                                        onChange={(e) => setHasSmt(e.target.checked)}
-                                        style={{
-                                            width: '18px',
-                                            height: '18px',
-                                            cursor: 'pointer',
-                                            accentColor: '#2563eb'
-                                        }}
-                                    />
-                                    <label htmlFor="hasSmtCheckbox" style={{ fontSize: '0.9rem', fontWeight: 700, color: hasSmt ? '#1d4ed8' : '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                        <span>⚡</span> SMT
-                                    </label>
-                                </div>
                             </div>
 
                             {/* Right Column: Remark */}
@@ -1177,35 +1075,6 @@ export const WorkOrder: React.FC = () => {
                                 gap: '0.75rem'
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                    {/* Backend Tickbox Option right before words Backend Process Routing */}
-                                    <label style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.4rem',
-                                        cursor: 'pointer',
-                                        userSelect: 'none',
-                                        backgroundColor: hasBackend ? '#eff6ff' : '#f1f5f9',
-                                        padding: '0.4rem 0.75rem',
-                                        borderRadius: '0.5rem',
-                                        border: `1.5px solid ${hasBackend ? '#2563eb' : '#cbd5e1'}`,
-                                        transition: 'all 0.15s ease'
-                                    }}>
-                                        <input
-                                            type="checkbox"
-                                            id="hasBackendCheckbox"
-                                            checked={hasBackend}
-                                            onChange={(e) => setHasBackend(e.target.checked)}
-                                            style={{
-                                                width: '18px',
-                                                height: '18px',
-                                                accentColor: '#2563eb',
-                                                cursor: 'pointer'
-                                            }}
-                                        />
-                                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: hasBackend ? '#1d4ed8' : '#64748b' }}>
-                                            Backend
-                                        </span>
-                                    </label>
                                     <span style={{ fontSize: '1.2rem' }}>🔀</span>
                                     <div>
                                         <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1e293b' }}>
@@ -1365,7 +1234,81 @@ export const WorkOrder: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className={styles.actions} style={{ marginTop: '30px', display: 'flex', gap: '10px' }}>
+                    {/* --- PROCESS SELECTION BAR (MOVED TO BOTTOM) --- */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1.25rem',
+                        marginTop: '1.5rem',
+                        marginBottom: '0.5rem',
+                        padding: '0.85rem 1.25rem',
+                        backgroundColor: '#f8fafc',
+                        borderRadius: '0.5rem',
+                        border: '1px solid #e2e8f0',
+                        flexWrap: 'wrap'
+                    }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>
+                            Process Selection *:
+                        </span>
+                        <label style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '0.95rem',
+                            color: hasSmt ? '#1d4ed8' : '#64748b',
+                            backgroundColor: hasSmt ? '#eff6ff' : '#ffffff',
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '0.375rem',
+                            border: `1.5px solid ${hasSmt ? '#2563eb' : '#cbd5e1'}`,
+                            transition: 'all 0.15s ease'
+                        }}>
+                            <input
+                                type="checkbox"
+                                id="hasSmtProcessCheckbox"
+                                checked={hasSmt}
+                                onChange={(e) => setHasSmt(e.target.checked)}
+                                style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }}
+                            />
+                            <span>⚡ SMT</span>
+                        </label>
+                        <label style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '0.95rem',
+                            color: hasBackend ? '#1d4ed8' : '#64748b',
+                            backgroundColor: hasBackend ? '#eff6ff' : '#ffffff',
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '0.375rem',
+                            border: `1.5px solid ${hasBackend ? '#2563eb' : '#cbd5e1'}`,
+                            transition: 'all 0.15s ease'
+                        }}>
+                            <input
+                                type="checkbox"
+                                id="hasBackendProcessCheckbox"
+                                checked={hasBackend}
+                                onChange={(e) => setHasBackend(e.target.checked)}
+                                style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }}
+                            />
+                            <span>🔀 Backend</span>
+                        </label>
+                        {!hasSmt && (
+                            <span style={{ fontSize: '0.85rem', color: '#b45309', backgroundColor: '#fef3c7', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fde68a', fontWeight: 600 }}>
+                                ⚠️ SMT process disabled for this Work Order.
+                            </span>
+                        )}
+                        {!hasBackend && (
+                            <span style={{ fontSize: '0.85rem', color: '#b45309', backgroundColor: '#fef3c7', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fde68a', fontWeight: 600 }}>
+                                ⚠️ Backend process disabled for this Work Order.
+                            </span>
+                        )}
+                    </div>
+
+                    <div className={styles.actions} style={{ marginTop: '1.25rem', display: 'flex', gap: '10px' }}>
                         <button 
                             className={`${styles.button} ${isCreating ? styles.buttonWithSpinner : ''}`} 
                             onClick={handleCreateWorkOrder}

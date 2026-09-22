@@ -21,61 +21,257 @@ import { useToast } from '../../../components/Toast';
 import { useAuth } from '../../../hooks/useAuth';
 import type { RrhWorkOrderRecord, RrhWorkOrderDetail } from '../types';
 
-interface ExcelPreviewData {
-    fileName: string;
-    fileSize: number;
-    totalRows: number;
-    totalColumns: number;
-    columns: string[];
-    previewRows: Record<string, any>[];
-}
-
-// Concise helpers
-const formatBytes = (bytes: number) => {
-    if (!bytes || bytes <= 0) return '0 B';
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${['B', 'KB', 'MB', 'GB'][i]}`;
+// Helper functions for formatting
+const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString();
 };
 
-const formatDate = (d: string) => d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '-';
-const formatDateTime = (d: string) => d ? new Date(d).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+const formatDateTime = (dateString: string | null | undefined) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleString();
+};
 
-// Shared Excel Data Table Component
+const formatBytes = (bytes: number | null | undefined, decimals = 2) => {
+    if (bytes == null || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
+
+export interface ParsedCell {
+    columnNumber?: number;
+    c?: number;
+    columnLetter?: string;
+    rawValue?: string | null;
+    displayValue?: string | null;
+    v?: string | null;
+    dataType?: string;
+    t?: string;
+    isMerged?: boolean;
+    mergeType?: 'MASTER' | 'SLAVE' | 'NONE';
+    rowSpan?: number;
+    colSpan?: number;
+}
+
+export interface ParsedRow {
+    rowNumber: number;
+    rowType: 'HEADER' | 'SUB_HEADER' | 'DATA' | 'BLANK';
+    cells: ParsedCell[];
+}
+
+export interface ParsedMerge {
+    rangeReference: string;
+    startRow: number;
+    startColumn: number;
+    endRow: number;
+    endColumn: number;
+    rowSpan?: number;
+    colSpan?: number;
+}
+
+export interface ParsedSheet {
+    sheetName: string;
+    totalRows: number;
+    totalColumns: number;
+    fileHash?: string;
+    fileSize?: number;
+    merges: ParsedMerge[];
+    rows: ParsedRow[];
+}
+
+interface ExcelPreviewData {
+    fileName: string;
+    originalName: string;
+    totalRows: number;
+    totalColumns: number;
+    fileHash?: string;
+    fileSize?: number;
+    data: ParsedSheet;
+}
+
+export interface RrhWorkOrderDetailExtended extends RrhWorkOrderDetail {
+    excel_structure?: ParsedSheet;
+}
+
+const getColLetter = (colIndex: number): string => {
+    let temp, letter = '';
+    while (colIndex > 0) {
+        temp = (colIndex - 1) % 26;
+        letter = String.fromCharCode(temp + 65) + letter;
+        colIndex = Math.floor((colIndex - temp - 1) / 26);
+    }
+    return letter;
+};
+
+// Exact Spreadsheet Excel Preview Component
 const ExcelDataTable: React.FC<{
+    sheetData: ParsedSheet;
+    emptyMessage?: string;
+    maxDisplayRows?: number;
+}> = ({ sheetData, emptyMessage = 'No rows to display.', maxDisplayRows }) => {
+    if (!sheetData || !sheetData.rows || sheetData.rows.length === 0) {
+        return <div className={styles.emptyNotice}>{emptyMessage}</div>;
+    }
+
+    const { totalColumns, rows } = sheetData;
+
+    // Separate Header Rows (Row 1 and Row 2) from Data Rows (Row 3+)
+    const headerRows = rows.filter(r => r.rowType === 'HEADER' || r.rowType === 'SUB_HEADER' || r.rowNumber <= 2);
+    const dataRows = rows.filter(r => r.rowType !== 'HEADER' && r.rowType !== 'SUB_HEADER' && r.rowNumber > 2);
+    const displayedDataRows = maxDisplayRows ? dataRows.slice(0, maxDisplayRows) : dataRows;
+
+    return (
+        <div style={{ overflowX: 'auto', maxWidth: '100%', maxHeight: '600px', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+            <table className={styles.previewTable} style={{ whiteSpace: 'nowrap', borderCollapse: 'collapse', width: '100%' }}>
+                <thead>
+                    {/* Top Spreadsheet Coordinate Bar (#, A, B, C, ... AF) */}
+                    <tr style={{ background: '#f1f5f9' }}>
+                        <th style={{ width: '45px', position: 'sticky', top: 0, left: 0, zIndex: 4, background: '#e2e8f0', borderRight: '2px solid #cbd5e1', borderBottom: '2px solid #cbd5e1', textAlign: 'center', fontSize: '0.75rem', color: '#64748b' }}>
+                            #
+                        </th>
+                        {Array.from({ length: totalColumns }).map((_, i) => (
+                            <th key={`coord-${i}`} style={{ position: 'sticky', top: 0, zIndex: 3, background: '#f1f5f9', padding: '4px 8px', borderRight: '1px solid #cbd5e1', borderBottom: '2px solid #cbd5e1', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 700 }}>
+                                {getColLetter(i + 1)}
+                            </th>
+                        ))}
+                    </tr>
+
+                    {/* Exact Excel Row 1 & Row 2 Headers */}
+                    {headerRows.map((row) => (
+                        <tr key={`hdr-row-${row.rowNumber}`} style={{ background: row.rowNumber === 1 ? '#e0e7ff' : '#f8fafc' }}>
+                            <th style={{ width: '45px', position: 'sticky', left: 0, zIndex: 2, background: row.rowNumber === 1 ? '#c7d2fe' : '#e2e8f0', borderRight: '2px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#374151' }}>
+                                {row.rowNumber}
+                            </th>
+                            {row.cells.map((cell) => {
+                                if (cell.mergeType === 'SLAVE') {
+                                    return null; // Skip cells covered by master merge
+                                }
+
+                                const isMaster = cell.mergeType === 'MASTER';
+                                const rowSpan = isMaster && cell.rowSpan ? cell.rowSpan : 1;
+                                const colSpan = isMaster && cell.colSpan ? cell.colSpan : 1;
+                                const val = String(cell.displayValue ?? cell.v ?? cell.rawValue ?? '');
+
+                                return (
+                                    <th
+                                        key={`hdr-cell-${row.rowNumber}-${cell.columnNumber ?? cell.c}`}
+                                        rowSpan={rowSpan}
+                                        colSpan={colSpan}
+                                        title={val}
+                                        style={{
+                                            padding: row.rowNumber === 1 ? '8px 12px' : '6px 10px',
+                                            border: '1px solid #cbd5e1',
+                                            textAlign: colSpan > 1 || isMaster ? 'center' : 'left',
+                                            verticalAlign: 'middle',
+                                            fontWeight: 700,
+                                            fontSize: row.rowNumber === 1 ? '0.85rem' : '0.75rem',
+                                            color: row.rowNumber === 1 ? '#1e1b4b' : '#334155',
+                                            background: row.rowNumber === 1 ? '#e0e7ff' : '#f8fafc',
+                                            textTransform: row.rowNumber === 1 ? 'uppercase' : 'none'
+                                        }}
+                                    >
+                                        {val}
+                                    </th>
+                                );
+                            })}
+                        </tr>
+                    ))}
+                </thead>
+                <tbody>
+                    {displayedDataRows.length === 0 ? (
+                        <tr>
+                            <td colSpan={totalColumns + 1} className={styles.emptyNotice}>
+                                {emptyMessage}
+                            </td>
+                        </tr>
+                    ) : (
+                        displayedDataRows.map((row) => (
+                            <tr key={`data-row-${row.rowNumber}`} style={{ background: row.rowNumber % 2 === 0 ? '#f8fafc' : '#ffffff' }}>
+                                <td style={{ width: '45px', fontWeight: 600, color: '#64748b', position: 'sticky', left: 0, background: row.rowNumber % 2 === 0 ? '#f1f5f9' : '#ffffff', zIndex: 1, borderRight: '2px solid #cbd5e1', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontSize: '0.8rem' }}>
+                                    {row.rowNumber}
+                                </td>
+                                {row.cells.map((cell) => {
+                                    if (cell.mergeType === 'SLAVE') {
+                                        return null;
+                                    }
+
+                                    const isMaster = cell.mergeType === 'MASTER';
+                                    const rowSpan = isMaster && cell.rowSpan ? cell.rowSpan : 1;
+                                    const colSpan = isMaster && cell.colSpan ? cell.colSpan : 1;
+                                    const val = String(cell.displayValue ?? cell.v ?? cell.rawValue ?? '');
+
+                                    return (
+                                        <td
+                                            key={`cell-${row.rowNumber}-${cell.columnNumber ?? cell.c}`}
+                                            rowSpan={rowSpan}
+                                            colSpan={colSpan}
+                                            title={val}
+                                            style={{
+                                                padding: '6px 10px',
+                                                border: '1px solid #e2e8f0',
+                                                textAlign: colSpan > 1 ? 'center' : 'left',
+                                                verticalAlign: 'top',
+                                                fontSize: '0.85rem'
+                                            }}
+                                        >
+                                            {val}
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+};
+
+// Legacy Flat Table fallback
+const LegacyExcelDataTable: React.FC<{
     columns: string[];
     rows: Record<string, any>[];
     emptyMessage?: string;
 }> = ({ columns, rows, emptyMessage = 'No rows to display.' }) => (
-    <table className={styles.previewTable}>
-        <thead>
-            <tr>
-                <th style={{ width: '45px' }}>#</th>
-                {columns.map((col, idx) => (
-                    <th key={idx}>{col}</th>
-                ))}
-            </tr>
-        </thead>
-        <tbody>
-            {rows.length === 0 ? (
+    <div style={{ overflowX: 'auto', maxWidth: '100%', maxHeight: '600px' }}>
+        <table className={styles.previewTable} style={{ whiteSpace: 'nowrap' }}>
+            <thead>
                 <tr>
-                    <td colSpan={columns.length + 1} className={styles.emptyNotice}>
-                        {emptyMessage}
-                    </td>
+                    <th style={{ width: '45px', position: 'sticky', top: 0, left: 0, zIndex: 3, background: '#f8fafc' }}>#</th>
+                    {columns.map((col, idx) => (
+                        <th key={idx} style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc', padding: '8px 12px', borderBottom: '2px solid #e2e8f0' }}>
+                            {col}
+                        </th>
+                    ))}
                 </tr>
-            ) : (
-                rows.map((row, rIdx) => (
-                    <tr key={rIdx}>
-                        <td style={{ fontWeight: 600, color: '#94a3b8' }}>{rIdx + 1}</td>
-                        {columns.map((col, cIdx) => (
-                            <td key={cIdx} title={String(row[col] ?? '')}>
-                                {String(row[col] ?? '')}
-                            </td>
-                        ))}
+            </thead>
+            <tbody>
+                {rows.length === 0 ? (
+                    <tr>
+                        <td colSpan={columns.length + 1} className={styles.emptyNotice}>
+                            {emptyMessage}
+                        </td>
                     </tr>
-                ))
-            )}
-        </tbody>
-    </table>
+                ) : (
+                    rows.map((row, rIdx) => (
+                        <tr key={rIdx}>
+                            <td style={{ fontWeight: 600, color: '#94a3b8', position: 'sticky', left: 0, background: 'inherit', zIndex: 1, borderRight: '1px solid #e2e8f0' }}>
+                                {rIdx + 1}
+                            </td>
+                            {columns.map((col, cIdx) => (
+                                <td key={cIdx} title={String(row[col] ?? '')} style={{ padding: '8px 12px', border: '1px solid #e2e8f0' }}>
+                                    {String(row[col] ?? '')}
+                                </td>
+                            ))}
+                        </tr>
+                    ))
+                )}
+            </tbody>
+        </table>
+    </div>
 );
 
 export const RrhWorkOrder: React.FC = () => {
@@ -90,6 +286,7 @@ export const RrhWorkOrder: React.FC = () => {
     const [workOrderDate, setWorkOrderDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [lotQuantity, setLotQuantity] = useState('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [tempFileName, setTempFileName] = useState<string | null>(null);
     const [isParsingExcel, setIsParsingExcel] = useState(false);
     const [excelPreview, setExcelPreview] = useState<ExcelPreviewData | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -109,7 +306,7 @@ export const RrhWorkOrder: React.FC = () => {
     const [totalPages, setTotalPages] = useState(1);
 
     // Detail Modal states
-    const [selectedDetail, setSelectedDetail] = useState<RrhWorkOrderDetail | null>(null);
+    const [selectedDetail, setSelectedDetail] = useState<RrhWorkOrderDetailExtended | null>(null);
     const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
     const [modalExcelFilter, setModalExcelFilter] = useState('');
 
@@ -128,6 +325,7 @@ export const RrhWorkOrder: React.FC = () => {
 
             if (result.success) {
                 setExcelPreview(result);
+                setTempFileName(result.fileName);
                 showToast(`Excel parsed: ${result.totalRows} rows and ${result.totalColumns} columns detected.`, 'info');
             } else {
                 throw new Error(result.error || 'Failed to parse Excel file.');
@@ -139,6 +337,7 @@ export const RrhWorkOrder: React.FC = () => {
             showToast(msg, 'error');
             setSelectedFile(null);
             setExcelPreview(null);
+            setTempFileName(null);
             if (fileInputRef.current) fileInputRef.current.value = '';
         } finally {
             setIsParsingExcel(false);
@@ -157,8 +356,8 @@ export const RrhWorkOrder: React.FC = () => {
             return;
         }
 
-        if (file.size > 50 * 1024 * 1024) {
-            const errorMsg = 'File size exceeds 50MB limit.';
+        if (file.size > 100 * 1024 * 1024) {
+            const errorMsg = 'File size exceeds 100MB limit.';
             setFormError(errorMsg);
             showToast(errorMsg, 'error');
             return;
@@ -168,9 +367,17 @@ export const RrhWorkOrder: React.FC = () => {
         parseExcel(file);
     };
 
-    const handleClearFile = () => {
+    const handleClearFile = async () => {
+        if (tempFileName) {
+            try {
+                await apiFetch(`/api/rrh/work-orders/temp-file/${encodeURIComponent(tempFileName)}`, { method: 'DELETE' });
+            } catch (e) {
+                console.warn('Failed to delete temp file:', e);
+            }
+        }
         setSelectedFile(null);
         setExcelPreview(null);
+        setTempFileName(null);
         setFormError('');
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
@@ -228,7 +435,7 @@ export const RrhWorkOrder: React.FC = () => {
             return;
         }
 
-        if (!selectedFile) {
+        if (!selectedFile && !tempFileName) {
             setFormError('Please select and upload an Excel file.');
             return;
         }
@@ -239,7 +446,14 @@ export const RrhWorkOrder: React.FC = () => {
             formData.append('work_order_id', woIdTrimmed);
             formData.append('work_order_date', workOrderDate);
             formData.append('lot_quantity', qtyNum.toString());
-            formData.append('file', selectedFile);
+
+            if (tempFileName) {
+                formData.append('temp_filename', tempFileName);
+            }
+            if (selectedFile) {
+                formData.append('original_filename', selectedFile.name);
+                formData.append('file', selectedFile);
+            }
 
             const result = await apiFetch('/api/rrh/work-orders', {
                 method: 'POST',
@@ -247,8 +461,15 @@ export const RrhWorkOrder: React.FC = () => {
             });
 
             if (result.success) {
-                showToast(`RRH Work Order "${woIdTrimmed}" created successfully!`, 'success');
-                handleResetForm();
+                showToast(result.message || `RRH Work Order "${woIdTrimmed}" saved successfully!`, 'success');
+                setSelectedFile(null);
+                setExcelPreview(null);
+                setTempFileName(null);
+                setWorkOrderId('');
+                setWorkOrderDate(new Date().toISOString().split('T')[0]);
+                setLotQuantity('');
+                setFormError('');
+                if (fileInputRef.current) fileInputRef.current.value = '';
                 fetchWorkOrders();
             } else {
                 throw new Error(result.error || 'Failed to create RRH Work Order.');
@@ -312,7 +533,28 @@ export const RrhWorkOrder: React.FC = () => {
         }
     };
 
-    // Filter modal excel rows
+    // Filter modal rows for structure or legacy table
+    const filteredModalStructure = useMemo(() => {
+        if (!selectedDetail?.excel_structure) return null;
+        if (!modalExcelFilter.trim()) return selectedDetail.excel_structure;
+
+        const term = modalExcelFilter.toLowerCase().trim();
+        const headers = selectedDetail.excel_structure.rows.filter(
+            r => r.rowType === 'HEADER' || r.rowType === 'SUB_HEADER' || r.rowNumber <= 2
+        );
+        const dataRows = selectedDetail.excel_structure.rows.filter(
+            r => r.rowType !== 'HEADER' && r.rowType !== 'SUB_HEADER' && r.rowNumber > 2
+        );
+        const matchedData = dataRows.filter(row =>
+            row.cells.some(c => String(c.displayValue ?? c.v ?? c.rawValue ?? '').toLowerCase().includes(term))
+        );
+
+        return {
+            ...selectedDetail.excel_structure,
+            rows: [...headers, ...matchedData]
+        };
+    }, [selectedDetail, modalExcelFilter]);
+
     const filteredModalRows = useMemo(() => {
         if (!selectedDetail?.excel_data) return [];
         if (!modalExcelFilter.trim()) return selectedDetail.excel_data;
@@ -334,7 +576,7 @@ export const RrhWorkOrder: React.FC = () => {
                     <div>
                         <h1 className={styles.headerTitle}>RRH Work Order Management</h1>
                         <p className={styles.headerSubtitle}>
-                            Create and manage Remote Radio Head (RRH) Work Orders and associated Excel datasets independently.
+                            Create and manage Remote Radio Head (RRH) Work Orders and exact Excel master datasets independently.
                         </p>
                     </div>
                 </div>
@@ -345,7 +587,7 @@ export const RrhWorkOrder: React.FC = () => {
                 <div className={styles.cardHeader}>
                     <h2 className={styles.cardTitle}>
                         <FileSpreadsheet size={20} color="#4f46e5" />
-                        Create RRH Work Order
+                        Create or Replace RRH Work Order
                     </h2>
                 </div>
 
@@ -426,7 +668,7 @@ export const RrhWorkOrder: React.FC = () => {
                                     <strong>Click to browse</strong> or drag and drop your Excel workbook here
                                 </p>
                                 <p className={styles.dropzoneHint}>
-                                    Supports Microsoft Excel (.xlsx, .xls) up to 50MB
+                                    Supports Microsoft Excel (.xlsx, .xls) up to 100MB
                                 </p>
                             </div>
                         ) : (
@@ -437,7 +679,7 @@ export const RrhWorkOrder: React.FC = () => {
                                         <p className={styles.fileActiveName}>{selectedFile.name}</p>
                                         <p className={styles.fileActiveMeta}>
                                             Size: {formatBytes(selectedFile.size)}
-                                            {isParsingExcel && ' • Parsing preview...'}
+                                            {isParsingExcel && ' • Parsing exact preview...'}
                                         </p>
                                     </div>
                                 </div>
@@ -445,7 +687,7 @@ export const RrhWorkOrder: React.FC = () => {
                                     type="button"
                                     className={styles.removeFileBtn}
                                     onClick={handleClearFile}
-                                    title="Remove file"
+                                    title="Remove file and cleanup temp storage"
                                 >
                                     <X size={16} /> Remove File
                                 </button>
@@ -453,18 +695,23 @@ export const RrhWorkOrder: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Live Preview Card */}
+                    {/* Live Exact Preview Card */}
                     {excelPreview && !isParsingExcel && (
                         <div className={styles.previewBox}>
                             <div className={styles.previewStats}>
                                 <div className={styles.statItem}>
                                     <FileText size={16} color="#6366f1" />
                                     <span>File:</span>
-                                    <span className={styles.statValue}>{excelPreview.fileName}</span>
+                                    <span className={styles.statValue}>{excelPreview.originalName || excelPreview.fileName}</span>
                                 </div>
                                 <div className={styles.statItem}>
                                     <Layers size={16} color="#059669" />
-                                    <span>Total Columns:</span>
+                                    <span>Sheet:</span>
+                                    <span className={styles.statValue}>"{excelPreview.data.sheetName}"</span>
+                                </div>
+                                <div className={styles.statItem}>
+                                    <Layers size={16} color="#059669" />
+                                    <span>Columns:</span>
                                     <span className={styles.statValue}>{excelPreview.totalColumns}</span>
                                 </div>
                                 <div className={styles.statItem}>
@@ -473,13 +720,18 @@ export const RrhWorkOrder: React.FC = () => {
                                     <span className={styles.statValue}>{excelPreview.totalRows}</span>
                                 </div>
                                 <div className={styles.statItem} style={{ marginLeft: 'auto', color: '#64748b', fontSize: '0.8rem' }}>
-                                    (Showing first {excelPreview.previewRows.length} rows preview)
+                                    (Exact Excel Preview • Row 1 & Row 2 Preserved)
                                 </div>
                             </div>
 
-                            <div className={styles.previewTableWrapper}>
-                                <ExcelDataTable columns={excelPreview.columns} rows={excelPreview.previewRows} />
+                            <div className={styles.previewTableWrapper} style={{ maxHeight: '450px' }}>
+                                <ExcelDataTable sheetData={excelPreview.data} maxDisplayRows={150} />
                             </div>
+                            {excelPreview.data.rows.length > 152 && (
+                                <div style={{ padding: '6px 12px', background: '#f8fafc', fontSize: '0.8rem', color: '#64748b', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+                                    Showing preview of first 150 rows. All {excelPreview.totalRows} rows will be fully saved upon creation.
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -496,17 +748,17 @@ export const RrhWorkOrder: React.FC = () => {
                         <button
                             type="submit"
                             className={styles.btnPrimary}
-                            disabled={isSubmitting || isParsingExcel || !workOrderId.trim() || !lotQuantity || !selectedFile}
+                            disabled={isSubmitting || isParsingExcel || !workOrderId.trim() || !lotQuantity || (!selectedFile && !tempFileName)}
                         >
                             {isSubmitting ? (
                                 <>
                                     <span className={styles.spinner} />
-                                    Creating Work Order...
+                                    Saving Work Order & Master Data...
                                 </>
                             ) : (
                                 <>
                                     <CheckCircle2 size={18} />
-                                    Create Work Order
+                                    Save / Replace Work Order
                                 </>
                             )}
                         </button>
@@ -522,7 +774,7 @@ export const RrhWorkOrder: React.FC = () => {
                 </form>
             </div>
 
-            {/* Created RRH Work Orders Section */}
+            {/* Created RRH Work Orders Directory */}
             <div className={styles.card}>
                 <div className={styles.cardHeader}>
                     <h2 className={styles.cardTitle}>
@@ -630,7 +882,7 @@ export const RrhWorkOrder: React.FC = () => {
                                                     className={`${styles.actionBtn} ${styles.actionBtnView}`}
                                                     onClick={() => handleViewDetail(wo.id)}
                                                     disabled={loadingDetailId === wo.id}
-                                                    title="View Details & Full Dataset"
+                                                    title="View Details & Exact Excel Dataset"
                                                 >
                                                     {loadingDetailId === wo.id ? (
                                                         <span className={styles.spinner} style={{ width: '12px', height: '12px', borderWidth: '1.5px' }} />
@@ -716,7 +968,7 @@ export const RrhWorkOrder: React.FC = () => {
                     className={styles.modalOverlay}
                     onClick={e => { if (e.target === e.currentTarget) setSelectedDetail(null); }}
                 >
-                    <div className={styles.modalDialog}>
+                    <div className={styles.modalDialog} style={{ maxWidth: '1200px' }}>
                         <div className={styles.modalHeader}>
                             <h3 className={styles.modalTitle}>
                                 <Radio size={20} color="#4f46e5" />
@@ -732,7 +984,7 @@ export const RrhWorkOrder: React.FC = () => {
                         </div>
 
                         <div className={styles.modalBody}>
-                            {/* Section 1: RRH Work Order Details */}
+                            {/* Section 1: Work Order Overview */}
                             <div className={styles.modalSection}>
                                 <h4 className={styles.sectionHeader}>
                                     Section 1 — Work Order Overview
@@ -753,7 +1005,7 @@ export const RrhWorkOrder: React.FC = () => {
                                     <div className={styles.detailItem}>
                                         <span className={styles.detailLabel}>Lot Quantity</span>
                                         <span className={styles.detailValue}>
-                                            {selectedDetail.lot_quantity.toLocaleString()}
+                                            {selectedDetail.lot_quantity?.toLocaleString() || 0}
                                         </span>
                                     </div>
                                     <div className={styles.detailItem}>
@@ -771,7 +1023,7 @@ export const RrhWorkOrder: React.FC = () => {
                                     <div className={styles.detailItem}>
                                         <span className={styles.detailLabel}>Excel File Name</span>
                                         <span className={styles.detailValue}>
-                                            {selectedDetail.excel_filename}
+                                            {selectedDetail.excel_filename || 'N/A'}
                                         </span>
                                     </div>
                                     <div className={styles.detailItem}>
@@ -783,10 +1035,12 @@ export const RrhWorkOrder: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Section 2: Excel Data */}
+                            {/* Section 2: Excel Master Data (Exact Spreadsheet View) */}
                             <div className={styles.modalSection}>
                                 <div className={styles.sectionHeader}>
-                                    <span>Section 2 — Excel Data ({selectedDetail.total_excel_rows} rows, {selectedDetail.excel_columns?.length || 0} columns)</span>
+                                    <span>
+                                        Section 2 — Master Excel Dataset ({selectedDetail.total_excel_rows || selectedDetail.excel_structure?.totalRows || 0} rows, {selectedDetail.excel_structure?.totalColumns || selectedDetail.excel_columns?.length || 32} columns)
+                                    </span>
                                     <button
                                         type="button"
                                         className={styles.btnPrimary}
@@ -809,16 +1063,23 @@ export const RrhWorkOrder: React.FC = () => {
                                         />
                                     </div>
                                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                        Showing {filteredModalRows.length} of {selectedDetail.total_excel_rows} rows
+                                        Exact visual layout from PostgreSQL master data
                                     </span>
                                 </div>
 
-                                <div className={styles.modalTableContainer}>
-                                    <ExcelDataTable
-                                        columns={selectedDetail.excel_columns || []}
-                                        rows={filteredModalRows}
-                                        emptyMessage="No rows match your search filter."
-                                    />
+                                <div className={styles.modalTableContainer} style={{ maxHeight: '480px' }}>
+                                    {selectedDetail.excel_structure ? (
+                                        <ExcelDataTable
+                                            sheetData={filteredModalStructure || selectedDetail.excel_structure}
+                                            emptyMessage="No rows match your search filter."
+                                        />
+                                    ) : (
+                                        <LegacyExcelDataTable
+                                            columns={selectedDetail.excel_columns || []}
+                                            rows={filteredModalRows}
+                                            emptyMessage="No rows match your search filter."
+                                        />
+                                    )}
                                 </div>
                             </div>
                         </div>

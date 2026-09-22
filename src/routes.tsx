@@ -54,6 +54,15 @@ import Packing from './pages/backend/Packing';
 import ReworkBackend from './pages/backend/Rework';
 import DebugBackend from './pages/backend/Debug';
 import TrackItems from './pages/backend/TrackItems';
+import { RrhWorkOrder } from './pages/rrh/work-order/RrhWorkOrder';
+import { RrhInward } from './pages/rrh/inward/RrhInward';
+import { RrhIvi } from './pages/rrh/ivi/RrhIvi';
+import { RrhIpqc } from './pages/rrh/ipqc/RrhIpqc';
+import { RrhDebug } from './pages/rrh/debug/RrhDebug';
+import { RrhTesting } from './pages/rrh/testing/RrhTesting';
+import { RrhFqc } from './pages/rrh/fqc/RrhFqc';
+import { RrhOba } from './pages/rrh/oba/RrhOba';
+import { RrhPackagingOutgoingData } from './pages/rrh/packaging-outgoing-data/RrhPackagingOutgoingData';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -292,6 +301,57 @@ export const router = createBrowserRouter([
                     {
                         path: 'track-items',
                         element: <TrackItems />,
+                    },
+                ]
+            },
+
+            {
+                path: '/rrh',
+                element: (
+                    <ProtectedRoute>
+                        <Outlet />
+                    </ProtectedRoute>
+                ),
+                children: [
+                    {
+                        path: '',
+                        element: <Navigate to="/rrh/work-order" replace />,
+                    },
+                    {
+                        path: 'work-order',
+                        element: <RrhWorkOrder />,
+                    },
+                    {
+                        path: 'inward',
+                        element: <RrhInward />,
+                    },
+                    {
+                        path: 'ivi',
+                        element: <RrhIvi />,
+                    },
+                    {
+                        path: 'ipqc',
+                        element: <RrhIpqc />,
+                    },
+                    {
+                        path: 'debug',
+                        element: <RrhDebug />,
+                    },
+                    {
+                        path: 'testing',
+                        element: <RrhTesting />,
+                    },
+                    {
+                        path: 'fqc',
+                        element: <RrhFqc />,
+                    },
+                    {
+                        path: 'oba',
+                        element: <RrhOba />,
+                    },
+                    {
+                        path: 'packaging-outgoing-data',
+                        element: <RrhPackagingOutgoingData />,
                     },
                 ]
             },

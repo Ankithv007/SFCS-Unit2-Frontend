@@ -76,5 +76,16 @@ export const systemPagesConfig: SystemPageRoute[] = [
     { permission_key: 'backend_packing', module_name: 'Backend', page_name: 'Packing', route_path: '/backend/packing', display_order: 90, page_type: 'PAGE', icon: 'Package', parent_module: 'Backend' },
     { permission_key: 'backend_rework', module_name: 'Backend', page_name: 'Rework', route_path: '/backend/rework', display_order: 91, page_type: 'PAGE', icon: 'Wrench', parent_module: 'Backend' },
     { permission_key: 'backend_debug', module_name: 'Backend', page_name: 'Debug', route_path: '/backend/debug', display_order: 92, page_type: 'PAGE', icon: 'Bug', parent_module: 'Backend' },
-    { permission_key: 'backend_track_items', module_name: 'Backend', page_name: 'Track Items', route_path: '/backend/track-items', display_order: 93, page_type: 'PAGE', icon: 'List', parent_module: 'Backend' }
+    { permission_key: 'backend_track_items', module_name: 'Backend', page_name: 'Track Items', route_path: '/backend/track-items', display_order: 93, page_type: 'PAGE', icon: 'List', parent_module: 'Backend' },
+
+    // RRH Module
+    { permission_key: 'rrh_work_order', module_name: 'RRH', page_name: 'Work Order', route_path: '/rrh/work-order', display_order: 94, page_type: 'PAGE', icon: 'Clipboard', parent_module: 'RRH' },
+    { permission_key: 'rrh_inward', module_name: 'RRH', page_name: 'Inward', route_path: '/rrh/inward', display_order: 95, page_type: 'PAGE', icon: 'ArrowDownRight', parent_module: 'RRH' },
+    { permission_key: 'rrh_ivi', module_name: 'RRH', page_name: 'IVI', route_path: '/rrh/ivi', display_order: 96, page_type: 'PAGE', icon: 'Eye', parent_module: 'RRH' },
+    { permission_key: 'rrh_ipqc', module_name: 'RRH', page_name: 'IPQC', route_path: '/rrh/ipqc', display_order: 97, page_type: 'PAGE', icon: 'ShieldCheck', parent_module: 'RRH' },
+    { permission_key: 'rrh_debug', module_name: 'RRH', page_name: 'Debug', route_path: '/rrh/debug', display_order: 98, page_type: 'PAGE', icon: 'Bug', parent_module: 'RRH' },
+    { permission_key: 'rrh_testing', module_name: 'RRH', page_name: 'Testing', route_path: '/rrh/testing', display_order: 99, page_type: 'PAGE', icon: 'Play', parent_module: 'RRH' },
+    { permission_key: 'rrh_fqc', module_name: 'RRH', page_name: 'FQC', route_path: '/rrh/fqc', display_order: 100, page_type: 'PAGE', icon: 'Award', parent_module: 'RRH' },
+    { permission_key: 'rrh_oba', module_name: 'RRH', page_name: 'OBA', route_path: '/rrh/oba', display_order: 101, page_type: 'PAGE', icon: 'PackageSearch', parent_module: 'RRH' },
+    { permission_key: 'rrh_packaging_outgoing_data', module_name: 'RRH', page_name: 'Packaging Outgoing Data', route_path: '/rrh/packaging-outgoing-data', display_order: 102, page_type: 'PAGE', icon: 'Package', parent_module: 'RRH' }
 ];

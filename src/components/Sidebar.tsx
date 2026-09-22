@@ -5,6 +5,7 @@ import { useToast } from './Toast';
 import {
     Home,
     Shield,
+    Clipboard,
     Cpu,
     ClipboardList,
     FileCheck,
@@ -42,7 +43,10 @@ import {
     Boxes,
     ShoppingCart,
     RotateCcw,
-    BarChart3
+    BarChart3,
+    ArrowDownRight,
+    Award,
+    PackageSearch
 } from 'lucide-react';
 import styles from './Sidebar.module.css';
 
@@ -74,11 +78,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     
     const canViewSmtModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('smt_') && p.permission_key !== 'smt_work_order' && p.can_view);
     const canViewBackendModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('backend_') && p.can_view);
+    const canViewRrhModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('rrh_') && p.can_view);
     const canViewPreTestingModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('pre_') && p.can_view);
     const canViewInventoryModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('inv_') && p.can_view);
 
     useEffect(() => {
         if (location.pathname.startsWith('/pre-testing')) setExpandedModule('pre-testing');
+        else if (location.pathname.startsWith('/rrh')) setExpandedModule('rrh');
         else if (location.pathname.startsWith('/smt')) {
             if (location.pathname !== '/smt/work-order') {
                 setExpandedModule('smt');
@@ -574,6 +580,118 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     <span className={styles.menuIcon}>
                                         <ScanLine size={18} />
                                     </span> Track Items
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* RRH Module */}
+            {canViewRrhModule && (
+                <div className={styles.moduleWrapper}>
+                    <div
+                        className={`${styles.menuItem} ${expandedModule === 'rrh' ? styles.active : ''}`}
+                        onClick={() => toggleModule('rrh')}
+                        title="RRH"
+                    >
+                        <span className={styles.menuIcon}>
+                            <Radio size={20} />
+                        </span>
+                        <span className={styles.menuText}>RRH</span>
+                        <span className={styles.arrow}>{expandedModule === 'rrh' ? '▼' : '▶'}</span>
+                    </div>
+
+                    {expandedModule === 'rrh' && isExpanded && (
+                        <div className={styles.submenu}>
+                            {hasPermission('rrh_work_order') && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/work-order') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/work-order')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <Clipboard size={18} />
+                                    </span> Work Order
+                                </div>
+                            )}
+                            {hasPermission('rrh_inward') && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/inward') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/inward')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <ArrowDownRight size={18} />
+                                    </span> Inward
+                                </div>
+                            )}
+                            {hasPermission('rrh_ivi') && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/ivi') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/ivi')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <Eye size={18} />
+                                    </span> IVI
+                                </div>
+                            )}
+                            {hasPermission('rrh_ipqc') && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/ipqc') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/ipqc')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <ShieldCheck size={18} />
+                                    </span> IPQC
+                                </div>
+                            )}
+                            {hasPermission('rrh_debug') && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/debug') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/debug')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <Bug size={18} />
+                                    </span> Debug
+                                </div>
+                            )}
+                            {hasPermission('rrh_testing') && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/testing') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/testing')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <PlayCircle size={18} />
+                                    </span> Testing
+                                </div>
+                            )}
+                            {hasPermission('rrh_fqc') && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/fqc') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/fqc')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <Award size={18} />
+                                    </span> FQC
+                                </div>
+                            )}
+                            {hasPermission('rrh_oba') && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/oba') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/oba')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <PackageSearch size={18} />
+                                    </span> OBA
+                                </div>
+                            )}
+                            {hasPermission('rrh_packaging_outgoing_data') && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/packaging-outgoing-data') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/packaging-outgoing-data')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <Package size={18} />
+                                    </span> Packaging Outgoing Data
                                 </div>
                             )}
                         </div>

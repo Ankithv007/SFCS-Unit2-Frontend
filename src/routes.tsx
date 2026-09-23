@@ -55,6 +55,7 @@ import ReworkBackend from './pages/backend/Rework';
 import DebugBackend from './pages/backend/Debug';
 import TrackItems from './pages/backend/TrackItems';
 import { RrhWorkOrder } from './pages/rrh/work-order/RrhWorkOrder';
+import { RrhMasterView } from './pages/rrh/master-view/RrhMasterView';
 import { RrhInward } from './pages/rrh/inward/RrhInward';
 import { RrhIvi } from './pages/rrh/ivi/RrhIvi';
 import { RrhIpqc } from './pages/rrh/ipqc/RrhIpqc';
@@ -320,6 +321,10 @@ export const router = createBrowserRouter([
                     {
                         path: 'work-order',
                         element: <RrhWorkOrder />,
+                    },
+                    {
+                        path: 'work-order/master-view/:id',
+                        element: <RrhMasterView />,
                     },
                     {
                         path: 'inward',

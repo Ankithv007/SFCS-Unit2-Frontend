@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Radio,
     UploadCloud,
@@ -230,51 +231,8 @@ const ExcelDataTable: React.FC<{
     );
 };
 
-// Legacy Flat Table fallback
-const LegacyExcelDataTable: React.FC<{
-    columns: string[];
-    rows: Record<string, any>[];
-    emptyMessage?: string;
-}> = ({ columns, rows, emptyMessage = 'No rows to display.' }) => (
-    <div style={{ overflowX: 'auto', maxWidth: '100%', maxHeight: '600px' }}>
-        <table className={styles.previewTable} style={{ whiteSpace: 'nowrap' }}>
-            <thead>
-                <tr>
-                    <th style={{ width: '45px', position: 'sticky', top: 0, left: 0, zIndex: 3, background: '#f8fafc' }}>#</th>
-                    {columns.map((col, idx) => (
-                        <th key={idx} style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc', padding: '8px 12px', borderBottom: '2px solid #e2e8f0' }}>
-                            {col}
-                        </th>
-                    ))}
-                </tr>
-            </thead>
-            <tbody>
-                {rows.length === 0 ? (
-                    <tr>
-                        <td colSpan={columns.length + 1} className={styles.emptyNotice}>
-                            {emptyMessage}
-                        </td>
-                    </tr>
-                ) : (
-                    rows.map((row, rIdx) => (
-                        <tr key={rIdx}>
-                            <td style={{ fontWeight: 600, color: '#94a3b8', position: 'sticky', left: 0, background: 'inherit', zIndex: 1, borderRight: '1px solid #e2e8f0' }}>
-                                {rIdx + 1}
-                            </td>
-                            {columns.map((col, cIdx) => (
-                                <td key={cIdx} title={String(row[col] ?? '')} style={{ padding: '8px 12px', border: '1px solid #e2e8f0' }}>
-                                    {String(row[col] ?? '')}
-                                </td>
-                            ))}
-                        </tr>
-                    ))
-                )}
-            </tbody>
-        </table>
-    </div>
-);
-
 export const RrhWorkOrder: React.FC = () => {
+    const navigate = useNavigate();
     const { user, permissions = [] } = useAuth();
     const { showToast } = useToast();
 
@@ -305,10 +263,7 @@ export const RrhWorkOrder: React.FC = () => {
     const [totalRecords, setTotalRecords] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
-    // Detail Modal states
-    const [selectedDetail, setSelectedDetail] = useState<RrhWorkOrderDetailExtended | null>(null);
-    const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
-    const [modalExcelFilter, setModalExcelFilter] = useState('');
+
 
     // Parse Excel via API
     const parseExcel = async (file: File) => {
@@ -484,24 +439,6 @@ export const RrhWorkOrder: React.FC = () => {
         }
     };
 
-    // View Detail Modal
-    const handleViewDetail = async (id: number) => {
-        setLoadingDetailId(id);
-        try {
-            const res = await apiFetch(`/api/rrh/work-orders/${id}`);
-            if (res.success && res.data) {
-                setSelectedDetail(res.data);
-                setModalExcelFilter('');
-            } else {
-                throw new Error(res.error || 'Failed to fetch Work Order details.');
-            }
-        } catch (err: any) {
-            showToast(err.message || 'Failed to fetch details.', 'error');
-        } finally {
-            setLoadingDetailId(null);
-        }
-    };
-
     // Download Original Excel
     const handleDownloadExcel = async (id: number, filename: string) => {
         try {
@@ -523,7 +460,6 @@ export const RrhWorkOrder: React.FC = () => {
             const res = await apiFetch(`/api/rrh/work-orders/${id}`, { method: 'DELETE' });
             if (res.success) {
                 showToast(`RRH Work Order "${woId}" deleted successfully.`, 'success');
-                if (selectedDetail?.id === id) setSelectedDetail(null);
                 fetchWorkOrders();
             } else {
                 throw new Error(res.error || 'Failed to delete RRH Work Order.');
@@ -532,38 +468,6 @@ export const RrhWorkOrder: React.FC = () => {
             showToast(err.message || 'Failed to delete RRH Work Order.', 'error');
         }
     };
-
-    // Filter modal rows for structure or legacy table
-    const filteredModalStructure = useMemo(() => {
-        if (!selectedDetail?.excel_structure) return null;
-        if (!modalExcelFilter.trim()) return selectedDetail.excel_structure;
-
-        const term = modalExcelFilter.toLowerCase().trim();
-        const headers = selectedDetail.excel_structure.rows.filter(
-            r => r.rowType === 'HEADER' || r.rowType === 'SUB_HEADER' || r.rowNumber <= 2
-        );
-        const dataRows = selectedDetail.excel_structure.rows.filter(
-            r => r.rowType !== 'HEADER' && r.rowType !== 'SUB_HEADER' && r.rowNumber > 2
-        );
-        const matchedData = dataRows.filter(row =>
-            row.cells.some(c => String(c.displayValue ?? c.v ?? c.rawValue ?? '').toLowerCase().includes(term))
-        );
-
-        return {
-            ...selectedDetail.excel_structure,
-            rows: [...headers, ...matchedData]
-        };
-    }, [selectedDetail, modalExcelFilter]);
-
-    const filteredModalRows = useMemo(() => {
-        if (!selectedDetail?.excel_data) return [];
-        if (!modalExcelFilter.trim()) return selectedDetail.excel_data;
-
-        const term = modalExcelFilter.toLowerCase().trim();
-        return selectedDetail.excel_data.filter(row =>
-            Object.values(row).some(val => String(val ?? '').toLowerCase().includes(term))
-        );
-    }, [selectedDetail, modalExcelFilter]);
 
     return (
         <div className={styles.container}>
@@ -880,15 +784,10 @@ export const RrhWorkOrder: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className={`${styles.actionBtn} ${styles.actionBtnView}`}
-                                                    onClick={() => handleViewDetail(wo.id)}
-                                                    disabled={loadingDetailId === wo.id}
-                                                    title="View Details & Exact Excel Dataset"
+                                                    onClick={() => navigate(`/rrh/work-order/master-view/${wo.id}`)}
+                                                    title="View Full-Page Master Excel Data"
                                                 >
-                                                    {loadingDetailId === wo.id ? (
-                                                        <span className={styles.spinner} style={{ width: '12px', height: '12px', borderWidth: '1.5px' }} />
-                                                    ) : (
-                                                        <Eye size={14} />
-                                                    )} View
+                                                    <Eye size={14} /> View
                                                 </button>
                                                 <button
                                                     type="button"
@@ -962,130 +861,7 @@ export const RrhWorkOrder: React.FC = () => {
                 </div>
             </div>
 
-            {/* Work Order Detail Modal */}
-            {selectedDetail && (
-                <div
-                    className={styles.modalOverlay}
-                    onClick={e => { if (e.target === e.currentTarget) setSelectedDetail(null); }}
-                >
-                    <div className={styles.modalDialog} style={{ maxWidth: '1200px' }}>
-                        <div className={styles.modalHeader}>
-                            <h3 className={styles.modalTitle}>
-                                <Radio size={20} color="#4f46e5" />
-                                RRH Work Order Detail: {selectedDetail.work_order_id}
-                            </h3>
-                            <button
-                                type="button"
-                                className={styles.closeBtn}
-                                onClick={() => setSelectedDetail(null)}
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
 
-                        <div className={styles.modalBody}>
-                            {/* Section 1: Work Order Overview */}
-                            <div className={styles.modalSection}>
-                                <h4 className={styles.sectionHeader}>
-                                    Section 1 — Work Order Overview
-                                </h4>
-                                <div className={styles.detailsGrid}>
-                                    <div className={styles.detailItem}>
-                                        <span className={styles.detailLabel}>Work Order ID</span>
-                                        <span className={styles.detailValue} style={{ color: '#4f46e5' }}>
-                                            {selectedDetail.work_order_id}
-                                        </span>
-                                    </div>
-                                    <div className={styles.detailItem}>
-                                        <span className={styles.detailLabel}>Date</span>
-                                        <span className={styles.detailValue}>
-                                            {formatDate(selectedDetail.work_order_date)}
-                                        </span>
-                                    </div>
-                                    <div className={styles.detailItem}>
-                                        <span className={styles.detailLabel}>Lot Quantity</span>
-                                        <span className={styles.detailValue}>
-                                            {selectedDetail.lot_quantity?.toLocaleString() || 0}
-                                        </span>
-                                    </div>
-                                    <div className={styles.detailItem}>
-                                        <span className={styles.detailLabel}>Created By</span>
-                                        <span className={styles.detailValue}>
-                                            {selectedDetail.created_by || 'System'}
-                                        </span>
-                                    </div>
-                                    <div className={styles.detailItem}>
-                                        <span className={styles.detailLabel}>Created At</span>
-                                        <span className={styles.detailValue}>
-                                            {formatDateTime(selectedDetail.created_at)}
-                                        </span>
-                                    </div>
-                                    <div className={styles.detailItem}>
-                                        <span className={styles.detailLabel}>Excel File Name</span>
-                                        <span className={styles.detailValue}>
-                                            {selectedDetail.excel_filename || 'N/A'}
-                                        </span>
-                                    </div>
-                                    <div className={styles.detailItem}>
-                                        <span className={styles.detailLabel}>File Size</span>
-                                        <span className={styles.detailValue}>
-                                            {formatBytes(selectedDetail.excel_file_size)}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Section 2: Excel Master Data (Exact Spreadsheet View) */}
-                            <div className={styles.modalSection}>
-                                <div className={styles.sectionHeader}>
-                                    <span>
-                                        Section 2 — Master Excel Dataset ({selectedDetail.total_excel_rows || selectedDetail.excel_structure?.totalRows || 0} rows, {selectedDetail.excel_structure?.totalColumns || selectedDetail.excel_columns?.length || 32} columns)
-                                    </span>
-                                    <button
-                                        type="button"
-                                        className={styles.btnPrimary}
-                                        style={{ padding: '0.45rem 1rem', fontSize: '0.85rem' }}
-                                        onClick={() => handleDownloadExcel(selectedDetail.id, selectedDetail.excel_filename)}
-                                    >
-                                        <Download size={15} /> Download Original Excel
-                                    </button>
-                                </div>
-
-                                <div className={styles.excelControls}>
-                                    <div className={styles.searchInputWrapper} style={{ maxWidth: '360px' }}>
-                                        <Search size={16} className={styles.searchIcon} />
-                                        <input
-                                            type="text"
-                                            className={styles.searchInput}
-                                            placeholder="Search across all Excel cells..."
-                                            value={modalExcelFilter}
-                                            onChange={e => setModalExcelFilter(e.target.value)}
-                                        />
-                                    </div>
-                                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                        Exact visual layout from PostgreSQL master data
-                                    </span>
-                                </div>
-
-                                <div className={styles.modalTableContainer} style={{ maxHeight: '480px' }}>
-                                    {selectedDetail.excel_structure ? (
-                                        <ExcelDataTable
-                                            sheetData={filteredModalStructure || selectedDetail.excel_structure}
-                                            emptyMessage="No rows match your search filter."
-                                        />
-                                    ) : (
-                                        <LegacyExcelDataTable
-                                            columns={selectedDetail.excel_columns || []}
-                                            rows={filteredModalRows}
-                                            emptyMessage="No rows match your search filter."
-                                        />
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

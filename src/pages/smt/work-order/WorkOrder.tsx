@@ -66,6 +66,17 @@ const DescriptionCell: React.FC<{ text: string }> = ({ text }) => {
 
 const ALL_STAGES = ['PTH', 'VI', 'QA', 'Flashing', 'PCBA-FCT', 'Assembly', 'Unit Testing', 'QI', 'Packing'];
 
+const formatSidesDisplay = (side: string | null | undefined): string => {
+    if (!side) return '-';
+    const s = side.trim();
+    if (s === 'Top / Bottom' || s === 'TOP/BOTTOM' || s === 'TOP / BOTTOM' || s.toLowerCase() === 'top/bottom' || s.toLowerCase() === 'top / bottom') {
+        return 'TOP and BOTTOM';
+    }
+    if (s.toUpperCase() === 'TOP') return 'TOP';
+    if (s.toUpperCase() === 'BOTTOM') return 'BOTTOM';
+    return side;
+};
+
 export const WorkOrder: React.FC = () => {
     const { smtUser, smtLogout } = useSmtAuth();
     const { user } = useAuth();
@@ -947,9 +958,12 @@ export const WorkOrder: React.FC = () => {
                                 disabled={!hasSmt}
                             >
                                 <option value="">Select Sides</option>
-                                <option value="Top">Top</option>
-                                <option value="Bottom">Bottom</option>
-                                <option value="Top / Bottom">Top / Bottom</option>
+                                <option value="Top">TOP</option>
+                                <option value="Bottom">BOTTOM</option>
+                                <option value="Top / Bottom">TOP and BOTTOM</option>
+                                {sides === 'TOP' && <option value="TOP" style={{ display: 'none' }}>TOP</option>}
+                                {sides === 'BOTTOM' && <option value="BOTTOM" style={{ display: 'none' }}>BOTTOM</option>}
+                                {sides === 'TOP/BOTTOM' && <option value="TOP/BOTTOM" style={{ display: 'none' }}>TOP and BOTTOM</option>}
                             </select>
                         </div>
 
@@ -1397,7 +1411,7 @@ export const WorkOrder: React.FC = () => {
                                                 <td style={{ fontWeight: 500, color: '#374151' }}>{wo.po_id || '-'}</td>
                                                 <td>{wo.product_name}</td>
                                                 <DescriptionCell text={wo.product_description} />
-                                                <td style={{ fontWeight: 500, color: '#475569' }}>{wo.sides || '-'}</td>
+                                                <td style={{ fontWeight: 500, color: '#475569' }}>{formatSidesDisplay(wo.sides)}</td>
                                                 <td 
                                                     className="smt-clickable-count smt-total" 
                                                     onClick={() => setSelectedCount({
@@ -1715,7 +1729,7 @@ export const WorkOrder: React.FC = () => {
                                         </div>
                                         <div className={styles.detailItem}>
                                             <span className={styles.detailLabel}>Number of Sides</span>
-                                            <span className={styles.detailValue}>{viewDetailWo.sides || '-'}</span>
+                                            <span className={styles.detailValue}>{formatSidesDisplay(viewDetailWo.sides)}</span>
                                         </div>
                                         <div className={styles.detailItem}>
                                             <span className={styles.detailLabel}>Quantity</span>

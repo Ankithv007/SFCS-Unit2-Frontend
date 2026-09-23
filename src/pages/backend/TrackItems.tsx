@@ -789,7 +789,7 @@ const TrackItems: React.FC = () => {
                                                             {isCurrent && <span className={styles.liveTag}>LIVE</span>}
                                                         </div>
                                                         {isSkipped ? (
-                                                            <StatusBadge status="SKIPPED" small />
+                                                            <span style={{ fontSize: '9px', background: 'rgba(148,163,184,0.12)', color: '#94a3b8', border: '1px solid #cbd5e133', padding: '2px 8px', borderRadius: '9999px', fontWeight: 700 }}>N/A</span>
                                                         ) : visited ? (
                                                             <StatusBadge status={stStatus} small />
                                                         ) : (
@@ -962,36 +962,63 @@ const TrackItems: React.FC = () => {
 
                         {/* ── Audit Table ── */}
                         <div className={styles.auditPanel}>
-                            <h3 className={styles.panelTitle}><Activity size={18} /> Full Audit Log</h3>
+                            <h3 className={styles.panelTitle}><Activity size={18} /> Full Audit Log (SMT + Backend)</h3>
                             <div className={styles.tableWrap}>
-                                <table className={styles.auditTable}>
-                                    <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th>Stage</th>
-                                            <th>Action</th>
-                                            <th>Operator</th>
-                                            <th>Date & Time</th>
-                                            <th>Failure Remark</th>
-                                            <th>Repair Note</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {data.scan_history.length === 0 ? (
-                                            <tr><td colSpan={7} className={styles.emptyRow}>No records.</td></tr>
-                                        ) : data.scan_history.map((row, idx) => (
-                                            <tr key={idx} className={row.station === 'Rework' || row.station === 'Debug' ? styles.repairRow : ''}>
-                                                <td className={styles.auditIdx}>{idx + 1}</td>
-                                                <td><strong>{row.station}</strong></td>
-                                                <td><StatusBadge status={row.status} small /></td>
-                                                <td>{row.scanned_by}</td>
-                                                <td className={styles.auditTime}>{fmt(row.scanned_at)}</td>
-                                                <td className={styles.remarkCell}>{row.remarks || row.failed_remarks || '—'}</td>
-                                                <td className={styles.remarkCell}>{row.repair_remark || '—'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                {(() => {
+                                    const backendRows = (data.scan_history || []).map((row: ScanEntry) => ({
+                                        station: row.station,
+                                        status: row.status,
+                                        scanned_by: row.scanned_by,
+                                        scanned_at: row.scanned_at,
+                                        remarks: row.remarks,
+                                        repair_remark: row.repair_remark,
+                                        source: 'Backend',
+                                    }));
+                                    const smtRows = (data.smt_scan_history || []).map((h: any) => ({
+                                        station: h.process_step || '-',
+                                        status: h.status || '-',
+                                        scanned_by: h.scanned_by || '-',
+                                        scanned_at: h.scanned_at,
+                                        remarks: h.rework_reason || null,
+                                        repair_remark: null,
+                                        source: 'SMT',
+                                    }));
+                                    const combined = [...smtRows, ...backendRows].sort(
+                                        (a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
+                                    );
+                                    return (
+                                        <table className={styles.auditTable}>
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Source</th>
+                                                    <th>Stage</th>
+                                                    <th>Action</th>
+                                                    <th>Operator</th>
+                                                    <th>Date &amp; Time</th>
+                                                    <th>Failure Remark</th>
+                                                    <th>Repair Note</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {combined.length === 0 ? (
+                                                    <tr><td colSpan={8} className={styles.emptyRow}>No records.</td></tr>
+                                                ) : combined.map((row, idx) => (
+                                                    <tr key={idx} className={row.station === 'Rework' || row.station === 'Debug' ? styles.repairRow : ''}>
+                                                        <td className={styles.auditIdx}>{idx + 1}</td>
+                                                        <td><span style={{ fontSize: '9px', background: row.source === 'SMT' ? 'rgba(59,130,246,0.12)' : 'rgba(16,185,129,0.12)', color: row.source === 'SMT' ? '#3b82f6' : '#10b981', border: `1px solid ${row.source === 'SMT' ? '#3b82f633' : '#10b98133'}`, padding: '2px 6px', borderRadius: '3px', fontWeight: 700 }}>{row.source}</span></td>
+                                                        <td><strong>{row.station}</strong></td>
+                                                        <td><StatusBadge status={row.status} small /></td>
+                                                        <td>{row.scanned_by}</td>
+                                                        <td className={styles.auditTime}>{fmt(row.scanned_at)}</td>
+                                                        <td className={styles.remarkCell}>{row.remarks || '—'}</td>
+                                                        <td className={styles.remarkCell}>{row.repair_remark || '—'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>
@@ -1252,60 +1279,60 @@ const TrackItems: React.FC = () => {
                                 <thead>
                                     <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
                                         <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '30px' }}>#</th>
+                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '60px' }}>Source</th>
                                         <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '80px' }}>Stage</th>
                                         <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '80px' }}>Action</th>
                                         <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '90px' }}>Operator</th>
-                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '120px' }}>Date & Time</th>
+                                        <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', width: '120px' }}>Date &amp; Time</th>
                                         <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Remarks / Failure</th>
                                         <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Repair Note</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {data.scan_history.length === 0 ? (
+                                {(() => {
+                                    const backendRows = (data.scan_history || []).map((row: ScanEntry) => ({
+                                        station: row.station,
+                                        status: row.status,
+                                        scanned_by: row.scanned_by,
+                                        scanned_at: row.scanned_at,
+                                        remarks: row.remarks || row.failed_remarks || null,
+                                        repair_remark: row.repair_remark || null,
+                                        source: 'Backend',
+                                    }));
+                                    const smtRows = (data.smt_scan_history || []).map((h: any) => ({
+                                        station: h.process_step || '-',
+                                        status: h.status || '-',
+                                        scanned_by: h.scanned_by || '-',
+                                        scanned_at: h.scanned_at,
+                                        remarks: h.rework_reason || null,
+                                        repair_remark: null,
+                                        source: 'SMT',
+                                    }));
+                                    const combined = [...smtRows, ...backendRows].sort(
+                                        (a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
+                                    );
+                                    return combined.length === 0 ? (
                                         <tr>
-                                            <td colSpan={7} style={{ padding: '12px', textAlign: 'center', color: '#64748b', border: '1px solid #cbd5e1' }}>
-                                                No scan events recorded yet.
-                                            </td>
+                                            <td colSpan={8} style={{ padding: '12px', textAlign: 'center', color: '#64748b', border: '1px solid #cbd5e1' }}>No scan events recorded yet.</td>
                                         </tr>
-                                    ) : (
-                                        data.scan_history.map((row, idx) => {
-                                            const isRepair = row.station === 'Rework' || row.station === 'Debug';
-                                            return (
-                                                <tr
-                                                    key={idx}
-                                                    style={{
-                                                        background: isRepair ? '#fffbeb' : idx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                                                        color: '#1e293b'
-                                                    }}
-                                                >
-                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600, textAlign: 'center' }}>{idx + 1}</td>
-                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.station}</td>
-                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
-                                                        <span style={{
-                                                            display: 'inline-block',
-                                                            padding: '2px 6px',
-                                                            borderRadius: '4px',
-                                                            fontWeight: 700,
-                                                            fontSize: '9px',
-                                                            background: statusBg(row.status),
-                                                            color: statusColor(row.status),
-                                                            border: `1px solid ${statusColor(row.status)}33`
-                                                        }}>
-                                                            {row.status.toUpperCase()}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
-                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
-                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>
-                                                        {row.remarks || row.failed_remarks || '—'}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>
-                                                        {row.repair_remark || '—'}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    )}
+                                    ) : combined.map((row, idx) => {
+                                        const isRepair = row.station === 'Rework' || row.station === 'Debug';
+                                        return (
+                                            <tr key={idx} style={{ background: isRepair ? '#fffbeb' : idx % 2 === 0 ? '#ffffff' : '#f8fafc', color: '#1e293b' }}>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600, textAlign: 'center' }}>{idx + 1}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700, color: row.source === 'SMT' ? '#3b82f6' : '#10b981' }}>{row.source}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.station}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
+                                                    <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, fontSize: '9px', background: statusBg(row.status), color: statusColor(row.status), border: `1px solid ${statusColor(row.status)}33` }}>{row.status.toUpperCase()}</span>
+                                                </td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>{row.remarks || '—'}</td>
+                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>{row.repair_remark || '—'}</td>
+                                            </tr>
+                                        );
+                                    });
+                                })()}
                                 </tbody>
                             </table>
                         </>
@@ -1334,6 +1361,10 @@ const TrackItems: React.FC = () => {
                                     <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.product_name}</span>
                                 </div>
                                 <div>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '100px' }}>Process</span>
+                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.has_smt && woData.has_backend ? 'SMT + Backend' : woData.has_smt ? 'SMT' : 'Backend'}</span>
+                                </div>
+                                <div>
                                     <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '100px' }}>Total Serials</span>
                                     <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.total_serials} / {woData.quantity}</span>
                                 </div>
@@ -1348,6 +1379,9 @@ const TrackItems: React.FC = () => {
                                 <thead>
                                     <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
                                         <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Serial Number</th>
+                                        {woData.has_smt && SMT_PIPELINE_STAGES.map((step: string) => (
+                                            <th key={step} style={{ padding: '6px 8px', border: '1px solid #cbd5e1', background: '#1e4db7' }}>{step}</th>
+                                        ))}
                                         {PRODUCTION_PIPELINE.map((step: any) => (
                                             <th key={step.code} style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>{step.label}</th>
                                         ))}
@@ -1358,6 +1392,13 @@ const TrackItems: React.FC = () => {
                                     {woData.serials.map((s: any, idx: number) => (
                                         <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f8fafc', color: '#1e293b' }}>
                                             <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{s.serial_number}</td>
+                                            {woData.has_smt && SMT_PIPELINE_STAGES.map((step: string) => (
+                                                <td key={step} style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>
+                                                    {s.smt_step_status && s.smt_step_status[step] ? (
+                                                        <span style={{ color: s.smt_step_status[step] === 'PASS' ? '#16a34a' : '#d97706', fontWeight: 700 }}>{s.smt_step_status[step]}</span>
+                                                    ) : (<span style={{ color: '#94a3b8' }}>-</span>)}
+                                                </td>
+                                            ))}
                                             {PRODUCTION_PIPELINE.map((step: any) => (
                                                 <td key={step.code} style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>
                                                     {s.step_status && s.step_status[step.name] && s.step_status[step.name] !== '-' ? (

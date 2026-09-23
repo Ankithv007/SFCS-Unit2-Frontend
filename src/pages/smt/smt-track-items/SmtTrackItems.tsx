@@ -33,6 +33,7 @@ interface SmtTrackResult {
     sides: string;
     has_smt?: boolean;
     has_backend?: boolean;
+    selected_stages?: any;
     current_stage: string;
     current_status: string;
     final_status_label: string;
@@ -68,6 +69,41 @@ const STAGE_ROUTES: Record<string, string> = {
     'Post AOI': '/smt/post-aoi',
     'Rework': '/smt/rework',
     'SMT FG': '/smt/smt-fg',
+};
+
+// ─── Backend Stage Helpers ─────────────────────────────────────────────────────
+
+const normalizeStageId = (s: string) => (s || '').toUpperCase().replace(/[\s\-_]/g, '');
+
+const isBackendStageSelected = (stage: { code: string; name: string; label: string }, selectedStages: any): boolean => {
+    if (selectedStages === null || selectedStages === undefined) return true; // legacy: treat as all selected
+    let list: any[] = [];
+    if (Array.isArray(selectedStages)) {
+        list = selectedStages;
+    } else if (typeof selectedStages === 'string') {
+        try { list = JSON.parse(selectedStages); } catch { list = []; }
+    }
+    if (list.length === 0) return false;
+    const codeNorm = normalizeStageId(stage.code);
+    const nameNorm = normalizeStageId(stage.name);
+    const labelNorm = normalizeStageId(stage.label);
+    return list.some((item: any) => {
+        const s = typeof item === 'string' ? item : (item?.stage_code || item?.stage_name || '');
+        const sNorm = normalizeStageId(s);
+        return sNorm === codeNorm || sNorm === nameNorm || sNorm === labelNorm;
+    });
+};
+
+const normalizeStatus = (status: string): string => {
+    switch ((status || '').toUpperCase()) {
+        case 'ACCEPTED': return 'PASS';
+        case 'PASS':     return 'PASS';
+        case 'FAILED':   return 'FAIL';
+        case 'FAIL':     return 'FAIL';
+        case 'REWORK':   return 'REWORK';
+        case 'RESOLVED': return 'RESOLVED';
+        default: return (status || '').toUpperCase();
+    }
 };
 
 const fmt = (ts: string | null | undefined) =>
@@ -238,7 +274,7 @@ const SmtTrackItems: React.FC = () => {
         const entries = data?.scan_history.filter(h => h.process_step === stageName) ?? [];
         if (!entries.length) return 'pending';
         const last = entries[entries.length - 1];
-        return last.status;
+        return normalizeStatus(last.status);
     };
 
     const isCurrentStage = (stageName: string) => data?.current_stage === stageName;
@@ -624,22 +660,43 @@ const SmtTrackItems: React.FC = () => {
                             {selectedPipelineView === 'backend' ? (
                                 <div className={styles.pipeline}>
                                     {BACKEND_PIPELINE.map((stage, idx) => {
-                                        const bHistory = data.backend_scan_history || [];
-                                        const entries = bHistory.filter((h: any) => 
-                                            (h.station || '').toUpperCase() === stage.name.toUpperCase() || 
-                                            (h.station || '').toUpperCase() === stage.code.toUpperCase() ||
-                                            (h.station || '').toUpperCase() === stage.label.toUpperCase()
-                                        );
-                                        const visited = entries.length > 0;
-                                        const stStatus = visited ? entries[entries.length - 1].status : 'pending';
-                                        const color = visited ? statusColor(stStatus) : '#cbd5e1';
+                                        const isSelected = isBackendStageSelected(stage, data.selected_stages);
                                         const isLast = idx === BACKEND_PIPELINE.length - 1;
+
+                                        if (!isSelected) {
+                                            return (
+                                                <React.Fragment key={stage.code}>
+                                                    <div className={styles.pipelineNode}>
+                                                        <div className={styles.pipelineNodeDot} style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', boxShadow: 'none' }}>
+                                                            <Zap size={16} style={{ color: '#94a3b8' }} />
+                                                        </div>
+                                                        <div className={styles.pipelineNodeLabel} style={{ color: '#94a3b8' }}>{stage.name}</div>
+                                                        <span style={{ fontSize: '9px', background: 'rgba(148,163,184,0.12)', color: '#94a3b8', border: '1px solid #cbd5e133', padding: '2px 8px', borderRadius: '9999px', fontWeight: 700 }}>N/A</span>
+                                                    </div>
+                                                    {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                                </React.Fragment>
+                                            );
+                                        }
+
+                                        const bHistory = data.backend_scan_history || [];
+                                        const entries = bHistory.filter((h: any) => {
+                                            const sc = normalizeStageId(h.stage_code || '');
+                                            const st = normalizeStageId(h.station || '');
+                                            const cn = normalizeStageId(stage.code);
+                                            const nn = normalizeStageId(stage.name);
+                                            const ln = normalizeStageId(stage.label);
+                                            return sc === cn || st === cn || st === nn || st === ln;
+                                        });
+                                        const visited = entries.length > 0;
+                                        const rawStatus = visited ? entries[entries.length - 1].status : '';
+                                        const stStatus = visited ? normalizeStatus(rawStatus) : 'PENDING';
+                                        const color = visited ? statusColor(stStatus) : '#cbd5e1';
 
                                         return (
                                             <React.Fragment key={stage.code}>
                                                 <div className={styles.pipelineNode}>
-                                                    <div className={styles.pipelineNodeDot} style={{ background: color, boxShadow: `0 0 0 4px ${color}22` }}>
-                                                        <Zap size={16} />
+                                                    <div className={styles.pipelineNodeDot} style={{ background: visited ? color : '#f1f5f9', border: visited ? 'none' : '1px dashed #94a3b8', boxShadow: visited ? `0 0 0 4px ${color}22` : 'none' }}>
+                                                        <Zap size={16} style={{ color: visited ? '#fff' : '#94a3b8' }} />
                                                     </div>
                                                     <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
                                                         {stage.name}
@@ -667,7 +724,7 @@ const SmtTrackItems: React.FC = () => {
                                         ? data.scan_history.filter(h => h.process_step === stage && h.side && h.side.toLowerCase() === side.toLowerCase())
                                         : data.scan_history.filter(h => h.process_step === stage);
                                     const visited = entries.length > 0;
-                                    const stStatus = visited ? entries[entries.length - 1].status : 'pending';
+                                    const stStatus = visited ? normalizeStatus(entries[entries.length - 1].status) : 'pending';
                                     const isCurrent = isCurrentStage(stage) && (!side || !data.current_stage);
                                     const color = visited ? statusColor(stStatus) : '#cbd5e1';
                                     return (
@@ -699,14 +756,15 @@ const SmtTrackItems: React.FC = () => {
                                     // Serial Number node
                                     const snEntries = data.scan_history.filter(h => h.process_step === 'Serial Number');
                                     const snVisited = snEntries.length > 0;
-                                    const snColor = snVisited ? statusColor(snEntries[snEntries.length - 1].status) : '#cbd5e1';
+                                    const snStatus = snVisited ? normalizeStatus(snEntries[snEntries.length - 1].status) : 'pending';
+                                    const snColor = snVisited ? statusColor(snStatus) : '#cbd5e1';
                                     return (
                                         <div className={styles.pipeline}>
                                             {/* Serial Number */}
                                             <div className={styles.pipelineNode}>
                                                 <div className={styles.pipelineNodeDot} style={{ background: snColor, boxShadow: `0 0 0 4px ${snColor}22` }}><StationIcon station="Serial Number" /></div>
                                                 <div className={styles.pipelineNodeLabel} style={{ color: snVisited ? '#1e293b' : '#94a3b8' }}>Serial Number</div>
-                                                {snVisited ? <StatusBadge status={snEntries[snEntries.length - 1].status} small /> : <span className={styles.pendingTag}>Pending</span>}
+                                                {snVisited ? <StatusBadge status={snStatus} small /> : <span className={styles.pendingTag}>Pending</span>}
                                             </div>
                                             <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
 
@@ -780,50 +838,66 @@ const SmtTrackItems: React.FC = () => {
                             )}
                         </div>
 
-                        {/* RIGHT: Scan History Table */}
+                        {/* RIGHT: Scan History Table (SMT + Backend combined) */}
                         <div className={styles.historyPanel}>
                             <h3 className={styles.panelTitle}><Clock size={18} /> Scan History</h3>
 
                             <div className={styles.tableContainer}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
-                                    <thead>
-                                        <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
-                                            <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>#</th>
-                                            <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Process Step</th>
-                                            <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Status</th>
-                                            <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Scanned By</th>
-                                            <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Scanned At</th>
-                                            <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Rework Reason</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {data.scan_history.length === 0 ? (
-                                            <tr><td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No records.</td></tr>
-                                        ) : data.scan_history.map((row, idx) => (
-                                            <tr key={idx} style={{ background: row.status === 'REWORK' ? 'rgba(245,158,11,0.05)' : row.status === 'FAIL' ? 'rgba(239,68,68,0.05)' : '#f9fafb' }}>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{idx + 1}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{row.process_step}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
-                                                    <span style={{
-                                                        fontSize: '9px',
-                                                        background: statusBg(row.status),
-                                                        color: statusColor(row.status),
-                                                        border: `1px solid ${statusColor(row.status)}33`,
-                                                        padding: '2px 6px',
-                                                        borderRadius: '3px',
-                                                    }}>
-                                                        {row.status.toUpperCase()}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>
-                                                    {row.rework_reason || '—'}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                {(() => {
+                                    const smtRows = (data.scan_history || []).map((h: ScanEntry) => ({
+                                        process_step: h.process_step,
+                                        status: normalizeStatus(h.status),
+                                        scanned_by: h.scanned_by,
+                                        scanned_at: h.scanned_at,
+                                        remark: h.rework_reason || null,
+                                        source: 'SMT',
+                                    }));
+                                    const backendRows = (data.backend_scan_history || []).map((h: any) => ({
+                                        process_step: h.station || h.stage_code || '-',
+                                        status: normalizeStatus(h.status),
+                                        scanned_by: h.scanned_by || '-',
+                                        scanned_at: h.scanned_at,
+                                        remark: h.remarks || null,
+                                        source: 'Backend',
+                                    }));
+                                    const combinedHistory = [...smtRows, ...backendRows].sort(
+                                        (a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
+                                    );
+                                    return (
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                                            <thead>
+                                                <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>#</th>
+                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Source</th>
+                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Process Step</th>
+                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Status</th>
+                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Scanned By</th>
+                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Scanned At</th>
+                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Remark</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {combinedHistory.length === 0 ? (
+                                                    <tr><td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No records.</td></tr>
+                                                ) : combinedHistory.map((row, idx) => (
+                                                    <tr key={idx} style={{ background: row.status === 'REWORK' ? 'rgba(245,158,11,0.05)' : row.status === 'FAIL' ? 'rgba(239,68,68,0.05)' : '#f9fafb' }}>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{idx + 1}</td>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
+                                                            <span style={{ fontSize: '9px', background: row.source === 'SMT' ? 'rgba(59,130,246,0.12)' : 'rgba(16,185,129,0.12)', color: row.source === 'SMT' ? '#3b82f6' : '#10b981', border: `1px solid ${row.source === 'SMT' ? '#3b82f633' : '#10b98133'}`, padding: '2px 6px', borderRadius: '3px', fontWeight: 700 }}>{row.source}</span>
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{row.process_step}</td>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
+                                                            <span style={{ fontSize: '9px', background: statusBg(row.status), color: statusColor(row.status), border: `1px solid ${statusColor(row.status)}33`, padding: '2px 6px', borderRadius: '3px' }}>{row.status.toUpperCase()}</span>
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>{row.remark || '—'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    );
+                                })()}
                             </div>
                         </div>
 
@@ -892,7 +966,7 @@ const SmtTrackItems: React.FC = () => {
                                             letterSpacing: '0.03em',
                                             display: 'inline-block'
                                         }}>
-                                            SMT
+                                            {woData.has_smt && woData.has_backend ? 'SMT + Backend' : woData.has_smt ? 'SMT' : woData.has_backend ? 'Backend' : 'SMT'}
                                         </span>
                                     </div>
                                 </div>
@@ -1072,33 +1146,62 @@ const SmtTrackItems: React.FC = () => {
                             <p><strong>Serial Number:</strong> {data.serial_number}</p>
                             <p><strong>Work Order:</strong> {data.work_order_id}</p>
                             <p><strong>Product:</strong> {data.product_name}</p>
+                            <p><strong>Line ID:</strong> {data.line_id || '-'}</p>
+                            <p><strong>Process Selection:</strong> {data.has_smt && data.has_backend ? 'SMT + Backend' : data.has_smt ? 'SMT' : data.has_backend ? 'Backend' : 'SMT'}</p>
+                            <p><strong>Sides:</strong> {data.sides || '-'}</p>
+                            <p><strong>Current Stage:</strong> {data.current_stage}</p>
                             <p><strong>Status:</strong> {data.final_status_label}</p>
                         </div>
 
-                        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
-                            <thead>
-                                <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
-                                    <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>#</th>
-                                    <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Process</th>
-                                    <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Status</th>
-                                    <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Operator</th>
-                                    <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Timestamp</th>
-                                    <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Remark</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {data.scan_history.map((row, idx) => (
-                                    <tr key={idx}>
-                                        <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{idx + 1}</td>
-                                        <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}><strong>{row.process_step}</strong></td>
-                                        <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{row.status}</td>
-                                        <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
-                                        <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{fmt(row.scanned_at)}</td>
-                                        <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{row.rework_reason || '—'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                        {(() => {
+                            const smtRows = (data.scan_history || []).map((h: ScanEntry) => ({
+                                process_step: h.process_step,
+                                status: normalizeStatus(h.status),
+                                scanned_by: h.scanned_by,
+                                scanned_at: h.scanned_at,
+                                remark: h.rework_reason || null,
+                                source: 'SMT',
+                            }));
+                            const backendRows = (data.backend_scan_history || []).map((h: any) => ({
+                                process_step: h.station || h.stage_code || '-',
+                                status: normalizeStatus(h.status),
+                                scanned_by: h.scanned_by || '-',
+                                scanned_at: h.scanned_at,
+                                remark: h.remarks || null,
+                                source: 'Backend',
+                            }));
+                            const combinedHistory = [...smtRows, ...backendRows].sort(
+                                (a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
+                            );
+                            return (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+                                    <thead>
+                                        <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>#</th>
+                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Source</th>
+                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Process</th>
+                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Status</th>
+                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Operator</th>
+                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Timestamp</th>
+                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Remark</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {combinedHistory.map((row, idx) => (
+                                            <tr key={idx}>
+                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{idx + 1}</td>
+                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1', fontWeight: 600, color: row.source === 'SMT' ? '#3b82f6' : '#10b981' }}>{row.source}</td>
+                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}><strong>{row.process_step}</strong></td>
+                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{row.status}</td>
+                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
+                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{fmt(row.scanned_at)}</td>
+                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{row.remark || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            );
+                        })()}
                     </div>
                 )}
 
@@ -1111,6 +1214,8 @@ const SmtTrackItems: React.FC = () => {
                             <p><strong>Work Order:</strong> {woData.work_order_id}</p>
                             <p><strong>Product:</strong> {woData.product_name}</p>
                             <p><strong>Line ID:</strong> {woData.line_id}</p>
+                            <p><strong>Process Selection:</strong> {woData.has_smt && woData.has_backend ? 'SMT + Backend' : woData.has_smt ? 'SMT' : woData.has_backend ? 'Backend' : 'SMT'}</p>
+                            <p><strong>Sides:</strong> {woData.sides || '-'}</p>
                             <p><strong>Serials:</strong> {filteredSerials.length} / {woData.quantity}</p>
                         </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { apiFetch } from '../../../utils/api';
 import styles from './SmtTrackItems.module.css';
 import {
@@ -196,10 +196,21 @@ const SmtTrackItems: React.FC = () => {
         const q = (directQuery ?? query).trim();
         const type = directSearchType ?? searchType;
         if (!q) return;
-        setLoading(true); setError(null); setData(null); setWoData(null); setAppeared(false); setCurrentPage(1);
+        setLoading(true); setError(null); setData(null); setAppeared(false);
+        if (type !== 'wo') {
+            setWoData(null);
+            setCurrentPage(1);
+        }
         try {
             if (type === 'wo') {
-                const result = await apiFetch(`/api/smt/track/wo/${encodeURIComponent(q)}`);
+                const params = new URLSearchParams({
+                    page: currentPage.toString(),
+                    limit: ITEMS_PER_PAGE.toString(),
+                    search: debouncedSerialSearch,
+                    filterDate,
+                    filterStatus
+                });
+                const result = await apiFetch(`/api/smt/track/wo/${encodeURIComponent(q)}?${params.toString()}`);
                 setWoData(result);
             } else {
                 const result: SmtTrackResult = await apiFetch(`/api/smt/track/${encodeURIComponent(q)}`);
@@ -279,30 +290,24 @@ const SmtTrackItems: React.FC = () => {
 
     const isCurrentStage = (stageName: string) => data?.current_stage === stageName;
 
-    const filteredSerials = woData?.serials.filter((s: any) => {
-        let matches = true;
-        if (filterDate) {
-            const sDate = s.created_at ? new Date(s.created_at).toISOString().split('T')[0] : '';
-            if (sDate !== filterDate) matches = false;
-        }
-        if (filterStatus) {
-            const finalStatus = s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING';
-            if (finalStatus !== filterStatus) matches = false;
-        }
-        if (serialSearch.trim()) {
-            const snQuery = serialSearch.trim().toLowerCase();
-            const snVal = (s.serial_number || '').toLowerCase();
-            if (!snVal.includes(snQuery)) matches = false;
-        }
-        return matches;
-    }) || [];
+    const [debouncedSerialSearch, setDebouncedSerialSearch] = useState('');
 
     useEffect(() => {
-        setCurrentPage(1);
-    }, [filterDate, filterStatus, serialSearch]);
+        const handler = setTimeout(() => {
+            setDebouncedSerialSearch(serialSearch);
+            setCurrentPage(1);
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [serialSearch]);
 
-    const totalPages = Math.ceil(filteredSerials.length / ITEMS_PER_PAGE);
-    const currentSerials = filteredSerials.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    useEffect(() => {
+        if (searchType === 'wo' && query) {
+            handleSearch(undefined, query, 'wo');
+        }
+    }, [currentPage, debouncedSerialSearch, filterDate, filterStatus]);
+
+    const totalPages = woData ? Math.ceil(woData.total_filtered / ITEMS_PER_PAGE) : 0;
+    const currentSerials = woData?.serials || [];
 
     const [isExporting, setIsExporting] = useState(false);
 
@@ -334,8 +339,31 @@ const SmtTrackItems: React.FC = () => {
         }
     };
 
-    const completedCount = filteredSerials.filter((s: any) => s.final_status_label === 'Completed').length;
-    const pendingCount = filteredSerials.length - completedCount;
+    const completedCount = woData?.completed_count || 0;
+    const pendingCount = woData?.pending_count || 0;
+
+    const combinedHistory = useMemo(() => {
+        if (!data) return [];
+        const smtRows = (data.scan_history || []).map((h: ScanEntry) => ({
+            process_step: h.process_step,
+            status: normalizeStatus(h.status),
+            scanned_by: h.scanned_by,
+            scanned_at: h.scanned_at,
+            remark: h.rework_reason || null,
+            source: 'SMT',
+        }));
+        const backendRows = (data.backend_scan_history || []).map((h: any) => ({
+            process_step: h.station || h.stage_code || '-',
+            status: normalizeStatus(h.status),
+            scanned_by: h.scanned_by || '-',
+            scanned_at: h.scanned_at,
+            remark: h.remarks || null,
+            source: 'Backend',
+        }));
+        return [...smtRows, ...backendRows].sort(
+            (a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
+        );
+    }, [data]);
 
     return (
         <div className={styles.page}>
@@ -843,27 +871,6 @@ const SmtTrackItems: React.FC = () => {
                             <h3 className={styles.panelTitle}><Clock size={18} /> Scan History</h3>
 
                             <div className={styles.tableContainer}>
-                                {(() => {
-                                    const smtRows = (data.scan_history || []).map((h: ScanEntry) => ({
-                                        process_step: h.process_step,
-                                        status: normalizeStatus(h.status),
-                                        scanned_by: h.scanned_by,
-                                        scanned_at: h.scanned_at,
-                                        remark: h.rework_reason || null,
-                                        source: 'SMT',
-                                    }));
-                                    const backendRows = (data.backend_scan_history || []).map((h: any) => ({
-                                        process_step: h.station || h.stage_code || '-',
-                                        status: normalizeStatus(h.status),
-                                        scanned_by: h.scanned_by || '-',
-                                        scanned_at: h.scanned_at,
-                                        remark: h.remarks || null,
-                                        source: 'Backend',
-                                    }));
-                                    const combinedHistory = [...smtRows, ...backendRows].sort(
-                                        (a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
-                                    );
-                                    return (
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
                                             <thead>
                                                 <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
@@ -896,8 +903,6 @@ const SmtTrackItems: React.FC = () => {
                                                 ))}
                                             </tbody>
                                         </table>
-                                    );
-                                })()}
                             </div>
                         </div>
 
@@ -985,7 +990,7 @@ const SmtTrackItems: React.FC = () => {
                         <div className={styles.historyPanel} style={{ marginTop: '20px' }}>
                             <h3 className={styles.panelTitle} style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Package size={18} /> Work Order Serials ({filteredSerials.length})
+                                    <Package size={18} /> Work Order Serials ({woData.total_filtered})
                                 </span>
                                 <span style={{ fontSize: '13px', color: '#166534', background: '#dcfce7', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                                     Completed: {completedCount}
@@ -1096,7 +1101,7 @@ const SmtTrackItems: React.FC = () => {
                                         ))}
                                     </tbody>
                                 </table>
-                                {filteredSerials.length === 0 && (
+                                {woData.total_filtered === 0 && (
                                     <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
                                         No serial numbers match the selected filters.
                                     </div>
@@ -1106,7 +1111,7 @@ const SmtTrackItems: React.FC = () => {
                             {totalPages > 1 && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 16px' }}>
                                     <div style={{ fontSize: '12px', color: '#64748b' }}>
-                                        Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredSerials.length)} of {filteredSerials.length} entries
+                                        Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, woData.total_filtered)} of {woData.total_filtered} entries
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px' }}>
                                         <button 
@@ -1153,27 +1158,6 @@ const SmtTrackItems: React.FC = () => {
                             <p><strong>Status:</strong> {data.final_status_label}</p>
                         </div>
 
-                        {(() => {
-                            const smtRows = (data.scan_history || []).map((h: ScanEntry) => ({
-                                process_step: h.process_step,
-                                status: normalizeStatus(h.status),
-                                scanned_by: h.scanned_by,
-                                scanned_at: h.scanned_at,
-                                remark: h.rework_reason || null,
-                                source: 'SMT',
-                            }));
-                            const backendRows = (data.backend_scan_history || []).map((h: any) => ({
-                                process_step: h.station || h.stage_code || '-',
-                                status: normalizeStatus(h.status),
-                                scanned_by: h.scanned_by || '-',
-                                scanned_at: h.scanned_at,
-                                remark: h.remarks || null,
-                                source: 'Backend',
-                            }));
-                            const combinedHistory = [...smtRows, ...backendRows].sort(
-                                (a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
-                            );
-                            return (
                                 <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
                                     <thead>
                                         <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
@@ -1200,8 +1184,6 @@ const SmtTrackItems: React.FC = () => {
                                         ))}
                                     </tbody>
                                 </table>
-                            );
-                        })()}
                     </div>
                 )}
 
@@ -1216,7 +1198,7 @@ const SmtTrackItems: React.FC = () => {
                             <p><strong>Line ID:</strong> {woData.line_id}</p>
                             <p><strong>Process Selection:</strong> {woData.has_smt && woData.has_backend ? 'SMT + Backend' : woData.has_smt ? 'SMT' : woData.has_backend ? 'Backend' : 'SMT'}</p>
                             <p><strong>Sides:</strong> {woData.sides || '-'}</p>
-                            <p><strong>Serials:</strong> {filteredSerials.length} / {woData.quantity}</p>
+                            <p><strong>Serials:</strong> {woData.total_filtered} / {woData.quantity}</p>
                         </div>
 
                         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px', fontSize: '11px', textAlign: 'left' }}>
@@ -1230,7 +1212,7 @@ const SmtTrackItems: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredSerials.map((s: any, idx: number) => (
+                                {currentSerials.map((s: any, idx: number) => (
                                     <tr key={idx}>
                                         <td style={{ padding: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold' }}>{s.serial_number}</td>
                                         {SMT_PIPELINE.map(step => (

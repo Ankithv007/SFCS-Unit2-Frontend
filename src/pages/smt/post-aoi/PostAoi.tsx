@@ -589,7 +589,7 @@ const PostAoi: React.FC = () => {
                     }
                     fetchSessionStats(activeSession.id);
                 } else {
-                    addToast(`Invalid Serial Number. This Serial Number does not belong to the selected Work Order.`, 'error');
+                    addToast(res.message || `Invalid Serial Number. This Serial Number does not belong to the selected Work Order.`, 'error');
                     fetchSessionStats(activeSession.id);
                 }
             }

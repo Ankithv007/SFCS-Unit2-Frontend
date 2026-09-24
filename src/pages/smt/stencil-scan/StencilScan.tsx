@@ -83,7 +83,7 @@ const StencilScan: React.FC = () => {
     const [selectedWoId, setSelectedWoId] = useState('');
 
     // Transaction form states
-    const [productionLine, setProductionLine] = useState('');
+    const [productionLine, setProductionLine] = useState('Line 1');
     const [txRemarks, setTxRemarks] = useState('');
     
     // Return form states
@@ -209,7 +209,7 @@ const StencilScan: React.FC = () => {
                 
                 // Clear fields
                 setSelectedWoId('');
-                setProductionLine('');
+                setProductionLine('Line 1');
                 setTxRemarks('');
                 setRelocateReason('');
                 setCondition('Normal');
@@ -274,7 +274,7 @@ const StencilScan: React.FC = () => {
                     job_number: stencil.stencil_rack_number || stencil.job_number,
                     work_order_id: selectedWoId,
                     work_order_number: selectedWoId,
-                    production_line: productionLine.trim(),
+                    production_line: productionLine.trim() || 'Line 1',
                     remarks: txRemarks.trim()
                 })
             });
@@ -282,7 +282,7 @@ const StencilScan: React.FC = () => {
             if (res.success) {
                 showToast(res.message, 'success');
                 setSelectedWoId('');
-                setProductionLine('');
+                setProductionLine('Line 1');
                 setTxRemarks('');
                 fetchWorkOrders();
                 fetchLifecycleRecords();
@@ -662,7 +662,7 @@ const StencilScan: React.FC = () => {
                                          <button 
                                              type="submit" 
                                              className={`${styles.btnAction} ${styles.btnReceive}`} 
-                                             disabled={!selectedWoId || isSideMismatch || isSequenceMismatch || !productionLine || loading}
+                                             disabled={!selectedWoId || isSideMismatch || isSequenceMismatch || loading}
                                          >
                                              Confirm Check-Out
                                          </button>

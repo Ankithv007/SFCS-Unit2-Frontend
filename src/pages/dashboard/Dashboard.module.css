@@ -440,7 +440,7 @@
   color: #334155;
   font-weight: 900;
   text-transform: uppercase;
-  font-size: 1.25rem;
+  font-size: clamp(0.75rem, 1.2vw, 1.25rem);
   letter-spacing: 0.03em;
   padding: 0;
   height: 85px;
@@ -471,7 +471,7 @@
   color: #020617 !important;
   border: 2px solid #cbd5e1 !important;
   font-weight: 900;
-  font-size: 1.25rem !important;
+  font-size: clamp(0.75rem, 1.2vw, 1.25rem) !important;
   letter-spacing: 0.04em;
   text-align: center !important;
   width: 20%;
@@ -500,7 +500,7 @@
   background: linear-gradient(180deg, #dcfce7 0%, #bbf7d0 100%) !important;
   color: #022c22 !important;
   border: 2px solid #22c55e !important;
-  font-size: 1.55rem !important;
+  font-size: clamp(0.85rem, 1.5vw, 1.55rem) !important;
   font-weight: 950 !important;
   letter-spacing: 0.05em;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 1px rgba(255, 255, 255, 0.5);
@@ -513,7 +513,7 @@
   background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%) !important;
   color: #450a0a !important;
   border: 2px solid #ef4444 !important;
-  font-size: 1.55rem !important;
+  font-size: clamp(0.85rem, 1.5vw, 1.55rem) !important;
   font-weight: 950 !important;
   letter-spacing: 0.05em;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 1px rgba(255, 255, 255, 0.5);
@@ -526,7 +526,7 @@
   background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%) !important;
   color: #451a03 !important;
   border: 2px solid #f59e0b !important;
-  font-size: 1.25rem !important;
+  font-size: clamp(0.75rem, 1.2vw, 1.25rem) !important;
   font-weight: 950 !important;
   letter-spacing: 0.02em;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 1px rgba(255, 255, 255, 0.5);
@@ -539,7 +539,7 @@
   background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%) !important;
   color: #172554 !important;
   border: 2px solid #3b82f6 !important;
-  font-size: 1.1rem !important;
+  font-size: clamp(0.65rem, 1.0vw, 1.1rem) !important;
   font-weight: 950 !important;
   letter-spacing: 0.01em;
   line-height: 1.15;
@@ -549,7 +549,7 @@
 }
 
 .thPercentSign {
-  font-size: 0.95rem;
+  font-size: clamp(0.55rem, 0.9vw, 0.95rem);
   font-weight: 900;
   line-height: 1;
   opacity: 0.95;
@@ -561,7 +561,7 @@
   vertical-align: middle;
   font-weight: 800;
   color: #0f172a;
-  font-size: 1.05rem;
+  font-size: clamp(0.75rem, 1.1vw, 1.05rem);
   padding: 6px 8px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   border: 1.5px solid #cbd5e1;
@@ -589,7 +589,7 @@
   font-weight: 900;
   padding: 4px 6px;
   border-radius: 6px;
-  font-size: 1.6rem;
+  font-size: clamp(1rem, 1.6vw, 1.6rem);
   letter-spacing: -0.02em;
   width: 20%;
   box-sizing: border-box;
@@ -1056,7 +1056,7 @@
   background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
   color: #0f172a;
   font-weight: 900;
-  font-size: 1.15rem;
+  font-size: clamp(0.75rem, 1.1vw, 1.15rem);
   text-align: center;
   padding: 0;
   border: 2px solid #cbd5e1;
@@ -1097,7 +1097,7 @@
 
 .sideTable .tdCell {
   padding: 4px 6px;
-  font-size: 1.45rem;
+  font-size: clamp(0.9rem, 1.4vw, 1.45rem);
   font-weight: 900;
   border-radius: 6px;
   vertical-align: middle;

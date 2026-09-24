@@ -148,15 +148,16 @@ export const SerialNumber: React.FC = () => {
 
     const fetchWorkOrders = async () => {
         try {
-            let data = await apiFetch('/api/smt/workorders/pending');
-            let list = Array.isArray(data) ? data : (data?.data || data?.workOrders || []);
+            const data = await apiFetch('/api/smt/workorders/pending');
+            const list = Array.isArray(data) ? data : (data?.data || data?.workOrders || []);
 
-            if (list.length === 0) {
-                const fallbackData = await apiFetch('/api/smt/work-orders');
-                list = Array.isArray(fallbackData) ? fallbackData : (fallbackData?.data || fallbackData?.workOrders || fallbackData?.rows || []);
-            }
+            // Strictly filter: Work Order MUST have an active stencil assigned in Stencil Life Cycle Management
+            const stencilAssignedList = list.filter((w: any) => 
+                w.has_stencil_assigned === true || 
+                (w.stencil_id && String(w.stencil_id).trim() !== '')
+            );
 
-            setWorkOrders(list.map((w: any) => ({
+            setWorkOrders(stencilAssignedList.map((w: any) => ({
                 ...w,
                 id: String(w.id || w.work_order_id || ''),
                 work_order_id: String(w.work_order_id || w.id || '')
@@ -289,6 +290,12 @@ export const SerialNumber: React.FC = () => {
         e.preventDefault();
         const code = scanInput.trim();
         if (!code) return;
+
+        if (selectedWo && selectedWo.has_stencil_assigned === false) {
+            addToast('Cannot scan barcodes: Work Order must have an active stencil assigned in Stencil Life Cycle Management.', 'error');
+            setScanInput('');
+            return;
+        }
 
         const totalScanned = savedBarcodes.length + scannedBarcodes.length;
         if (selectedWo && totalScanned >= selectedWo.quantity) {
@@ -506,6 +513,11 @@ export const SerialNumber: React.FC = () => {
     const handleCreateRecordSubmit = async () => {
         if (!selectedWoId) {
             addToast('Please select a Work Order first.', 'error');
+            return;
+        }
+
+        if (selectedWo && selectedWo.has_stencil_assigned === false) {
+            addToast('Cannot generate serials: Work Order must have an active stencil assigned in Stencil Life Cycle Management.', 'error');
             return;
         }
 
@@ -1212,6 +1224,11 @@ export const SerialNumber: React.FC = () => {
                                     onOpen={fetchWorkOrders}
                                     required
                                 />
+                                {workOrders.length === 0 && (
+                                    <div className={`${styles.alert} ${styles.alertWarning}`} style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
+                                        ⚠️ No Work Orders with assigned stencils found. Before serial generation, check out a stencil in <strong>Stencil Rack Management</strong> and assign it to the Work Order in <strong>Stencil Life Cycle Management</strong>.
+                                    </div>
+                                )}
                             </div>
 
                             {selectedWo ? (
@@ -1251,6 +1268,22 @@ export const SerialNumber: React.FC = () => {
                                         <div className={`${styles.snapshotItem} ${styles.snapshotValLong}`}>
                                             <span className={styles.snapshotLabel}>Work Order Remarks</span>
                                             <span className={styles.snapshotVal}>{selectedWo.remark || '—'}</span>
+                                        </div>
+                                        <div className={`${styles.snapshotItem} ${styles.snapshotValLong}`} style={{ 
+                                            backgroundColor: selectedWo.has_stencil_assigned ? '#f0fdf4' : '#fef2f2', 
+                                            border: selectedWo.has_stencil_assigned ? '1px solid #bbf7d0' : '1px solid #fecaca', 
+                                            borderRadius: '6px', 
+                                            padding: '0.5rem 0.75rem',
+                                            margin: '0.25rem 0'
+                                        }}>
+                                            <span className={styles.snapshotLabel} style={{ color: selectedWo.has_stencil_assigned ? '#166534' : '#991b1b', fontWeight: 600 }}>
+                                                {selectedWo.has_stencil_assigned ? '✓ Stencil Life Cycle' : '⚠ Stencil Life Cycle Assignment Required'}
+                                            </span>
+                                            <span className={styles.snapshotVal} style={{ color: selectedWo.has_stencil_assigned ? '#15803d' : '#b91c1c', fontWeight: 600 }}>
+                                                {selectedWo.has_stencil_assigned 
+                                                    ? `${selectedWo.stencil_name || selectedWo.stencil_id} (Sides: ${selectedWo.stencil_sides || 'Active'})`
+                                                    : 'No stencil assigned. Please check out and assign a stencil in Stencil Life Cycle Management.'}
+                                            </span>
                                         </div>
                                         <div className={`${styles.snapshotItem} ${styles.snapshotValLong}`} style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
                                             <span className={styles.snapshotLabel} style={{ color: '#4f46e5' }}>Remaining Quantity Queue</span>
@@ -1583,7 +1616,7 @@ export const SerialNumber: React.FC = () => {
                                     type="button"
                                     onClick={handleCreateRecordSubmit}
                                     className={styles.button}
-                                    disabled={isSubmitting || !selectedWoId}
+                                    disabled={isSubmitting || !selectedWoId || (selectedWo && selectedWo.has_stencil_assigned === false)}
                                 >
                                     {isSubmitting ? 'Generating Serials...' : 'Generate Serials'}
                                 </button>
@@ -1754,6 +1787,16 @@ export const SerialNumber: React.FC = () => {
                                             <div className={styles.snapshotItem}>
                                                 <span className={styles.snapshotLabel}>Line ID</span>
                                                 <span className={styles.snapshotVal}>{viewRecord.line_id}</span>
+                                            </div>
+                                            <div className={styles.snapshotItem}>
+                                                <span className={styles.snapshotLabel}>Generated By / Operator</span>
+                                                <span className={styles.snapshotVal} style={{ fontWeight: 650, color: '#4f46e5' }}>
+                                                    {(viewRecord.created_by_name && viewRecord.created_by_name !== 'Unknown Operator' && viewRecord.created_by_name !== 'unknown_operator')
+                                                        ? viewRecord.created_by_name
+                                                        : (viewRecord.created_by && viewRecord.created_by !== 'unknown_operator' && viewRecord.created_by !== 'Unknown Operator')
+                                                            ? viewRecord.created_by
+                                                            : smtUser?.name || 'Operator'}
+                                                </span>
                                             </div>
                                             <div className={`${styles.snapshotItem} ${styles.snapshotValLong}`}>
                                                 <span className={styles.snapshotLabel}>Product Description</span>

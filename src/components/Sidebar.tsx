@@ -69,6 +69,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
 
     const hasPermission = (permissionKey: string) => {
         if (isSuperAdmin) return true;
+        // Stencil Scan is accessible to all authenticated operators and users
+        if (permissionKey === 'smt_stencil_scan') return true;
         const perm = permissions.find(p => p.permission_key === permissionKey);
         return !!(perm && perm.can_view);
     };
@@ -76,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     // Module visibility checks
     const canViewAdminPanel = hasPermission('admin_panel');
     
-    const canViewSmtModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('smt_') && p.permission_key !== 'smt_work_order' && p.can_view);
+    const canViewSmtModule = isSuperAdmin || hasPermission('smt_stencil_scan') || permissions.some(p => p.permission_key.startsWith('smt_') && p.permission_key !== 'smt_work_order' && p.can_view);
     const canViewBackendModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('backend_') && p.can_view);
     const canViewRrhModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('rrh_') && p.can_view);
     const canViewPreTestingModule = isSuperAdmin || permissions.some(p => p.permission_key.startsWith('pre_') && p.can_view);

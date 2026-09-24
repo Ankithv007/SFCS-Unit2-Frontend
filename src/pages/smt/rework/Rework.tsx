@@ -535,7 +535,7 @@ const Rework: React.FC = () => {
                     addToast(`Barcode "${code}" registered: PASS.`, 'success');
                     fetchSessionStats(activeSession.id);
                 } else {
-                    addToast(`Invalid Serial Number. This Serial Number does not belong to the selected Work Order.`, 'error');
+                    addToast(res.message || `Invalid Serial Number. This Serial Number does not belong to the selected Work Order.`, 'error');
                     fetchSessionStats(activeSession.id);
                 }
             }

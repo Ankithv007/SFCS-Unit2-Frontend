@@ -25,7 +25,16 @@ export async function apiFetch(
 
     const token = localStorage.getItem('auth_token');
     const backendUserId = localStorage.getItem('backend_userId');
-    const smtUserName = localStorage.getItem('X-User-Name');
+    let smtUserName = localStorage.getItem('X-User-Name');
+    if (!smtUserName) {
+        try {
+            const userDataStr = localStorage.getItem('user_data');
+            if (userDataStr) {
+                const parsed = JSON.parse(userDataStr);
+                smtUserName = parsed.name || parsed.employee_code || parsed.email || null;
+            }
+        } catch {}
+    }
 
     // Handle body type correctly (don't set Content-Type for FormData)
     const isFormData = options.body instanceof FormData;

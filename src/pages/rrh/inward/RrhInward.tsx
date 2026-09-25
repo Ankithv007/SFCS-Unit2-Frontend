@@ -78,7 +78,7 @@ interface ScanRecord {
     physical_tpn?: string | null;
     band_serial_no?: string | null;
     matched_inventory_id?: number | null;
-    result: 'PASS' | 'INVALID' | 'FAIL';
+    result: 'PASS' | 'INVALID' | 'FAIL' | 'EDITED PASS';
     status?: string;
     remark: string | null;
     scanned_by: string;
@@ -87,6 +87,8 @@ interface ScanRecord {
     repair_remark?: string | null;
     repaired_by?: string | null;
     sl_no?: string | null;
+    master_remark?: string | null;
+    master_failure_description?: string | null;
 }
 
 interface RemainingMasterRecord {
@@ -111,6 +113,7 @@ interface SessionStats {
     failed: number;
     invalid: number;
     pending: number;
+    editedPass: number;
     duplicate: number;
     yield: string | number;
     yieldPercent?: string;
@@ -195,6 +198,7 @@ const Inward: React.FC = () => {
         failed: 0,
         invalid: 0,
         pending: 0,
+        editedPass: 0,
         duplicate: 0,
         yield: '0.00',
         scans: []
@@ -219,11 +223,11 @@ const Inward: React.FC = () => {
     const [showAbortModal, setShowAbortModal] = useState(false);
     const [showFailedModal, setShowFailedModal] = useState(false);
 
-    // Repair Modal state (for 0 vs O typo corrections)
-    const [repairingScan, setRepairingScan] = useState<ScanRecord | null>(null);
-    const [repairCorrectedSerial, setRepairCorrectedSerial] = useState('');
-    const [repairRemarkText, setRepairRemarkText] = useState('');
-    const [isRepairingSubmitting, setIsRepairingSubmitting] = useState(false);
+    // Assign Modal state (for manual assignments)
+    const [assigningMasterRecord, setAssigningMasterRecord] = useState<RemainingMasterRecord | null>(null);
+    const [assignPhysicalSerial, setAssignPhysicalSerial] = useState('');
+    const [assignRemarkText, setAssignRemarkText] = useState('');
+    const [isAssigningSubmitting, setIsAssigningSubmitting] = useState(false);
 
     // QR Preview & Remarks Viewer Modal state
     const [selectedQrBarcode, setSelectedQrBarcode] = useState<string | null>(null);
@@ -246,7 +250,7 @@ const Inward: React.FC = () => {
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
     const isSuperAdmin = smtUser?.role === 'Super Admin' || user?.role === 'Super Admin';
-    const isModalOpen = showAbortModal || !!repairingScan || !!selectedQrBarcode || !!viewingRemarkText || showFailedModal;
+    const isModalOpen = showAbortModal || !!assigningMasterRecord || !!selectedQrBarcode || !!viewingRemarkText || showFailedModal;
 
     // Filtered Scans List for search
     const processedScans = React.useMemo(() => {
@@ -290,28 +294,20 @@ const Inward: React.FC = () => {
         fetchCompletedSessions(1, completedLimit, '');
     }, []);
 
-    // Keep scanner input focused when session is active
-    // Only steal focus back when nothing meaningful is focused (body = no input/button active)
+    // Initial scanner focus when session becomes active
     useEffect(() => {
         if (activeSession && activeSession.status === 'In Progress' && !isModalOpen && !isSearchFocused) {
-            const focusInput = () => {
-                const active = document.activeElement;
-                const isBodyOrScan = active === document.body || active === scanInputRef.current;
-                if (scanInputRef.current && isBodyOrScan) {
-                    scanInputRef.current.focus();
-                }
-            };
-            focusInput();
-            const interval = setInterval(focusInput, 1500);
-            return () => clearInterval(interval);
+            if (scanInputRef.current && document.activeElement === document.body) {
+                scanInputRef.current.focus({ preventScroll: true });
+            }
         }
-    }, [activeSession, isModalOpen, isSearchFocused]);
+    }, [activeSession?.id]);
 
     const wasModalOpen = useRef(false);
     useEffect(() => {
         if (wasModalOpen.current && !isModalOpen && !isSearchFocused) {
             setTimeout(() => {
-                scanInputRef.current?.focus();
+                scanInputRef.current?.focus({ preventScroll: true });
             }, 100);
         }
         wasModalOpen.current = isModalOpen;
@@ -572,56 +568,59 @@ const Inward: React.FC = () => {
             }
         } finally {
             setIsScanning(false);
-            scanInputRef.current?.focus();
+            scanInputRef.current?.focus({ preventScroll: true });
         }
     };
 
-    // ─── Edit / Repair Flow for INVALID Serials (0 vs O Typo Correction) ────
+    // ─── Manual Assignment Flow for Remaining Master Data ──────────
 
-    const openRepairModal = (scan: ScanRecord) => {
-        setRepairingScan(scan);
-        setRepairCorrectedSerial(scan.physical_serial_number || scan.barcode || '');
-        setRepairRemarkText('');
+    const openAssignModal = (masterRecord: RemainingMasterRecord) => {
+        setAssigningMasterRecord(masterRecord);
+        setAssignPhysicalSerial('');
+        setAssignRemarkText('');
     };
 
-    const submitRepairModal = async () => {
-        if (!repairingScan || !activeSession) return;
-        const corrected = repairCorrectedSerial.trim();
-        const remark = repairRemarkText.trim();
+    const submitAssignModal = async () => {
+        if (!assigningMasterRecord || !activeSession) return;
+        const physicalSerial = assignPhysicalSerial.trim();
+        const remark = assignRemarkText.trim();
 
-        if (!corrected) {
-            addToast('Corrected Serial Number cannot be empty.', 'error');
+        if (!physicalSerial) {
+            addToast('Physical Serial Number is required.', 'error');
             return;
         }
         if (!remark) {
-            addToast('Correction / Repair remark is mandatory.', 'error');
+            addToast('Assignment remark is mandatory.', 'error');
             return;
         }
 
-        setIsRepairingSubmitting(true);
+        setIsAssigningSubmitting(true);
         try {
-            const res = await apiFetch(`/api/rrh/inward/sessions/${activeSession.id}/scan/${repairingScan.scan_id}/repair`, {
+            const res = await apiFetch(`/api/rrh/inward/sessions/${activeSession.id}/assign`, {
                 method: 'POST',
                 body: JSON.stringify({
-                    correctedSerial: corrected,
-                    repairRemark: remark
+                    inventoryId: assigningMasterRecord.id,
+                    physicalSerialNumber: physicalSerial,
+                    remark
                 })
             });
 
             if (res && res.success) {
-                addToast(`Serial Number successfully corrected to "${corrected}": PASS.`, 'success');
-                setRepairingScan(null);
-                setRepairCorrectedSerial('');
-                setRepairRemarkText('');
+                addToast(res.message || `Serial Number "${physicalSerial}" manually assigned.`, 'success');
+                setAssigningMasterRecord(null);
+                setAssignPhysicalSerial('');
+                setAssignRemarkText('');
                 // Live refresh all three views
                 fetchSessionStats(activeSession.id);
                 fetchRemainingMasterData(activeSession.id, remainingPage, remainingLimit, remainingSearch);
+            } else {
+                addToast(res.message || 'Assignment failed.', 'error');
             }
         } catch (err: any) {
-            console.error('Repair error:', err);
-            addToast(err.message || 'Failed to submit correction.', 'error');
+            console.error('Assign error:', err);
+            addToast(err.message || 'Failed to submit manual assignment.', 'error');
         } finally {
-            setIsRepairingSubmitting(false);
+            setIsAssigningSubmitting(false);
         }
     };
 
@@ -687,7 +686,7 @@ const Inward: React.FC = () => {
     const handleExportCSV = () => {
         if (!activeSession) return;
         try {
-            const headers = ['S.No.', 'Scanned By', 'Date & Time', 'Physical TPN', 'Band Serial Number', 'Physical Serial Number', 'Status', 'Remark', 'Repair Remark'];
+            const headers = ['S.No.', 'Scanned By', 'Date & Time', 'Physical TPN', 'Band Serial Number', 'Physical Serial Number', 'Status', 'Remark', 'Assignment Remark'];
             const rows = stats.scans.map(scan => [
                 scan.sl_no || '-',
                 scan.scanned_by,
@@ -853,7 +852,7 @@ const Inward: React.FC = () => {
                 doc.text((scan.physical_serial_number || scan.barcode || '—').slice(0, 16), cols[5].x + 1, y + 5);
 
                 const stUpper = String(scan.result || scan.status || '').toUpperCase();
-                if (stUpper === 'PASS') {
+                if (stUpper === 'PASS' || stUpper === 'EDITED PASS') {
                     doc.setTextColor(22, 163, 74);
                     doc.setFont('helvetica', 'bold');
                 } else {
@@ -1446,7 +1445,7 @@ const Inward: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* ─── 4 TOP STATISTICS CARDS ───────────────────────────── */}
+                    {/* ─── TOP STATISTICS CARDS ───────────────────────────── */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                         {/* 1. Lot Quantity */}
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #2563eb', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
@@ -1458,7 +1457,17 @@ const Inward: React.FC = () => {
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#15803d', fontWeight: 800 }}>{stats.passed}</h2>
                         </div>
-                        {/* 3. Yield (%) */}
+                        {/* 3. Pending */}
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #f59e0b', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Pending</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b45309', fontWeight: 800 }}>{stats.pending}</h2>
+                        </div>
+                        {/* 4. Edited Pass */}
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #8b5cf6', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Edited Pass</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#6d28d9', fontWeight: 800 }}>{stats.editedPass}</h2>
+                        </div>
+                        {/* 5. Yield (%) */}
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #0d9488', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Yield (%)</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0f766e', fontWeight: 800 }}>
@@ -1477,7 +1486,7 @@ const Inward: React.FC = () => {
                                     </h4>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#16a34a', fontWeight: 600 }}>
                                         <span className={styles.blinkingDot} style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', display: 'inline-block' }}></span>
-                                        Scanner Focus Locked
+                                        Scanner Ready
                                     </div>
                                 </div>
                                 <div className={styles.detailScanRow}>
@@ -1558,12 +1567,13 @@ const Inward: React.FC = () => {
                                         <th>Physical Serial Number</th>
                                         <th>Status</th>
                                         <th>Remark</th>
+                                        <th>Edited By</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {processedScans.map((scan, idx) => {
-                                        const isCorrected = !!scan.corrected_serial_number && scan.corrected_serial_number !== scan.original_serial_number;
+                                        const isCorrected = scan.result === 'EDITED PASS';
                                         const displaySerial = scan.physical_serial_number || scan.barcode;
 
                                         return (
@@ -1582,12 +1592,12 @@ const Inward: React.FC = () => {
                                                     {scan.band_serial_no || '—'}
                                                 </td>
                                                 <td style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.95rem' }}>
-                                                    <span style={{ color: scan.result === 'PASS' ? '#15803d' : '#b45309' }}>
+                                                    <span style={{ color: (scan.result === 'PASS' || scan.result === 'EDITED PASS') ? '#15803d' : '#b45309' }}>
                                                         {displaySerial}
                                                     </span>
                                                     {isCorrected && (
                                                         <span style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', fontWeight: 500 }}>
-                                                            Orig: <span style={{ textDecoration: 'line-through' }}>{scan.original_serial_number}</span>
+                                                            Assigned manually
                                                         </span>
                                                     )}
                                                 </td>
@@ -1595,7 +1605,11 @@ const Inward: React.FC = () => {
                                                 <td style={{ fontSize: '0.85rem' }}>
                                                     {isCorrected ? (
                                                         <div style={{ color: '#166534', fontWeight: 600 }}>
-                                                            {renderRemarkCell(scan.repair_remark, 'Repair Remark')}
+                                                            {renderRemarkCell(scan.repair_remark, 'Remark')}
+                                                        </div>
+                                                    ) : scan.result === 'PASS' ? (
+                                                        <div style={{ color: '#64748b' }}>
+                                                            {renderRemarkCell(scan.master_remark, 'Work Order Remark')}
                                                         </div>
                                                     ) : scan.remark ? (
                                                         <div style={{ color: '#b91c1c' }}>
@@ -1605,30 +1619,13 @@ const Inward: React.FC = () => {
                                                         '—'
                                                     )}
                                                 </td>
+                                                <td style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>
+                                                    {isCorrected && scan.repaired_by ? scan.repaired_by : '—'}
+                                                </td>
                                                 <td>
                                                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                                        {/* Edit / Repair action for INVALID records */}
-                                                        {scan.result === 'INVALID' && activeSession.status !== 'Completed' && (
-                                                            <button
-                                                                className={styles.button}
-                                                                style={{
-                                                                    padding: '0.3rem 0.75rem',
-                                                                    fontSize: '0.8rem',
-                                                                    backgroundColor: '#f59e0b',
-                                                                    backgroundImage: 'none',
-                                                                    borderRadius: '6px',
-                                                                    fontWeight: 700,
-                                                                    whiteSpace: 'nowrap'
-                                                                }}
-                                                                onClick={() => openRepairModal(scan)}
-                                                                title="Correct typo or repair serial number"
-                                                            >
-                                                                🔧 Edit / Repair
-                                                            </button>
-                                                        )}
-
                                                         {/* QR Code preview for PASS records */}
-                                                        {scan.result === 'PASS' && (
+                                                        {(scan.result === 'PASS' || scan.result === 'EDITED PASS') && (
                                                             <button
                                                                 className={styles.secondaryButton}
                                                                 title="View QR Code"
@@ -1645,7 +1642,7 @@ const Inward: React.FC = () => {
                                     })}
                                     {stats.scans.length === 0 && (
                                         <tr>
-                                            <td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                            <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
                                                 No Physical Serial Numbers scanned in this session yet. Use the scanner above to begin.
                                             </td>
                                         </tr>
@@ -1747,6 +1744,7 @@ const Inward: React.FC = () => {
                                                 <th>Tejas OBD No</th>
                                                 <th>Lot</th>
                                                 <th>Remarks</th>
+                                                <th>Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1765,7 +1763,17 @@ const Inward: React.FC = () => {
                                                     <td>{item.tejas_obd_no || '—'}</td>
                                                     <td>{item.lot || '—'}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                                        {item.remarks || item.failure_description || '—'}
+                                                        {item.remarks || '—'}
+                                                    </td>
+                                                    <td>
+                                                        <button
+                                                            className={styles.button}
+                                                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundImage: 'none', backgroundColor: '#0ea5e9' }}
+                                                            onClick={() => openAssignModal(item)}
+                                                            disabled={activeSession.status === 'Completed'}
+                                                        >
+                                                            Assign Unit
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -1813,49 +1821,49 @@ const Inward: React.FC = () => {
                 </div>
             )}
 
-            {/* ─── MODAL: EDIT / REPAIR INVALID SCAN (0 vs O Typo Correction) ── */}
-            {repairingScan && (
+            {/* ─── MODAL: ASSIGN UNIT MANUALLY ── */}
+            {assigningMasterRecord && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                     <div className={styles.card} style={{ width: '480px', padding: '1.75rem', margin: 0, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)' }}>
-                        <h3 style={{ borderBottom: 'none', padding: 0, marginBottom: '1rem', color: '#d97706' }}>
-                            🔧 Edit / Repair Serial Number
+                        <h3 style={{ borderBottom: 'none', padding: 0, marginBottom: '1rem', color: '#0ea5e9' }}>
+                            🔗 Assign Physical Unit
                         </h3>
                         <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '1.25rem', lineHeight: '1.4' }}>
-                            Correct typos (e.g. letter <strong>O</strong> vs number <strong>0</strong>). The original scanned value will remain preserved for audit traceability.
+                            Assign a physical serial number to the remaining master data record. This will consume the master record and log it as an <strong>EDITED PASS</strong>.
                         </p>
 
                         <div className={styles.inputGroup} style={{ marginBottom: '1rem' }}>
-                            <label style={{ fontSize: '0.85rem', color: '#64748b' }}>Original Scanned Serial</label>
+                            <label style={{ fontSize: '0.85rem', color: '#64748b' }}>Target Master Record (Band Serial)</label>
                             <input
                                 type="text"
                                 className={styles.input}
-                                value={repairingScan.original_serial_number || repairingScan.barcode}
+                                value={assigningMasterRecord.band_serial_no || ''}
                                 disabled
                                 style={{ backgroundColor: '#f1f5f9', color: '#475569', fontWeight: 600, fontFamily: 'monospace' }}
                             />
                         </div>
 
                         <div className={styles.inputGroup} style={{ marginBottom: '1rem' }}>
-                            <label>Corrected Physical Serial Number *</label>
+                            <label>Physical Serial Number *</label>
                             <input
                                 type="text"
                                 className={styles.input}
-                                placeholder="Enter correct serial number..."
-                                value={repairCorrectedSerial}
-                                onChange={e => setRepairCorrectedSerial(e.target.value)}
+                                placeholder="Scan or enter physical serial number..."
+                                value={assignPhysicalSerial}
+                                onChange={e => setAssignPhysicalSerial(e.target.value)}
                                 style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '1rem' }}
                                 autoFocus
                             />
                         </div>
 
                         <div className={styles.inputGroup} style={{ marginBottom: '1.5rem' }}>
-                            <label>Correction Remark / Reason *</label>
+                            <label>Assignment Remark / Reason *</label>
                             <textarea
                                 className={styles.input}
                                 style={{ minHeight: '80px', fontFamily: 'inherit', resize: 'vertical' }}
-                                placeholder="E.g. Typo 0 vs O corrected from printed label..."
-                                value={repairRemarkText}
-                                onChange={e => setRepairRemarkText(e.target.value)}
+                                placeholder="E.g. Unit printed with slightly different format..."
+                                value={assignRemarkText}
+                                onChange={e => setAssignRemarkText(e.target.value)}
                                 required
                             />
                         </div>
@@ -1863,18 +1871,18 @@ const Inward: React.FC = () => {
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                             <button
                                 className={styles.secondaryButton}
-                                onClick={() => setRepairingScan(null)}
-                                disabled={isRepairingSubmitting}
+                                onClick={() => setAssigningMasterRecord(null)}
+                                disabled={isAssigningSubmitting}
                             >
                                 Cancel
                             </button>
                             <button
                                 className={styles.button}
-                                style={{ backgroundColor: '#16a34a', backgroundImage: 'none', fontWeight: 700 }}
-                                onClick={submitRepairModal}
-                                disabled={isRepairingSubmitting}
+                                style={{ backgroundColor: '#0ea5e9', backgroundImage: 'none', fontWeight: 700 }}
+                                onClick={submitAssignModal}
+                                disabled={isAssigningSubmitting}
                             >
-                                {isRepairingSubmitting ? 'Validating...' : 'Submit Correction'}
+                                {isAssigningSubmitting ? 'Assigning...' : 'Submit Assignment'}
                             </button>
                         </div>
                     </div>

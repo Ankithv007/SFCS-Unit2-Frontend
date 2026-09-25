@@ -28,6 +28,8 @@ interface SmtTrackResult {
     serial_format: string;
     work_order_id: string;
     product_name: string;
+    customer_name?: string;
+    model_name?: string;
     quantity: number;
     line_id: string;
     sides: string;
@@ -43,6 +45,8 @@ interface SmtTrackResult {
     total_passed: number;
     scan_history: ScanEntry[];
     backend_scan_history?: any[];
+    backend_stages?: any[];
+    combined_history?: any[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -92,6 +96,31 @@ const isBackendStageSelected = (stage: { code: string; name: string; label: stri
         const sNorm = normalizeStageId(s);
         return sNorm === codeNorm || sNorm === nameNorm || sNorm === labelNorm;
     });
+};
+
+const getProcessSelectionText = (d: any): string => {
+    if (!d) return '—';
+    const hasSmt = d.has_smt !== false;
+    let hasBackend = d.has_backend === true;
+
+    if (!hasBackend && d.selected_stages) {
+        if (Array.isArray(d.selected_stages) && d.selected_stages.length > 0) {
+            hasBackend = true;
+        } else if (typeof d.selected_stages === 'string' && d.selected_stages.trim() !== '' && d.selected_stages !== '[]') {
+            hasBackend = true;
+        }
+    }
+    if (!hasBackend && d.backend_scan_history && d.backend_scan_history.length > 0) {
+        hasBackend = true;
+    }
+    if (!hasBackend && d.backend_stages && d.backend_stages.some((s: any) => s.is_selected)) {
+        hasBackend = true;
+    }
+
+    if (hasSmt && hasBackend) return 'SMT + Backend';
+    if (hasSmt) return 'SMT';
+    if (hasBackend) return 'Backend';
+    return '—';
 };
 
 const normalizeStatus = (status: string): string => {
@@ -174,6 +203,7 @@ const SmtTrackItems: React.FC = () => {
 
     const inputRef = useRef<HTMLInputElement>(null);
     const printRef = useRef<HTMLDivElement>(null);
+    const searchRequestIdRef = useRef<number>(0);
 
     useEffect(() => { 
         inputRef.current?.focus(); 
@@ -196,6 +226,9 @@ const SmtTrackItems: React.FC = () => {
         const q = (directQuery ?? query).trim();
         const type = directSearchType ?? searchType;
         if (!q) return;
+
+        const currentRequestId = ++searchRequestIdRef.current;
+
         setLoading(true); setError(null); setData(null); setAppeared(false);
         if (type !== 'wo') {
             setWoData(null);
@@ -211,16 +244,26 @@ const SmtTrackItems: React.FC = () => {
                     filterStatus
                 });
                 const result = await apiFetch(`/api/smt/track/wo/${encodeURIComponent(q)}?${params.toString()}`);
-                setWoData(result);
+                if (currentRequestId === searchRequestIdRef.current) {
+                    setWoData(result);
+                }
             } else {
                 const result: SmtTrackResult = await apiFetch(`/api/smt/track/${encodeURIComponent(q)}`);
-                setData(result);
+                if (currentRequestId === searchRequestIdRef.current) {
+                    setData(result);
+                }
             }
-            setTimeout(() => setAppeared(true), 50);
+            if (currentRequestId === searchRequestIdRef.current) {
+                setTimeout(() => setAppeared(true), 50);
+            }
         } catch (err: any) {
-            setError(err.message || 'Item not found in system.');
+            if (currentRequestId === searchRequestIdRef.current) {
+                setError(err.message || 'Item not found in system.');
+            }
         } finally {
-            setLoading(false);
+            if (currentRequestId === searchRequestIdRef.current) {
+                setLoading(false);
+            }
         }
     };
 
@@ -312,18 +355,24 @@ const SmtTrackItems: React.FC = () => {
     const [isExporting, setIsExporting] = useState(false);
 
     const handleDownloadExcel = async () => {
-        if (!woData?.work_order_id) return;
+        const serialNo = data?.serial_number;
+        const woId = woData?.work_order_id;
+        if (!serialNo && !woId) return;
         setIsExporting(true);
         try {
-            const blob = await apiFetch(`/api/smt/track/export/wo/${encodeURIComponent(woData.work_order_id)}`) as Blob;
+            const endpoint = serialNo 
+                ? `/api/smt/track/export/serial/${encodeURIComponent(serialNo)}`
+                : `/api/smt/track/export/wo/${encodeURIComponent(woId!)}`;
+            const blob = await apiFetch(endpoint) as Blob;
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
 
             const now = new Date();
             const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
-            const cleanWo = woData.work_order_id.replace(/[^a-zA-Z0-9_-]/g, '_');
-            const fileName = `SMT_WorkOrder_Report_${cleanWo}_${timestamp}.xlsx`;
+            const fileName = serialNo
+                ? `SMT_Serial_Traceability_${serialNo.replace(/[^a-zA-Z0-9_-]/g, '_')}_${timestamp}.xlsx`
+                : `SMT_WorkOrder_Report_${woId!.replace(/[^a-zA-Z0-9_-]/g, '_')}_${timestamp}.xlsx`;
 
             link.setAttribute('download', fileName);
             document.body.appendChild(link);
@@ -344,6 +393,16 @@ const SmtTrackItems: React.FC = () => {
 
     const combinedHistory = useMemo(() => {
         if (!data) return [];
+        if (data.combined_history && Array.isArray(data.combined_history) && data.combined_history.length > 0) {
+            return data.combined_history.map((h: any) => ({
+                process_step: h.process_step,
+                status: normalizeStatus(h.status),
+                scanned_by: h.scanned_by || '-',
+                scanned_at: h.scanned_at,
+                remark: h.remark || h.rework_reason || null,
+                source: h.source || 'SMT',
+            }));
+        }
         const smtRows = (data.scan_history || []).map((h: ScanEntry) => ({
             process_step: h.process_step,
             status: normalizeStatus(h.status),
@@ -353,7 +412,7 @@ const SmtTrackItems: React.FC = () => {
             source: 'SMT',
         }));
         const backendRows = (data.backend_scan_history || []).map((h: any) => ({
-            process_step: h.station || h.stage_code || '-',
+            process_step: h.station || h.stage_name || h.stage_code || '-',
             status: normalizeStatus(h.status),
             scanned_by: h.scanned_by || '-',
             scanned_at: h.scanned_at,
@@ -377,25 +436,7 @@ const SmtTrackItems: React.FC = () => {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    {data && (
-                        <button 
-                            type="button"
-                            onClick={handleDownloadPdf}
-                            disabled={isDownloading}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: '8px',
-                                background: '#3b82f6', color: '#fff', border: 'none',
-                                padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
-                                cursor: isDownloading ? 'not-allowed' : 'pointer',
-                                opacity: isDownloading ? 0.7 : 1,
-                                transition: 'all 0.2s'
-                            }}
-                        >
-                            <Download size={18} />
-                            {isDownloading ? 'Generating PDF...' : 'Download PDF'}
-                        </button>
-                    )}
-                    {woData && (
+                    {(data || woData) && (
                         <>
                             <button 
                                 type="button"
@@ -574,7 +615,7 @@ const SmtTrackItems: React.FC = () => {
                                         letterSpacing: '0.03em',
                                         display: 'inline-block'
                                     }}>
-                                        SMT
+                                        {getProcessSelectionText(data)}
                                     </span>
                                 </div>
                             </div>
@@ -1144,46 +1185,81 @@ const SmtTrackItems: React.FC = () => {
             <div ref={printRef} style={{ position: 'absolute', left: '-10000px', top: 0, width: '794px', pointerEvents: 'none' }}>
                 {data && (
                     <div style={{ padding: '20px', background: '#fff', fontFamily: 'Arial, sans-serif' }}>
-                        <h1 style={{ marginBottom: '10px', color: '#1e293b' }}>SMT Serial Traceability Report</h1>
-                        <p style={{ color: '#64748b', marginBottom: '20px' }}>Generated on {new Date().toLocaleString('en-IN')}</p>
+                        <h1 style={{ marginBottom: '10px', color: '#1e293b', fontSize: '20px' }}>SMT Serial Traceability Report</h1>
+                        <p style={{ color: '#64748b', marginBottom: '20px', fontSize: '12px' }}>Generated on {new Date().toLocaleString('en-IN')}</p>
                         
-                        <div style={{ marginBottom: '20px', padding: '15px', background: '#f1f5f9', borderRadius: '8px' }}>
-                            <p><strong>Serial Number:</strong> {data.serial_number}</p>
-                            <p><strong>Work Order:</strong> {data.work_order_id}</p>
-                            <p><strong>Product:</strong> {data.product_name}</p>
-                            <p><strong>Line ID:</strong> {data.line_id || '-'}</p>
-                            <p><strong>Process Selection:</strong> {data.has_smt && data.has_backend ? 'SMT + Backend' : data.has_smt ? 'SMT' : data.has_backend ? 'Backend' : 'SMT'}</p>
-                            <p><strong>Sides:</strong> {data.sides || '-'}</p>
-                            <p><strong>Current Stage:</strong> {data.current_stage}</p>
-                            <p><strong>Status:</strong> {data.final_status_label}</p>
+                        {/* Metadata Box */}
+                        <div style={{ marginBottom: '15px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                            <p style={{ margin: 0 }}><strong>Serial Number:</strong> {data.serial_number}</p>
+                            <p style={{ margin: 0 }}><strong>Work Order:</strong> {data.work_order_id}</p>
+                            <p style={{ margin: 0 }}><strong>Product:</strong> {data.product_name}</p>
+                            <p style={{ margin: 0 }}><strong>Customer:</strong> {data.customer_name || '-'}</p>
+                            <p style={{ margin: 0 }}><strong>Model:</strong> {data.model_name || '-'}</p>
+                            <p style={{ margin: 0 }}><strong>Line ID:</strong> {data.line_id || '-'}</p>
+                            <p style={{ margin: 0 }}><strong>Process Selection:</strong> {getProcessSelectionText(data)}</p>
+                            <p style={{ margin: 0 }}><strong>Sides:</strong> {data.sides || '-'}</p>
+                            <p style={{ margin: 0 }}><strong>Current Stage:</strong> {data.current_stage}</p>
+                            <p style={{ margin: 0 }}><strong>Overall Status:</strong> {data.final_status_label}</p>
                         </div>
 
-                                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
-                                    <thead>
-                                        <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
-                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>#</th>
-                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Source</th>
-                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Process</th>
-                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Status</th>
-                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Operator</th>
-                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Timestamp</th>
-                                            <th style={{ padding: '8px', border: '1px solid #cbd5e1' }}>Remark</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {combinedHistory.map((row, idx) => (
-                                            <tr key={idx}>
-                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{idx + 1}</td>
-                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1', fontWeight: 600, color: row.source === 'SMT' ? '#3b82f6' : '#10b981' }}>{row.source}</td>
-                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}><strong>{row.process_step}</strong></td>
-                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{row.status}</td>
-                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
-                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{fmt(row.scanned_at)}</td>
-                                                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}>{row.remark || '—'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                        {/* Summary Stats Cards */}
+                        <div style={{ marginBottom: '15px', display: 'flex', gap: '12px' }}>
+                            <div style={{ flex: 1, padding: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '18px', fontWeight: 800, color: '#166534' }}>{data.total_passed}</div>
+                                <div style={{ fontSize: '10px', fontWeight: 600, color: '#15803d' }}>Total Stages Passed</div>
+                            </div>
+                            <div style={{ flex: 1, padding: '10px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '6px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '18px', fontWeight: 800, color: '#92400e' }}>{data.total_reworks}</div>
+                                <div style={{ fontSize: '10px', fontWeight: 600, color: '#b45309' }}>Rework Events</div>
+                            </div>
+                            <div style={{ flex: 1, padding: '10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '18px', fontWeight: 800, color: '#991b1b' }}>{data.total_failures}</div>
+                                <div style={{ fontSize: '10px', fontWeight: 600, color: '#b91c1c' }}>Total Failures</div>
+                            </div>
+                        </div>
+
+                        {/* Production Pipeline Status */}
+                        {data.backend_stages && data.backend_stages.length > 0 && (
+                            <div style={{ marginBottom: '15px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <h3 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>Backend Pipeline Status</h3>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                    {data.backend_stages.map((st: any, i: number) => (
+                                        <span key={i} style={{ fontSize: '10px', padding: '3px 8px', borderRadius: '4px', background: st.status === 'PASSED' ? '#dcfce7' : st.status === 'FAILED' ? '#fee2e2' : '#f1f5f9', color: st.status === 'PASSED' ? '#166534' : st.status === 'FAILED' ? '#991b1b' : '#64748b', fontWeight: 600, border: '1px solid #cbd5e1' }}>
+                                            {st.name || st.code}: {st.status}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Combined Scan History Table */}
+                        <h3 style={{ margin: '15px 0 8px 0', fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>Complete Scan History</h3>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                            <thead>
+                                <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                    <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>#</th>
+                                    <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Source</th>
+                                    <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Process Step</th>
+                                    <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Status</th>
+                                    <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Scanned By</th>
+                                    <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Scanned At</th>
+                                    <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Remark</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {combinedHistory.map((row, idx) => (
+                                    <tr key={idx}>
+                                        <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{idx + 1}</td>
+                                        <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1', fontWeight: 700, color: row.source === 'SMT' ? '#2563eb' : '#059669' }}>{row.source}</td>
+                                        <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}><strong>{row.process_step}</strong></td>
+                                        <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1', fontWeight: 700, color: row.status === 'PASS' ? '#166534' : row.status === 'FAIL' ? '#991b1b' : '#334155' }}>{row.status}</td>
+                                        <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
+                                        <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>{fmt(row.scanned_at)}</td>
+                                        <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>{row.remark || '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
 

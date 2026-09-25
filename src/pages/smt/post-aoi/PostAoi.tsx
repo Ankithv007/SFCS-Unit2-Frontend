@@ -9,6 +9,8 @@ import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import SMTCountDetailsModal from '../../../components/SMTCountDetailsModal';
+import { usePreviousStagePassed } from '../../../hooks/usePreviousStagePassed';
+import { PreviousStagePassedModal } from '../../../components/PreviousStagePassedModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { 
@@ -175,6 +177,23 @@ const PostAoi: React.FC = () => {
     const [failRemark, setFailRemark] = useState('');
     const [selectedScanToFail, setSelectedScanToFail] = useState<ScanRecord | null>(null);
     const [showFailedModal, setShowFailedModal] = useState(false);
+    const [showPrevStageModal, setShowPrevStageModal] = useState(false);
+
+    // Live-synced Pending at Current Stage data (Previous stage: Pre-AOI)
+    const {
+        units: prevStageUnits,
+        count: prevStageCount,
+        previousStage: resolvedPrevStage,
+        loading: prevStageLoading,
+        refetch: refetchPrevStage
+    } = usePreviousStagePassed({
+        workOrderId: activeSession?.work_order_id,
+        side: activeSession?.side,
+        stage: 'Post-AOI',
+        sessionId: activeSession?.id,
+        enabled: !!activeSession
+    });
+
     const [selectedScanToRepair, setSelectedScanToRepair] = useState<{ barcode: string } | null>(null);
     const [repairRemark, setRepairRemark] = useState('');
     const [editingScanId, setEditingScanId] = useState<string | null>(null);
@@ -261,7 +280,7 @@ const PostAoi: React.FC = () => {
     }, []);
 
     // Determine if any modal/dialog is currently active
-    const isModalOpen = showAbortModal || !!selectedScanToFail || !!selectedScanToRepair || !!editingScanId || !!selectedQrBarcode || !!viewingRemarkText || showFailedModal || !!fgOperatorModal;
+    const isModalOpen = showAbortModal || !!selectedScanToFail || !!selectedScanToRepair || !!editingScanId || !!selectedQrBarcode || !!viewingRemarkText || showFailedModal || showPrevStageModal || !!fgOperatorModal;
 
     // Keep scanner input focused if scanning is active, no dialog is open, and search input is not focused
     useEffect(() => {
@@ -495,6 +514,8 @@ const PostAoi: React.FC = () => {
             }
         } catch (err: any) {
             console.error('Error loading session stats:', err);
+        } finally {
+            refetchPrevStage();
         }
     };
 
@@ -1780,6 +1801,26 @@ const PostAoi: React.FC = () => {
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>WO Quantity</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e293b' }}>{stats.workOrderQuantity}</h2>
                         </div>
+                        <div 
+                            className={styles.card} 
+                            style={{ 
+                                margin: 0, 
+                                padding: '1.25rem', 
+                                borderLeft: '5px solid #8b5cf6', 
+                                textAlign: 'center', 
+                                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', 
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                userSelect: 'none'
+                            }}
+                            onClick={() => setShowPrevStageModal(true)}
+                            title="Click to view Pending at Current Stage units"
+                        >
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Pending at Current Stage</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#6d28d9' }}>
+                                {prevStageLoading && prevStageCount === 0 ? '...' : prevStageCount}
+                            </h2>
+                        </div>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #16a34a', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#15803d' }}>{stats.passed}</h2>
@@ -2229,6 +2270,21 @@ const PostAoi: React.FC = () => {
                     type="FAILED"
                     label="Post AOI Failed Units"
                     onClose={() => setShowFailedModal(false)}
+                />
+            )}
+
+            {/* Pending at Current Stage Modal */}
+            {showPrevStageModal && activeSession && (
+                <PreviousStagePassedModal
+                    isOpen={showPrevStageModal}
+                    onClose={() => setShowPrevStageModal(false)}
+                    units={prevStageUnits}
+                    count={prevStageCount}
+                    workOrderId={activeSession.work_order_id}
+                    side={activeSession.side}
+                    currentStage="Post-AOI"
+                    previousStage={resolvedPrevStage || 'Pre-AOI'}
+                    loading={prevStageLoading}
                 />
             )}
 

@@ -9,6 +9,8 @@ import { apiFetch } from '../../../utils/api';
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
+import { usePreviousStagePassed } from '../../../hooks/usePreviousStagePassed';
+import { PreviousStagePassedModal } from '../../../components/PreviousStagePassedModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
 interface Toast { 
@@ -172,6 +174,22 @@ const SMTFG: React.FC = () => {
     const [selectedQrBarcode, setSelectedQrBarcode] = useState<string | null>(null);
     const [singleQrDataUrl, setSingleQrDataUrl] = useState<string | null>(null);
     const [isZipping, setIsZipping] = useState(false);
+    const [showPrevStageModal, setShowPrevStageModal] = useState(false);
+
+    // Pending at Current Stage Hook
+    const {
+        units: prevStageUnits,
+        count: prevStageCount,
+        previousStage: resolvedPrevStage,
+        loading: prevStageLoading,
+        refetch: refetchPrevStage
+    } = usePreviousStagePassed({
+        workOrderId: activeSession?.work_order_id,
+        side: activeSession?.side,
+        stage: 'SMT-FG',
+        sessionId: activeSession?.id,
+        enabled: !!activeSession
+    });
 
     // Focus Lock Ref
     const scanInputRef = useRef<HTMLInputElement>(null);
@@ -278,6 +296,8 @@ const SMTFG: React.FC = () => {
         } catch (err: any) {
             console.error(err);
             addToast('Failed to refresh session statistics.', 'error');
+        } finally {
+            refetchPrevStage();
         }
     };
 
@@ -916,7 +936,7 @@ const SMTFG: React.FC = () => {
         );
     };
 
-    const isModalOpen = !!selectedQrBarcode;
+    const isModalOpen = !!selectedQrBarcode || showPrevStageModal;
 
     return (
         <div className={styles.container}>
@@ -1314,6 +1334,29 @@ const SMTFG: React.FC = () => {
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>WO Quantity</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e1b4b' }}>{stats.workOrderQuantity}</h2>
                         </div>
+                        <div
+                            className={styles.card}
+                            onClick={() => setShowPrevStageModal(true)}
+                            title="Click to view Pending at Current Stage units"
+                            style={{
+                                margin: 0,
+                                padding: '1.25rem',
+                                borderLeft: '5px solid #0284c7',
+                                textAlign: 'center',
+                                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                background: '#f0f9ff'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#0369a1', fontWeight: 700 }}>Pending at Current Stage</p>
+                                <span style={{ fontSize: '0.75rem', color: '#0284c7' }}>🔍</span>
+                            </div>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0369a1' }}>
+                                {prevStageLoading && prevStageCount === 0 ? '...' : prevStageCount}
+                            </h2>
+                        </div>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #10b981', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#047857' }}>{stats.passed}</h2>
@@ -1515,6 +1558,20 @@ const SMTFG: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showPrevStageModal && (
+                <PreviousStagePassedModal
+                    isOpen={showPrevStageModal}
+                    onClose={() => setShowPrevStageModal(false)}
+                    currentStage="SMT-FG"
+                    previousStage={resolvedPrevStage || 'Post-AOI'}
+                    workOrderId={activeSession?.work_order_id || ''}
+                    side={activeSession?.side || ''}
+                    count={prevStageCount}
+                    units={prevStageUnits}
+                    loading={prevStageLoading}
+                />
             )}
         </div>
     );

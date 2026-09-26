@@ -67,6 +67,9 @@ interface InwardSession {
     updated_at?: string;
     duplicate_scan_count: number;
     lot_quantity?: number;
+    lot_number?: string | null;
+    excel_filename?: string;
+    work_order_db_id?: number;
 }
 
 interface ScanRecord {
@@ -87,6 +90,7 @@ interface ScanRecord {
     repair_remark?: string | null;
     repaired_by?: string | null;
     sl_no?: string | null;
+    lot?: string | null;
     master_remark?: string | null;
     master_failure_description?: string | null;
 }
@@ -235,6 +239,8 @@ const Inward: React.FC = () => {
     const [isZipping, setIsZipping] = useState(false);
     const [viewingRemarkText, setViewingRemarkText] = useState<string | null>(null);
     const [viewingRemarkTitle, setViewingRemarkTitle] = useState<string>('');
+    const [isExportingExcel, setIsExportingExcel] = useState(false);
+    const [isExportingRemaining, setIsExportingRemaining] = useState(false);
 
     // Scanner focus lock ref
     const scanInputRef = useRef<HTMLInputElement>(null);
@@ -683,34 +689,70 @@ const Inward: React.FC = () => {
 
     // ─── Export & Report Handlers ────────────────────────────────────────────
 
-    const handleExportCSV = () => {
+    const triggerDownload = (blob: Blob, filename: string) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+        a.click();
+        window.URL.revokeObjectURL(url);
+    };
+
+    const handleExportExcel = async () => {
         if (!activeSession) return;
         try {
-            const headers = ['S.No.', 'Scanned By', 'Date & Time', 'Physical TPN', 'Band Serial Number', 'Physical Serial Number', 'Status', 'Remark', 'Assignment Remark'];
-            const rows = stats.scans.map(scan => [
-                scan.sl_no || '-',
-                scan.scanned_by,
-                new Date(scan.scanned_at).toLocaleString(),
-                scan.physical_tpn || '',
-                scan.band_serial_no || '',
-                scan.physical_serial_number || scan.barcode,
-                scan.result,
-                scan.remark || '',
-                scan.repair_remark || ''
-            ]);
+            setIsExportingExcel(true);
+            addToast('Generating RRH INWARD Excel report...', 'info');
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch(`/api/rrh/inward/sessions/${activeSession.id}/export/excel`, {
+                headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+            });
+            if (!res.ok) throw new Error('Failed to export scanned products logs to Excel.');
+            const blob = await res.blob();
+            triggerDownload(blob, `RRH_INWARD_Scan_Logs_${activeSession.work_order_id}.xlsx`);
+            addToast('Excel report downloaded successfully.', 'success');
+        } catch (err: any) {
+            console.error('Excel export error:', err);
+            addToast(err.message || 'Excel export failed.', 'error');
+        } finally {
+            setIsExportingExcel(false);
+        }
+    };
 
-            const csvContent = [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n');
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.setAttribute('href', url);
-            link.setAttribute('download', `RRH_INWARD_Scan_Logs_${activeSession.work_order_id}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            addToast('CSV exported successfully.', 'success');
-        } catch (err) {
-            addToast('CSV export failed.', 'error');
+    const handleExportRemainingExcel = async () => {
+        if (!activeSession) return;
+        try {
+            setIsExportingRemaining(true);
+            addToast('Generating Remaining Master Data Excel report...', 'info');
+            const token = localStorage.getItem('auth_token');
+            const query = remainingSearch ? `?search=${encodeURIComponent(remainingSearch)}` : '';
+            const res = await fetch(`/api/rrh/inward/sessions/${activeSession.id}/remaining-master-data/export/excel${query}`, {
+                headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+            });
+            if (!res.ok) throw new Error('Failed to export remaining master data.');
+            const blob = await res.blob();
+            triggerDownload(blob, `RRH_Remaining_Master_Data_${activeSession.work_order_id}.xlsx`);
+            addToast('Remaining Master Data Excel downloaded successfully.', 'success');
+        } catch (err: any) {
+            console.error('Export remaining error:', err);
+            addToast(err.message || 'Failed to export remaining master data.', 'error');
+        } finally {
+            setIsExportingRemaining(false);
+        }
+    };
+
+    const handleDownloadSessionFile = async (session: InwardSession) => {
+        try {
+            addToast(`Downloading Master Excel file for ${session.work_order_id}...`, 'info');
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch(`/api/rrh/work-orders/${encodeURIComponent(session.work_order_id)}/download`, {
+                headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+            });
+            if (!res.ok) throw new Error('Master Excel file not found on server or could not be downloaded.');
+            const blob = await res.blob();
+            triggerDownload(blob, session.excel_filename || `${session.work_order_id}.xlsx`);
+            addToast('Master Excel file downloaded successfully.', 'success');
+        } catch (err: any) {
+            console.error('File download error:', err);
+            addToast(err.message || 'Failed to download Master Excel file.', 'error');
         }
     };
 
@@ -814,14 +856,14 @@ const Inward: React.FC = () => {
             sectionHeader('  3.  SCANNED PRODUCTS LOGS', 21, 128, 61);
             checkPageBreak(12);
             const cols = [
-                { label: '#', x: ML, w: 10 },
-                { label: 'Scanned By', x: ML + 10, w: 22 },
-                { label: 'Date & Time', x: ML + 32, w: 28 },
-                { label: 'Physical TPN', x: ML + 60, w: 28 },
-                { label: 'Band Serial No', x: ML + 88, w: 28 },
-                { label: 'Physical Serial No', x: ML + 116, w: 28 },
-                { label: 'Status', x: ML + 144, w: 16 },
-                { label: 'Remark', x: ML + 160, w: 22 }
+                { label: '#', x: ML, w: 8 },
+                { label: 'Scanned By', x: ML + 8, w: 22 },
+                { label: 'Date & Time', x: ML + 30, w: 26 },
+                { label: 'Physical TPN', x: ML + 56, w: 26 },
+                { label: 'Band Serial No', x: ML + 82, w: 26 },
+                { label: 'Physical Serial No', x: ML + 108, w: 28 },
+                { label: 'Status', x: ML + 136, w: 18 },
+                { label: 'Remark', x: ML + 154, w: 28 }
             ];
 
             doc.setFillColor(31, 78, 121);
@@ -845,7 +887,7 @@ const Inward: React.FC = () => {
                 doc.setTextColor(15, 23, 42);
 
                 doc.text(String(scan.sl_no || '-'), cols[0].x + 1, y + 5);
-                doc.text((scan.scanned_by || '—').slice(0, 12), cols[1].x + 1, y + 5);
+                doc.text((scan.scanned_by || '—').slice(0, 14), cols[1].x + 1, y + 5);
                 doc.text(formatTimestamp(scan.scanned_at).slice(0, 16), cols[2].x + 1, y + 5);
                 doc.text((scan.physical_tpn || '—').slice(0, 16), cols[3].x + 1, y + 5);
                 doc.text((scan.band_serial_no || '—').slice(0, 16), cols[4].x + 1, y + 5);
@@ -863,8 +905,8 @@ const Inward: React.FC = () => {
 
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(71, 85, 105);
-                const rem = scan.repair_remark || scan.remark || '—';
-                doc.text(rem.slice(0, 14), cols[7].x + 1, y + 5);
+                const rem = scan.repair_remark || scan.remark || scan.master_remark || '—';
+                doc.text(rem.slice(0, 20), cols[7].x + 1, y + 5);
 
                 y += 7;
             });
@@ -1019,11 +1061,13 @@ const Inward: React.FC = () => {
 
     const renderRemarkCell = (remark: string | null | undefined, title: string) => {
         if (!remark) return '—';
-        const preview = remark.length > 20 ? remark.slice(0, 18) + '...' : remark;
+        const words = remark.trim().split(/\s+/);
+        const exceedsWordLimit = words.length > 5 || remark.length > 25;
+        const preview = exceedsWordLimit ? words.slice(0, 5).join(' ') + '...' : remark;
         return (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
                 <span title={remark}>{preview}</span>
-                {remark.length > 20 && (
+                {exceedsWordLimit && (
                     <button
                         type="button"
                         className={styles.secondaryButton}
@@ -1201,6 +1245,7 @@ const Inward: React.FC = () => {
                                         <thead>
                                             <tr>
                                                 <th>Work Order Number</th>
+                                                <th>Lot Number</th>
                                                 <th>Started By</th>
                                                 <th>Started At</th>
                                                 <th>Status</th>
@@ -1211,16 +1256,25 @@ const Inward: React.FC = () => {
                                             {activeSessionsList.map(session => (
                                                 <tr key={session.id}>
                                                     <td style={{ fontWeight: 700, color: '#4f46e5' }}>{session.work_order_id}</td>
+                                                    <td style={{ fontWeight: 600, color: '#0f766e', fontFamily: 'monospace' }}>{session.lot_number || '—'}</td>
                                                     <td>{session.created_by_name || session.created_by || '—'}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{formatTimestamp(session.created_at)}</td>
                                                     <td>{getStatusBadge(session.status)}</td>
-                                                    <td style={{ display: 'flex', gap: '8px' }}>
+                                                    <td style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                                         <button
                                                             className={styles.secondaryButton}
                                                             style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', backgroundColor: '#eef2ff', color: '#4338ca', borderColor: '#c7d2fe', fontWeight: 600 }}
                                                             onClick={() => setActiveSession(session)}
                                                         >
                                                             View Details / Resume
+                                                        </button>
+                                                        <button
+                                                            className={styles.secondaryButton}
+                                                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                            onClick={() => handleDownloadSessionFile(session)}
+                                                            title="Download Master Excel File"
+                                                        >
+                                                            📥 Download File
                                                         </button>
                                                         {isSuperAdmin && (
                                                             <button
@@ -1236,7 +1290,7 @@ const Inward: React.FC = () => {
                                             ))}
                                             {activeSessionsList.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                                                         No active INWARD sessions found. Select a Work Order above to begin.
                                                     </td>
                                                 </tr>
@@ -1333,6 +1387,7 @@ const Inward: React.FC = () => {
                                 <thead>
                                     <tr>
                                         <th>Work Order Number</th>
+                                        <th>Lot Number</th>
                                         <th>Started By</th>
                                         <th>Completed At</th>
                                         <th>Status</th>
@@ -1343,18 +1398,27 @@ const Inward: React.FC = () => {
                                     {completedSessionsList.map(session => (
                                         <tr key={session.id}>
                                             <td style={{ fontWeight: 600, color: '#334155' }}>{session.work_order_id}</td>
+                                            <td style={{ fontWeight: 600, color: '#0f766e', fontFamily: 'monospace' }}>{session.lot_number || '—'}</td>
                                             <td>{session.created_by_name || session.created_by || '—'}</td>
                                             <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
                                                 {formatTimestamp(session.updated_at || session.created_at)}
                                             </td>
                                             <td>{getStatusBadge(session.status)}</td>
-                                            <td style={{ display: 'flex', gap: '8px' }}>
+                                            <td style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                                 <button
                                                     className={styles.secondaryButton}
                                                     style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
                                                     onClick={() => setActiveSession(session)}
                                                 >
                                                     View Details
+                                                </button>
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                    onClick={() => handleDownloadSessionFile(session)}
+                                                    title="Download Master Excel File"
+                                                >
+                                                    📥 Download File
                                                 </button>
                                                 {isSuperAdmin && (
                                                     <button
@@ -1370,7 +1434,7 @@ const Inward: React.FC = () => {
                                     ))}
                                     {completedSessionsList.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                            <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                                                 No completed INWARD sessions found.
                                             </td>
                                         </tr>
@@ -1419,7 +1483,15 @@ const Inward: React.FC = () => {
                             ← Back to Session Setup
                         </button>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                            <button
+                                className={styles.secondaryButton}
+                                style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                                onClick={() => handleDownloadSessionFile(activeSession)}
+                                title="Download original Master Excel file for this session"
+                            >
+                                📥 Download Master File
+                            </button>
                             <span style={{ fontSize: '1rem', fontWeight: 600, color: '#334155' }}>
                                 Work Order: <strong style={{ color: '#2563eb' }}>{activeSession.work_order_id}</strong>
                             </span>
@@ -1434,6 +1506,12 @@ const Inward: React.FC = () => {
                                 <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block' }}>Work Order Number</span>
                                 <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>{activeSession.work_order_id}</span>
                             </div>
+                            {activeSession.lot_number && (
+                                <div>
+                                    <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block' }}>Lot Number</span>
+                                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f766e', fontFamily: 'monospace' }}>{activeSession.lot_number}</span>
+                                </div>
+                            )}
                             <div>
                                 <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block' }}>Date & Time</span>
                                 <span style={{ fontSize: '0.95rem', color: '#334155' }}>{formatWoDateTime(selectedWoDetails?.dateTime || activeSession.created_at)}</span>
@@ -1541,8 +1619,14 @@ const Inward: React.FC = () => {
                                     >
                                         📄 PDF Report
                                     </button>
-                                    <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleExportCSV} title="Download CSV scan log">
-                                        CSV 📄
+                                    <button
+                                        className={styles.secondaryButton}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                                        onClick={handleExportExcel}
+                                        disabled={isExportingExcel || stats.scans.length === 0}
+                                        title="Download Excel scan log (.xlsx)"
+                                    >
+                                        📊 {isExportingExcel ? 'Exporting...' : 'Excel Report'}
                                     </button>
                                     <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginLeft: 6, marginRight: 2 }}>QR:</span>
                                     <button className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} onClick={handleDownloadAllQRPDF} title="Download all QR labels as PDF">
@@ -1720,6 +1804,27 @@ const Inward: React.FC = () => {
                                         Clear
                                     </button>
                                 )}
+                                <button
+                                    className={styles.secondaryButton}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        fontSize: '0.85rem',
+                                        background: '#0284c7',
+                                        color: '#fff',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        padding: '0.4rem 0.8rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={handleExportRemainingExcel}
+                                    disabled={remainingTotal === 0 || isExportingRemaining}
+                                    title="Download remaining unscanned master data as Excel (.xlsx)"
+                                >
+                                    📥 {isExportingRemaining ? 'Exporting...' : 'Export Unscanned (Excel)'}
+                                </button>
                             </div>
                         </div>
 
@@ -1763,7 +1868,7 @@ const Inward: React.FC = () => {
                                                     <td>{item.tejas_obd_no || '—'}</td>
                                                     <td>{item.lot || '—'}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                                        {item.remarks || '—'}
+                                                        {renderRemarkCell(item.remarks, 'Master Data Remark')}
                                                     </td>
                                                     <td>
                                                         <button

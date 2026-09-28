@@ -4,7 +4,7 @@ import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { 
-    Grid, Plus, Trash2, Edit2, AlertCircle, X, Info, Settings, FileSpreadsheet
+    Grid, Plus, Trash2, Edit2, AlertCircle, X, Info, Settings, FileSpreadsheet, Search, ArrowLeft
 } from 'lucide-react';
 
 interface Rack {
@@ -40,6 +40,39 @@ interface RackLocation {
     checked_out_at: string | null;
 }
 
+interface StencilDetails {
+    stencil_rack_number: string | null;
+    job_number: string | null;
+    stencil_name: string | null;
+    revision: string | null;
+    thickness_mills: number | null;
+    manufacturing_date: string | null;
+    side: 'TOP' | 'BOTTOM' | 'TOP/BOTTOM' | null;
+    location_id: string;
+    location_code: string;
+    rack_id: string;
+    rack_name: string;
+    rack_status: 'ACTIVE' | 'INACTIVE';
+    row_number: number;
+    column_number: number;
+    location_status: 'STORED' | 'CHECKED_OUT' | 'EMPTY';
+    remarks: string | null;
+    holder: {
+        employee_code: string | null;
+        employee_name: string | null;
+        department: string | null;
+        role: string | null;
+        received_at: string | null;
+        elapsed_time: string | null;
+        work_order_id: string | null;
+        work_order_number: string | null;
+        work_order_side: string | null;
+        machine: string | null;
+        production_line: string | null;
+        remarks: string | null;
+    } | null;
+}
+
 const StencilRackManagement: React.FC = () => {
     const { showToast } = useToast();
     const { user, permissions } = useAuth();
@@ -56,6 +89,13 @@ const StencilRackManagement: React.FC = () => {
     const [selectedRack, setSelectedRack] = useState<Rack | null>(null);
     const [locations, setLocations] = useState<RackLocation[]>([]);
     const [selectedLocation, setSelectedLocation] = useState<RackLocation | null>(null);
+
+    // Search Stencil State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [searchedStencil, setSearchedStencil] = useState<StencilDetails | null>(null);
+    const [searchNoResult, setSearchNoResult] = useState(false);
+    const [lastSearchedQuery, setLastSearchedQuery] = useState('');
 
     // Modals
     const [showRackModal, setShowRackModal] = useState(false);
@@ -351,6 +391,46 @@ const StencilRackManagement: React.FC = () => {
         }
     };
 
+    // Stencil Search Handler (Read-Only)
+    const handleSearchSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        const query = searchQuery.trim();
+        if (!query) {
+            showToast('Please enter a Rack Number, Job Number, or Stencil / Model Name to search.', 'info');
+            return;
+        }
+
+        setSearchLoading(true);
+        setSearchNoResult(false);
+        setLastSearchedQuery(query);
+
+        try {
+            const res = await apiFetch(`/api/smt/stencil-rack/stencil-info/${encodeURIComponent(query)}`);
+            if (res.success && res.stencil) {
+                setSearchedStencil(res.stencil);
+                setSearchNoResult(false);
+                showToast(`Found stencil details for '${query}'`, 'success');
+            } else {
+                setSearchedStencil(null);
+                setSearchNoResult(true);
+                showToast(res.message || 'No matching stencil record found.', 'info');
+            }
+        } catch (err: any) {
+            setSearchedStencil(null);
+            setSearchNoResult(true);
+            showToast(err.message || `No matching stencil record found for '${query}'.`, 'error');
+        } finally {
+            setSearchLoading(false);
+        }
+    };
+
+    const handleClearSearch = () => {
+        setSearchQuery('');
+        setSearchedStencil(null);
+        setSearchNoResult(false);
+        setLastSearchedQuery('');
+    };
+
     return (
         <div className={styles.container}>
             {/* Header Area */}
@@ -360,6 +440,38 @@ const StencilRackManagement: React.FC = () => {
                     <p>Register stencil racks, configure grids, and manage direct coordinates stencil storage.</p>
                 </div>
                 <div className={styles.actionButtons}>
+                    <form className={styles.searchForm} onSubmit={handleSearchSubmit}>
+                        <div className={styles.searchInputWrapper}>
+                            <Search size={16} className={styles.searchIcon} />
+                            <input 
+                                type="text"
+                                className={styles.searchInput}
+                                value={searchQuery}
+                                onChange={e => {
+                                    setSearchQuery(e.target.value);
+                                    if (searchNoResult) setSearchNoResult(false);
+                                }}
+                                placeholder="Search by Rack Number, Job Number, or Stencil / Model Name"
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    className={styles.searchClearBtn}
+                                    onClick={handleClearSearch}
+                                    title="Clear search"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+                        <button 
+                            type="submit" 
+                            className={styles.btnPrimary} 
+                            disabled={searchLoading || !searchQuery.trim()}
+                        >
+                            {searchLoading ? 'Searching...' : 'Search'}
+                        </button>
+                    </form>
                     {canCreateRack && (
                         <button className={styles.btnPrimary} onClick={handleOpenCreateRack}>
                             <Plus size={18} /> Add Stencil Rack
@@ -369,74 +481,261 @@ const StencilRackManagement: React.FC = () => {
             </div>
 
             {/* Main Layout (Racks List + Coordinate Matrix) */}
-            {/* Main Layout (Racks List + Coordinate Matrix) */}
             <div className={styles.mainLayout}>
                 
                 {/* Horizontal Rack Cards Selector */}
                 <div className={styles.rackSelectorContainer}>
                     <h3 className={styles.sidebarTitle}>Select Stencil Rack</h3>
-                    <div className={styles.rackHorizontalSelector}>
-                        {loading && racks.length === 0 ? (
-                            <div className={styles.emptyStateSimple}>Loading racks...</div>
-                        ) : racks.length === 0 ? (
-                            <div className={styles.emptyStateSimple}>No racks registered. Create one to begin.</div>
-                        ) : (
-                            racks.map(rack => (
-                                <div 
-                                    key={rack.id}
-                                    className={`${styles.rackHorizontalCard} ${selectedRack?.id === rack.id ? styles.activeRackHorizontalCard : ''}`}
-                                    onClick={() => setSelectedRack(rack)}
-                                >
-                                    <div className={styles.rackCardHeader}>
-                                        <span className={styles.rackName}>{rack.name}</span>
-                                        <span className={`${styles.badge} ${rack.status === 'ACTIVE' ? styles.badgeActive : styles.badgeInactive}`}>
-                                            {rack.status}
-                                        </span>
+                    <div className={styles.selectorBody}>
+                        {/* Existing Horizontal Rack Cards Selector */}
+                        <div className={styles.rackHorizontalSelector}>
+                            {loading && racks.length === 0 ? (
+                                <div className={styles.emptyStateSimple}>Loading racks...</div>
+                            ) : racks.length === 0 ? (
+                                <div className={styles.emptyStateSimple}>No racks registered. Create one to begin.</div>
+                            ) : (
+                                racks.map(rack => (
+                                    <div 
+                                        key={rack.id}
+                                        className={`${styles.rackHorizontalCard} ${!searchedStencil && !searchNoResult && selectedRack?.id === rack.id ? styles.activeRackHorizontalCard : ''}`}
+                                        onClick={() => {
+                                            setSelectedRack(rack);
+                                            setSearchedStencil(null);
+                                            setSearchNoResult(false);
+                                        }}
+                                    >
+                                        <div className={styles.rackCardHeader}>
+                                            <span className={styles.rackName}>{rack.name}</span>
+                                            <span className={`${styles.badge} ${rack.status === 'ACTIVE' ? styles.badgeActive : styles.badgeInactive}`}>
+                                                {rack.status}
+                                            </span>
+                                        </div>
+                                        <div className={styles.rackCardDetails}>
+                                            <span className={styles.rackDimensions}>{rack.rows} × {rack.columns}</span>
+                                        </div>
+                                        <div className={styles.rackCardActions}>
+                                            <button 
+                                                type="button"
+                                                className={styles.btnIcon} 
+                                                title={`Download Excel Report for ${rack.name}`}
+                                                disabled={downloadingRackId === rack.id}
+                                                onClick={(e) => { 
+                                                    e.stopPropagation(); 
+                                                    handleDownloadRackExcel(rack); 
+                                                }}
+                                            >
+                                                <FileSpreadsheet size={14} />
+                                            </button>
+                                            {isSuperAdmin && (
+                                                <>
+                                                    <button 
+                                                        className={styles.btnIcon} 
+                                                        title="Edit Rack"
+                                                        onClick={(e) => { e.stopPropagation(); handleOpenEditRack(rack); }}
+                                                    >
+                                                        <Settings size={14} />
+                                                    </button>
+                                                    <button 
+                                                        className={styles.btnIconDanger} 
+                                                        title="Delete Rack"
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteRack(rack); }}
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className={styles.rackCardDetails}>
-                                        <span className={styles.rackDimensions}>{rack.rows} × {rack.columns}</span>
-                                    </div>
-                                    <div className={styles.rackCardActions}>
-                                        <button 
-                                            type="button"
-                                            className={styles.btnIcon} 
-                                            title={`Download Excel Report for ${rack.name}`}
-                                            disabled={downloadingRackId === rack.id}
-                                            onClick={(e) => { 
-                                                e.stopPropagation(); 
-                                                handleDownloadRackExcel(rack); 
-                                            }}
-                                        >
-                                            <FileSpreadsheet size={14} />
-                                        </button>
-                                        {isSuperAdmin && (
-                                            <>
-                                                <button 
-                                                    className={styles.btnIcon} 
-                                                    title="Edit Rack"
-                                                    onClick={(e) => { e.stopPropagation(); handleOpenEditRack(rack); }}
-                                                >
-                                                    <Settings size={14} />
-                                                </button>
-                                                <button 
-                                                    className={styles.btnIconDanger} 
-                                                    title="Delete Rack"
-                                                    onClick={(e) => { e.stopPropagation(); handleDeleteRack(rack); }}
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            ))
-                        )}
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                {/* Direct Grid Layout Matrix Explorer */}
+                {/* Direct Grid Layout Matrix Explorer OR Stencil Details */}
                 <div className={styles.detailArea}>
-                    {!selectedRack ? (
+                    {searchedStencil ? (
+                        <div>
+                            {/* Stencil Details Header */}
+                            <div className={styles.searchResultHeader}>
+                                <div className={styles.searchResultTitle}>
+                                    <h3>
+                                        <Info size={20} color="#2563eb" /> 
+                                        Stencil Details
+                                    </h3>
+                                    <p>Read-only stencil specifications and storage location information.</p>
+                                </div>
+                                <button 
+                                    type="button" 
+                                    className={styles.btnSecondary} 
+                                    onClick={handleClearSearch}
+                                >
+                                    <ArrowLeft size={16} /> Back to Rack Matrix Grid
+                                </button>
+                            </div>
+
+                            {/* Read-Only Stencil Details Presentation */}
+                            <div className={styles.stencilDetailsCard}>
+                                <div className={styles.stencilInfoGrid}>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Stencil Rack Number</span>
+                                        <span className={styles.infoValue}>{searchedStencil.stencil_rack_number || '-'}</span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Job Number</span>
+                                        <span className={styles.infoValue}>{searchedStencil.job_number || '-'}</span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Stencil / Model Name</span>
+                                        <span className={styles.infoValue}>{searchedStencil.stencil_name || '-'}</span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Revision</span>
+                                        <span className={styles.infoValue}>{searchedStencil.revision || '-'}</span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Thickness (mills)</span>
+                                        <span className={styles.infoValue}>
+                                            {searchedStencil.thickness_mills !== null && searchedStencil.thickness_mills !== undefined 
+                                                ? `${searchedStencil.thickness_mills} mils` 
+                                                : '-'}
+                                        </span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Manufacturing Date</span>
+                                        <span className={styles.infoValue}>
+                                            {searchedStencil.manufacturing_date 
+                                                ? new Date(searchedStencil.manufacturing_date).toLocaleDateString() 
+                                                : '-'}
+                                        </span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Sides</span>
+                                        <span className={styles.infoValue}>{searchedStencil.side || '-'}</span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Current Rack</span>
+                                        <span className={styles.infoValue}>{searchedStencil.rack_name || '-'}</span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Current Row</span>
+                                        <span className={styles.infoValue}>
+                                            {searchedStencil.row_number !== null && searchedStencil.row_number !== undefined 
+                                                ? searchedStencil.row_number 
+                                                : '-'}
+                                        </span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Current Column</span>
+                                        <span className={styles.infoValue}>
+                                            {searchedStencil.column_number !== null && searchedStencil.column_number !== undefined 
+                                                ? searchedStencil.column_number 
+                                                : '-'}
+                                        </span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Location Code</span>
+                                        <span className={styles.infoValue}>{searchedStencil.location_code || '-'}</span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Current Status</span>
+                                        <span className={`${styles.statusBadge} ${
+                                            searchedStencil.location_status === 'STORED' ? styles.statusStored : 
+                                            searchedStencil.location_status === 'CHECKED_OUT' ? styles.statusCheckedOut : 
+                                            styles.statusEmpty
+                                        }`}>
+                                            {searchedStencil.location_status}
+                                        </span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Current Holder</span>
+                                        <span className={styles.infoValue}>
+                                            {searchedStencil.holder?.employee_name 
+                                                ? `${searchedStencil.holder.employee_name} (${searchedStencil.holder.employee_code || '-'})` 
+                                                : (searchedStencil.location_status === 'CHECKED_OUT' ? 'Checked Out' : 'None (In Storage)')}
+                                        </span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Received Date</span>
+                                        <span className={styles.infoValue}>
+                                            {searchedStencil.holder?.received_at 
+                                                ? new Date(searchedStencil.holder.received_at).toLocaleDateString() 
+                                                : '-'}
+                                        </span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Received Time</span>
+                                        <span className={styles.infoValue}>
+                                            {searchedStencil.holder?.received_at 
+                                                ? new Date(searchedStencil.holder.received_at).toLocaleTimeString() 
+                                                : '-'}
+                                        </span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Elapsed Time</span>
+                                        <span className={styles.infoValue}>
+                                            {searchedStencil.holder?.elapsed_time || '-'}
+                                        </span>
+                                    </div>
+                                    <div className={`${styles.infoGroupItem} ${styles.infoGroupItemFull}`}>
+                                        <span className={styles.infoLabel}>Remarks</span>
+                                        <span className={styles.infoValue}>{searchedStencil.remarks || 'No remarks.'}</span>
+                                    </div>
+                                </div>
+
+                                {/* Holder / Checkout Details if active */}
+                                {searchedStencil.location_status === 'CHECKED_OUT' && searchedStencil.holder && (
+                                    <div className={styles.holderDetailsCard}>
+                                        <div className={styles.holderHeader}>
+                                            <AlertCircle size={18} />
+                                            <span>Active Checkout & Production Assignment Details</span>
+                                        </div>
+                                        <div className={styles.holderGrid}>
+                                            <div className={styles.infoGroupItem}>
+                                                <span className={styles.infoLabel}>Holder Name</span>
+                                                <span className={styles.infoValue}>{searchedStencil.holder.employee_name} ({searchedStencil.holder.employee_code})</span>
+                                            </div>
+                                            <div className={styles.infoGroupItem}>
+                                                <span className={styles.infoLabel}>Department / Role</span>
+                                                <span className={styles.infoValue}>{searchedStencil.holder.department || '-'} / {searchedStencil.holder.role || '-'}</span>
+                                            </div>
+                                            <div className={styles.infoGroupItem}>
+                                                <span className={styles.infoLabel}>Work Order</span>
+                                                <span className={styles.infoValue}>{searchedStencil.holder.work_order_number || searchedStencil.holder.work_order_id || '-'}</span>
+                                            </div>
+                                            <div className={styles.infoGroupItem}>
+                                                <span className={styles.infoLabel}>Side</span>
+                                                <span className={styles.infoValue}>{searchedStencil.holder.work_order_side || '-'}</span>
+                                            </div>
+                                            <div className={styles.infoGroupItem}>
+                                                <span className={styles.infoLabel}>Machine / Line</span>
+                                                <span className={styles.infoValue}>{searchedStencil.holder.machine || '-'} / {searchedStencil.holder.production_line || '-'}</span>
+                                            </div>
+                                            <div className={styles.infoGroupItem}>
+                                                <span className={styles.infoLabel}>Checkout Remarks</span>
+                                                <span className={styles.infoValue}>{searchedStencil.holder.remarks || '-'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ) : searchNoResult ? (
+                        <div className={styles.noResultContainer}>
+                            <AlertCircle size={48} strokeWidth={1.5} color="#ef4444" />
+                            <h3 className={styles.noResultTitle}>No Matching Record Found</h3>
+                            <p className={styles.noResultText}>
+                                No stencil record found matching: "<strong>{lastSearchedQuery}</strong>". Please verify the Stencil Rack Number, Job Number, or Stencil / Model Name and try again.
+                            </p>
+                            <button 
+                                type="button" 
+                                className={styles.btnSecondary} 
+                                onClick={handleClearSearch}
+                            >
+                                Clear Search
+                            </button>
+                        </div>
+                    ) : !selectedRack ? (
                         <div className={styles.emptyState}>
                             <AlertCircle size={48} strokeWidth={1.5} />
                             <h3>Select a Stencil Rack</h3>
@@ -445,14 +744,14 @@ const StencilRackManagement: React.FC = () => {
                     ) : (
                         <div>
                             {/* Selected Rack Meta Info */}
-                                <div className={styles.detailHeader}>
-                                    <div className={styles.detailHeaderTitle}>
-                                        <h3>Storage Matrix Explorer</h3>
-                                        <p>Manage physical storage assignments by row and column coordinates.</p>
-                                    </div>
+                            <div className={styles.detailHeader}>
+                                <div className={styles.detailHeaderTitle}>
+                                    <h3>Storage Matrix Explorer</h3>
+                                    <p>Manage physical storage assignments by row and column coordinates.</p>
                                 </div>
+                            </div>
 
-                             {/* Information Card */}
+                            {/* Information Card */}
                             <div className={styles.rackInfoCard}>
                                 <div className={styles.infoGroupItem}>
                                     <span className={styles.infoLabel}>Rack Name</span>

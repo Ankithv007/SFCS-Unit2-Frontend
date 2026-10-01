@@ -36,7 +36,7 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
             const bg = t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : t.type === 'warning' ? '#fef3c7' : '#eff6ff';
             const color = t.type === 'error' ? '#991b1b' : t.type === 'success' ? '#166534' : t.type === 'warning' ? '#92400e' : '#1e40af';
             const border = t.type === 'error' ? '#fca5a5' : t.type === 'success' ? '#86efac' : t.type === 'warning' ? '#fcd34d' : '#bfdbfe';
-            const icon = t.type === 'error' ? '❌' : t.type === 'success' ? '✅' : t.type === 'warning' ? '⚠️' : 'ℹ️';
+            const icon = t.type === 'error' ? '✕' : t.type === 'success' ? '✓' : t.type === 'warning' ? '!' : 'ℹ';
 
             return (
                 <div key={t.id} onClick={() => onRemove(t.id)} style={{
@@ -135,6 +135,9 @@ interface InspectionRecord {
     remarks: string | null;
     scanned_by: string;
     scanned_at: string;
+    checkpoints?: any;
+    is_reinspected?: boolean;
+    defect_fixed?: string | null;
 }
 
 interface SessionStats {
@@ -195,6 +198,7 @@ export interface CheckpointRecord {
     status: 'PASS' | 'FAIL' | null;
     remark: string;
     confirmed: boolean;
+    previousFailureRemark?: string;
 }
 
 export const createInitialCheckpoints = (): CheckpointRecord[] =>
@@ -281,6 +285,11 @@ export const RrhIvi: React.FC = () => {
         setCurrentCpStatus(st);
         if (st === 'PASS') {
             setCurrentCpRemark('');
+        } else {
+            const prevRem = checkpoints[activeCpIndex]?.previousFailureRemark;
+            if (prevRem && !currentCpRemark) {
+                setCurrentCpRemark(prevRem);
+            }
         }
     };
 
@@ -301,7 +310,8 @@ export const RrhIvi: React.FC = () => {
                     ...cp,
                     status: currentCpStatus,
                     remark: currentCpStatus === 'PASS' ? 'no defect' : currentCpRemark.trim(),
-                    confirmed: true
+                    confirmed: true,
+                    previousFailureRemark: cp.previousFailureRemark || (currentCpStatus === 'FAIL' ? currentCpRemark.trim() : undefined)
                 };
             }
             return cp;
@@ -315,7 +325,7 @@ export const RrhIvi: React.FC = () => {
             setRrhUnit('no defect');
             setStatusVal('PASS');
         } else {
-            const defectText = failedCps.map(c => c.remark.trim()).filter(Boolean).join('; ');
+            const defectText = failedCps.map(c => `Point ${c.id}: ${c.remark.trim()}`).filter(Boolean).join('; ');
             setRrhUnit(defectText);
             setStatusVal('FAIL');
         }
@@ -340,18 +350,32 @@ export const RrhIvi: React.FC = () => {
         setCurrentCpRemark(target.status === 'FAIL' ? target.remark : '');
     };
 
-    // Recent inspections table state
+    // Recent inspections table state & pagination (10 per page)
     const [recentInspections, setRecentInspections] = useState<InspectionRecord[]>([]);
     const [inspectionSearch, setInspectionSearch] = useState('');
-    const [isExporting, setIsExporting] = useState(false);
+    const [recentPage, setRecentPage] = useState(1);
+    const recentLimit = 10;
+    const [exportingType, setExportingType] = useState<'RECENT' | 'FAILED' | null>(null);
     const [viewingImages, setViewingImages] = useState<{ serial: string; images: string[] } | null>(null);
     const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
+    // Failed inspections table state, search, pagination & details modal
+    const [failedSearch, setFailedSearch] = useState('');
+    const [failedPage, setFailedPage] = useState(1);
+    const failedLimit = 10;
+    const [failedModalRecord, setFailedModalRecord] = useState<InspectionRecord | null>(null);
+    const [fixedDefectModalRecord, setFixedDefectModalRecord] = useState<InspectionRecord | null>(null);
+
+    // Recent inspections table (strictly status === 'PASS' only, failed units go to Failed Inspections)
+    const passedInspections = useMemo(() => {
+        return recentInspections.filter(r => r.status === 'PASS');
+    }, [recentInspections]);
+
     // Filter recent inspections by search query
     const filteredRecentInspections = useMemo(() => {
-        if (!inspectionSearch.trim()) return recentInspections;
+        if (!inspectionSearch.trim()) return passedInspections;
         const q = inspectionSearch.trim().toLowerCase();
-        return recentInspections.filter(item => {
+        return passedInspections.filter(item => {
             return (
                 (item.band_serial_no && item.band_serial_no.toLowerCase().includes(q)) ||
                 (item.serial_number && item.serial_number.toLowerCase().includes(q)) ||
@@ -362,12 +386,222 @@ export const RrhIvi: React.FC = () => {
                 (item.duplexer_main && item.duplexer_main.toLowerCase().includes(q)) ||
                 (item.duplexer_part_no && item.duplexer_part_no.toLowerCase().includes(q)) ||
                 (item.rrh_unit && item.rrh_unit.toLowerCase().includes(q)) ||
+                (item.defect_fixed && item.defect_fixed.toLowerCase().includes(q)) ||
                 (item.status && item.status.toLowerCase().includes(q)) ||
                 (item.remarks && item.remarks.toLowerCase().includes(q)) ||
                 (item.scanned_by && item.scanned_by.toLowerCase().includes(q))
             );
         });
-    }, [recentInspections, inspectionSearch]);
+    }, [passedInspections, inspectionSearch]);
+
+    useEffect(() => {
+        setRecentPage(1);
+    }, [inspectionSearch]);
+
+    const recentTotalPages = Math.max(1, Math.ceil(filteredRecentInspections.length / recentLimit));
+    const paginatedRecentInspections = useMemo(() => {
+        const start = (recentPage - 1) * recentLimit;
+        return filteredRecentInspections.slice(start, start + recentLimit);
+    }, [filteredRecentInspections, recentPage, recentLimit]);
+
+    // Dedicated Failed Inspections list (strictly status === 'FAIL' AND not subsequently passed)
+    const failedInspections = useMemo(() => {
+        const passedSerials = new Set<string>();
+        recentInspections.forEach(r => {
+            if (r.status === 'PASS') {
+                if (r.serial_number) passedSerials.add(r.serial_number.trim().toUpperCase());
+                if (r.band_serial_no) passedSerials.add(r.band_serial_no.trim().toUpperCase());
+            }
+        });
+
+        const seenFailedSerials = new Set<string>();
+        return recentInspections.filter(r => {
+            if (r.status !== 'FAIL') return false;
+            const sn = (r.serial_number || '').trim().toUpperCase();
+            const bsn = (r.band_serial_no || '').trim().toUpperCase();
+            if (passedSerials.has(sn) || (bsn && passedSerials.has(bsn))) {
+                return false;
+            }
+            const key = bsn || sn;
+            if (key && seenFailedSerials.has(key)) {
+                return false;
+            }
+            if (key) seenFailedSerials.add(key);
+            return true;
+        });
+    }, [recentInspections]);
+
+    useEffect(() => {
+        setFailedPage(1);
+    }, [failedSearch]);
+
+    const filteredFailedInspections = useMemo(() => {
+        if (!failedSearch.trim()) return failedInspections;
+        const q = failedSearch.trim().toLowerCase();
+        return failedInspections.filter(item => {
+            return (
+                (item.band_serial_no && item.band_serial_no.toLowerCase().includes(q)) ||
+                (item.serial_number && item.serial_number.toLowerCase().includes(q)) ||
+                (item.physical_tpn && item.physical_tpn.toLowerCase().includes(q)) ||
+                (item.tejas_dc_no && item.tejas_dc_no.toLowerCase().includes(q)) ||
+                (item.tejas_obd_no && item.tejas_obd_no.toLowerCase().includes(q)) ||
+                (item.band && item.band.toLowerCase().includes(q)) ||
+                (item.duplexer_main && item.duplexer_main.toLowerCase().includes(q)) ||
+                (item.duplexer_part_no && item.duplexer_part_no.toLowerCase().includes(q)) ||
+                (item.rrh_unit && item.rrh_unit.toLowerCase().includes(q)) ||
+                (item.remarks && item.remarks.toLowerCase().includes(q)) ||
+                (item.scanned_by && item.scanned_by.toLowerCase().includes(q))
+            );
+        });
+    }, [failedInspections, failedSearch]);
+
+    const failedTotalPages = Math.max(1, Math.ceil(filteredFailedInspections.length / failedLimit));
+    const paginatedFailedInspections = useMemo(() => {
+        const start = (failedPage - 1) * failedLimit;
+        return filteredFailedInspections.slice(start, start + failedLimit);
+    }, [filteredFailedInspections, failedPage, failedLimit]);
+
+    // Re-inspect a failed unit: loads serial, Duplexer data, restores checkpoints with previous failure remark, and jumps to the failed checkpoint
+    const handleReinspectFailedRecord = (row: InspectionRecord) => {
+        const serial = row.band_serial_no || row.serial_number;
+        setSerialInput(serial);
+        handleLookupSerial(serial);
+        setDuplexerMain(row.duplexer_main || '');
+        setDuplexerPartNo(row.duplexer_part_no || '');
+        setRemarksVal(row.remarks || '');
+
+        let savedCps: any[] = [];
+        if (row.checkpoints) {
+            try {
+                savedCps = typeof row.checkpoints === 'string' ? JSON.parse(row.checkpoints) : row.checkpoints;
+                if (typeof savedCps === 'string') {
+                    savedCps = JSON.parse(savedCps);
+                }
+            } catch {
+                savedCps = [];
+            }
+        }
+
+        // Build a fallback point map from rrh_unit if checkpoints array is not populated or empty
+        const defectText = row.rrh_unit || '';
+        const pointDefectMap = new Map<number, string>();
+        if (defectText && defectText !== 'no defect') {
+            const parts = defectText.split(/[;\n]+/);
+            for (const part of parts) {
+                const trimmed = part.trim();
+                if (!trimmed) continue;
+                const pointMatch = trimmed.match(/(?:\[?\s*Point\s*(\d+)\s*\]?)\s*[:\-–]?\s*(.*)/i);
+                if (pointMatch) {
+                    const pNum = parseInt(pointMatch[1], 10);
+                    const pRem = pointMatch[2]?.trim() || trimmed;
+                    pointDefectMap.set(pNum, pRem);
+                } else {
+                    const lower = trimmed.toLowerCase();
+                    if (lower.includes('cap')) {
+                        pointDefectMap.set(1, trimmed);
+                    } else if (lower.includes('port') || lower.includes('connector') || lower.includes('opt') || lower.includes('pwr') || lower.includes('ant')) {
+                        pointDefectMap.set(2, trimmed);
+                    } else if (lower.includes('screw') && !lower.includes('hardware')) {
+                        pointDefectMap.set(3, trimmed);
+                    } else if (lower.includes('hardware') || lower.includes('nut') || lower.includes('washer')) {
+                        pointDefectMap.set(4, trimmed);
+                    } else if (lower.includes('paint') || lower.includes('chassis') || lower.includes('clean') || lower.includes('scratch') || lower.includes('dent') || lower.includes('dust')) {
+                        pointDefectMap.set(5, trimmed);
+                    } else if (lower.includes('label') || lower.includes('qr') || lower.includes('barcode') || lower.includes('sticker')) {
+                        pointDefectMap.set(6, trimmed);
+                    }
+                }
+            }
+            if (pointDefectMap.size === 0) {
+                const lower = defectText.toLowerCase();
+                if (lower.includes('cap')) pointDefectMap.set(1, defectText);
+                else if (lower.includes('port') || lower.includes('connector') || lower.includes('opt') || lower.includes('pwr') || lower.includes('ant')) pointDefectMap.set(2, defectText);
+                else if (lower.includes('screw') && !lower.includes('hardware')) pointDefectMap.set(3, defectText);
+                else if (lower.includes('hardware') || lower.includes('nut')) pointDefectMap.set(4, defectText);
+                else if (lower.includes('paint') || lower.includes('chassis') || lower.includes('clean')) pointDefectMap.set(5, defectText);
+                else if (lower.includes('label') || lower.includes('qr') || lower.includes('barcode')) pointDefectMap.set(6, defectText);
+                else {
+                    pointDefectMap.set(1, defectText);
+                }
+            }
+        }
+
+        const newCheckpoints: CheckpointRecord[] = IVI_CHECKPOINTS.map((def) => {
+            const match = Array.isArray(savedCps) ? savedCps.find((c: any) => c.id === def.id || c.title === def.title) : null;
+            if (match) {
+                if (match.status === 'FAIL') {
+                    const rem = match.remark || pointDefectMap.get(def.id) || row.rrh_unit || '';
+                    return {
+                        ...def,
+                        status: 'FAIL' as const,
+                        remark: rem,
+                        confirmed: true,
+                        previousFailureRemark: rem
+                    };
+                } else if (match.status === 'PASS') {
+                    return {
+                        ...def,
+                        status: 'PASS' as const,
+                        remark: 'no defect',
+                        confirmed: true,
+                        previousFailureRemark: match.previousFailureRemark
+                    };
+                }
+            }
+
+            if (pointDefectMap.has(def.id)) {
+                const rem = pointDefectMap.get(def.id)!;
+                return {
+                    ...def,
+                    status: 'FAIL' as const,
+                    remark: rem,
+                    confirmed: true,
+                    previousFailureRemark: rem
+                };
+            }
+
+            return {
+                ...def,
+                status: 'PASS' as const,
+                remark: 'no defect',
+                confirmed: true
+            };
+        });
+
+        setCheckpoints(newCheckpoints);
+
+        // Find the first failed checkpoint
+        const firstFailIdx = newCheckpoints.findIndex(c => c.status === 'FAIL');
+        const targetIdx = firstFailIdx >= 0 ? firstFailIdx : 0;
+        setActiveCpIndex(targetIdx);
+        setCurrentCpStatus(newCheckpoints[targetIdx].status);
+        setCurrentCpRemark(newCheckpoints[targetIdx].status === 'FAIL' ? newCheckpoints[targetIdx].remark : '');
+
+        // Recalculate RRH unit defect and overall status
+        const failedCps = newCheckpoints.filter(c => c.status === 'FAIL');
+        if (failedCps.length > 0) {
+            setRrhUnit(failedCps.map(c => `Point ${c.id}: ${c.remark}`).filter(Boolean).join('; '));
+            setStatusVal('FAIL');
+        } else {
+            setRrhUnit('no defect');
+            setStatusVal('PASS');
+        }
+
+        // Close details modal if open
+        setFailedModalRecord(null);
+
+        // Scroll smoothly to checkpoints section
+        setTimeout(() => {
+            const cpSection = document.getElementById('ivi-checkpoints-section');
+            if (cpSection) {
+                cpSection.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                window.scrollTo({ top: 380, behavior: 'smooth' });
+            }
+        }, 120);
+
+        addToast(`Loaded failed serial ${serial}. Navigated to failed Checkpoint ${targetIdx + 1}: ${newCheckpoints[targetIdx].title}.`, 'info');
+    };
 
     // Remaining Inward Master Data List State
     const [remainingMasterData, setRemainingMasterData] = useState<RemainingInwardMasterRecord[]>([]);
@@ -448,15 +682,21 @@ export const RrhIvi: React.FC = () => {
         return String(rawDateTime);
     };
 
-    // ─── 1. Load Work Orders for Dropdown ────────────────────────────────────
+    // ─── 1. Load Work Orders for Dropdown (Excludes active and completed IVI sessions) ──────
     const fetchEligibleWorkOrders = useCallback(async () => {
         try {
-            const response = await apiFetch('/api/rrh/work-orders?limit=all');
+            const response = await apiFetch('/api/rrh/ivi/eligible-work-orders');
             const list: EligibleWorkOrder[] = response?.data || (Array.isArray(response) ? response : []);
             setEligibleWos(list);
         } catch (err: any) {
             console.error('Failed to load eligible RRH work orders:', err);
-            addToast('Failed to load eligible work orders.', 'error');
+            try {
+                const fb = await apiFetch('/api/rrh/work-orders?limit=all');
+                const list: EligibleWorkOrder[] = fb?.data || (Array.isArray(fb) ? fb : []);
+                setEligibleWos(list);
+            } catch {
+                addToast('Failed to load eligible work orders.', 'error');
+            }
         }
     }, [addToast]);
 
@@ -662,12 +902,23 @@ export const RrhIvi: React.FC = () => {
             }
             // Auto focus serial input
             setTimeout(() => {
-                serialInputRef.current?.focus();
+                serialInputRef.current?.focus({ preventScroll: true });
             }, 100);
         }
     }, [activeSession?.id]);
 
-    // ─── 6. Lookup Scanned Serial Number Details (From RRH Inward Scanned Logs) ────
+    const wasModalOpen = useRef(false);
+    useEffect(() => {
+        const isModalOpen = !!failedModalRecord || !!viewingImages;
+        if (wasModalOpen.current && !isModalOpen) {
+            setTimeout(() => {
+                serialInputRef.current?.focus({ preventScroll: true });
+            }, 100);
+        }
+        wasModalOpen.current = isModalOpen;
+    }, [failedModalRecord, viewingImages]);
+
+    // ─── 6. Lookup Scanned Serial Number / Barcode Details (From RRH Inward Scanned Logs) ────
     const handleLookupSerial = async (serialToLookup: string) => {
         const clean = serialToLookup.trim();
         if (!clean) return;
@@ -681,21 +932,25 @@ export const RrhIvi: React.FC = () => {
 
             const data = await apiFetch(`/api/rrh/ivi/lookup?${params}`);
             if (data.found) {
+                // Automatically populate the resolved Band Serial Number
+                const resolvedBandSerial = (data.band_serial_no || clean).toUpperCase();
+                setSerialInput(resolvedBandSerial);
                 setFetchedSerial(data);
                 if (data.already_inspected) {
-                    addToast(`Warning: Serial "${clean}" was already inspected in IVI (${data.previous_inspection?.status || 'recorded'}).`, 'warning');
+                    addToast(`Warning: Serial "${resolvedBandSerial}" was already inspected in IVI (${data.previous_inspection?.status || 'recorded'}).`, 'warning');
                 } else {
-                    addToast(`Details retrieved from RRH Inward for serial "${clean}"`, 'success');
+                    addToast(`Barcode scanned: Band Serial "${resolvedBandSerial}" retrieved from RRH Inward.`, 'success');
                 }
             } else {
                 setFetchedSerial(null);
-                addToast(data.message || `Serial "${clean}" not found in RRH Inward scanned logs.`, 'warning');
+                addToast(data.message || `Barcode / Serial "${clean}" not found in RRH Inward scanned logs.`, 'warning');
             }
         } catch (err: any) {
             setFetchedSerial(null);
-            addToast(err.message || `Serial "${clean}" not found in RRH Inward scanned logs.`, 'error');
+            addToast(err.message || `Barcode / Serial "${clean}" not found in RRH Inward scanned logs.`, 'error');
         } finally {
             setIsFetchingSerial(false);
+            serialInputRef.current?.focus({ preventScroll: true });
         }
     };
 
@@ -724,7 +979,9 @@ export const RrhIvi: React.FC = () => {
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
-        serialInputRef.current?.focus();
+        setTimeout(() => {
+            serialInputRef.current?.focus({ preventScroll: true });
+        }, 100);
     };
 
     // ─── 8. Image Compression & Selection (Max 6 photos, Max Compression under 600KB) ──
@@ -905,6 +1162,7 @@ export const RrhIvi: React.FC = () => {
             }
             formData.append('status', statusVal);
             if (remarksVal.trim()) formData.append('remarks', remarksVal.trim());
+            formData.append('checkpoints', JSON.stringify(checkpoints));
 
             // Fetched metadata
             if (fetchedSerial) {
@@ -944,14 +1202,23 @@ export const RrhIvi: React.FC = () => {
     };
 
     // ─── 10. Export to Excel ─────────────────────────────────────────────────
-    const handleExportExcel = async (customSessionId?: string | number, customWoId?: string) => {
+    const handleExportExcel = async (customSessionId?: string | number, customWoId?: string, statusFilter?: 'PASS' | 'FAIL') => {
         const sId = customSessionId || activeSession?.id;
         const woId = customWoId || activeSession?.work_order_id || 'Unknown';
         if (!sId) return;
-        setIsExporting(true);
+
+        const isFailed = statusFilter === 'FAIL';
+        setExportingType(isFailed ? 'FAILED' : 'RECENT');
         try {
             const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/rrh/ivi/sessions/${sId}/export`, {
+            const queryParams = new URLSearchParams();
+            if (statusFilter) queryParams.set('status', statusFilter);
+            if (isFailed && failedInspections.length > 0) {
+                const ids = failedInspections.map(r => r.id).filter(Boolean);
+                if (ids.length > 0) queryParams.set('ids', ids.join(','));
+            }
+            const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
+            const res = await fetch(`/api/rrh/ivi/sessions/${sId}/export${queryStr}`, {
                 headers: {
                     ...(token ? { Authorization: `Bearer ${token}` } : {})
                 }
@@ -963,17 +1230,17 @@ export const RrhIvi: React.FC = () => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `RRH_IVI_Inspections_${woId}.xlsx`;
+            a.download = isFailed ? `RRH_IVI_Failed_Inspections_${woId}.xlsx` : `RRH_IVI_Inspections_${woId}.xlsx`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
 
-            addToast('Excel export downloaded successfully.', 'success');
+            addToast(`${isFailed ? 'Failed' : 'Recent'} inspections Excel downloaded successfully.`, 'success');
         } catch (err: any) {
             addToast(err.message || 'Failed to export Excel.', 'error');
         } finally {
-            setIsExporting(false);
+            setExportingType(null);
         }
     };
 
@@ -1094,7 +1361,6 @@ export const RrhIvi: React.FC = () => {
                         </div>
                     ) : detailsError ? (
                         <div className={styles.card} style={{ padding: '2rem', textAlign: 'center', color: '#dc2626', borderColor: '#fca5a5', backgroundColor: '#fef2f2' }}>
-                            <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>⚠️</span>
                             {detailsError}
                         </div>
                     ) : (
@@ -1191,7 +1457,7 @@ export const RrhIvi: React.FC = () => {
                                                             onClick={() => handleExportExcel(session.id, session.work_order_id)}
                                                             title="Download scanned inspections Excel"
                                                         >
-                                                            Download 📊
+                                                            Download Excel
                                                         </button>
                                                         <button
                                                             className={styles.secondaryButton}
@@ -1331,7 +1597,7 @@ export const RrhIvi: React.FC = () => {
                                                     onClick={() => handleExportExcel(session.id, session.work_order_id)}
                                                     title="Download scanned inspections Excel"
                                                 >
-                                                    Download 📊
+                                                    Download Excel
                                                 </button>
                                                 <button
                                                     className={styles.secondaryButton}
@@ -1443,44 +1709,58 @@ export const RrhIvi: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* ─── MAIN INSPECTION CARD (Matches Image Perfectly) ────── */}
+                    {/* ─── MAIN INSPECTION CARD (High-Speed Scanner Feature Matching Inward RRH) ────── */}
                     <div className={styles.card}>
-                        <h3 className={styles.inspectionTitle}>RRH IVI (Initial Visual Inspection)</h3>
-
-                        {/* Serial Number Input & Clear Button */}
-                        <div className={styles.serialRow}>
-                            <input
-                                ref={serialInputRef}
-                                type="text"
-                                className={styles.serialInput}
-                                placeholder="Scan or enter Serial Number..."
-                                value={serialInput}
-                                onChange={e => {
-                                    setSerialInput(e.target.value);
-                                    if (fetchedSerial) setFetchedSerial(null);
-                                }}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        handleLookupSerial(serialInput);
-                                    }
-                                }}
-                                disabled={isFetchingSerial || isSubmitting}
-                            />
-                            <button
-                                type="button"
-                                className={styles.clearButton}
-                                onClick={handleClear}
-                                title="Clear Serial Number and Form"
-                            >
-                                Clear
-                            </button>
-                            {isFetchingSerial && (
-                                <span style={{ fontSize: '0.85rem', color: '#4f46e5', fontWeight: 600 }}>
-                                    Fetching details...
-                                </span>
-                            )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '8px' }}>
+                            <h3 className={styles.inspectionTitle} style={{ margin: 0 }}>
+                                RRH IVI (Initial Visual Inspection)
+                            </h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#16a34a', fontWeight: 600 }}>
+                                <span className={styles.blinkingDot} style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', display: 'inline-block' }}></span>
+                                Scanner Ready
+                            </div>
                         </div>
+
+                        {/* Scanner Form Row (Matches Inward RRH scan feature) */}
+                        <form onSubmit={(e) => {
+                            e.preventDefault();
+                            handleLookupSerial(serialInput);
+                        }} className={styles.detailScanForm} style={{ marginBottom: '1.25rem' }}>
+                            <div className={styles.detailScanRow}>
+                                <input
+                                    ref={serialInputRef}
+                                    type="text"
+                                    className={styles.detailScanInput}
+                                    placeholder="Scan Barcode or enter Serial Number to get Band Serial..."
+                                    value={serialInput}
+                                    onChange={e => {
+                                        setSerialInput(e.target.value);
+                                        if (fetchedSerial) setFetchedSerial(null);
+                                    }}
+                                    disabled={isFetchingSerial || isSubmitting}
+                                    autoFocus
+                                />
+                                <button
+                                    type="submit"
+                                    className={styles.detailScanButton}
+                                    disabled={isFetchingSerial || isSubmitting || !serialInput.trim()}
+                                >
+                                    {isFetchingSerial ? 'Scanning...' : 'Submit Scan'}
+                                </button>
+                                <button
+                                    type="button"
+                                    className={styles.clearButton}
+                                    style={{ height: '52px', padding: '0 1.5rem' }}
+                                    onClick={handleClear}
+                                    title="Clear Barcode / Serial Number and Form"
+                                >
+                                    Clear
+                                </button>
+                            </div>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
+                                Scan barcode directly using scanner gun or enter manually to retrieve Band Serial and Work Order details automatically.
+                            </p>
+                        </form>
 
                         {/* Readout Details of Scanned Serial Number */}
                         {fetchedSerial && (
@@ -1582,7 +1862,7 @@ export const RrhIvi: React.FC = () => {
                                     </div>
                                     {isCompressing && (
                                         <div style={{ fontSize: '0.8rem', color: '#2563eb', fontWeight: 600, marginTop: '0.3rem' }}>
-                                            ⏳ Compressing images to minimum size...
+                                            Compressing images to minimum size...
                                         </div>
                                     )}
                                     {selectedImages.length > 0 && (
@@ -1592,7 +1872,7 @@ export const RrhIvi: React.FC = () => {
                                                     background: '#e2e8f0', color: '#1e293b', fontSize: '0.75rem',
                                                     padding: '0.2rem 0.5rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}>
-                                                    📷 {img.name} ({Math.round(img.size / 1024)}KB)
+                                                    {img.name} ({Math.round(img.size / 1024)}KB)
                                                     <button type="button" onClick={() => removeImage(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b91c1c', fontWeight: 700 }}>×</button>
                                                 </span>
                                             ))}
@@ -1631,7 +1911,7 @@ export const RrhIvi: React.FC = () => {
                             </div>
 
                             {/* Visual Inspection Checkpoints (Matching Reference UI — positioned above Submit Inspection) */}
-                            <div className={styles.checkpointSection}>
+                            <div id="ivi-checkpoints-section" className={styles.checkpointSection}>
                                 <h3 className={styles.checkpointHeading}>Visual Inspection Checkpoints</h3>
                                 <p className={styles.attemptInfo}>
                                     Mark <strong>Pass</strong> or <strong>Fail</strong> for each checkpoint. Confirm each selection to advance.
@@ -1646,10 +1926,10 @@ export const RrhIvi: React.FC = () => {
                                         if (cp.confirmed) {
                                             if (cp.status === 'PASS') {
                                                 statusClass = styles.stepNavPillPass;
-                                                statusIcon = '✔ ';
+                                                statusIcon = '✓ ';
                                             } else if (cp.status === 'FAIL') {
                                                 statusClass = styles.stepNavPillFail;
-                                                statusIcon = '❌ ';
+                                                statusIcon = '✕ ';
                                             }
                                         }
                                         return (
@@ -1688,21 +1968,64 @@ export const RrhIvi: React.FC = () => {
                                             </div>
 
                                             {/* Pass / Fail Buttons */}
-                                            <div className={styles.statusButtons}>
+                                            <div className={styles.statusButtons} style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                                                 <button
                                                     type="button"
                                                     className={`${styles.statusBtn} ${currentCpStatus === 'PASS' ? styles.passActive : ''}`}
                                                     onClick={() => handleSelectCpStatus('PASS')}
                                                 >
-                                                    ✔ Pass
+                                                    Pass
                                                 </button>
                                                 <button
                                                     type="button"
                                                     className={`${styles.statusBtn} ${currentCpStatus === 'FAIL' ? styles.failActive : ''}`}
                                                     onClick={() => handleSelectCpStatus('FAIL')}
                                                 >
-                                                    ❌ Fail
+                                                    Fail
                                                 </button>
+
+                                                {/* When that defect is passed, show what will be the remark just aside the pass/fail checkpoint */}
+                                                {(currentCpStatus === 'PASS' || checkpoints[activeCpIndex]?.status === 'PASS') && checkpoints[activeCpIndex]?.previousFailureRemark && (
+                                                    <div style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '8px',
+                                                        padding: '0.4rem 0.85rem',
+                                                        borderRadius: '6px',
+                                                        backgroundColor: '#fef2f2',
+                                                        border: '1px solid #fecaca',
+                                                        color: '#991b1b',
+                                                        fontSize: '0.85rem',
+                                                        fontWeight: 600,
+                                                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                                                    }}>
+                                                                                                                <span>Previous Defect Remark:</span>
+                                                        <span style={{
+                                                             fontStyle: 'italic',
+                                                             fontWeight: 700,
+                                                             color: '#b91c1c',
+                                                             textDecoration: currentCpStatus === 'PASS' ? 'line-through' : 'none',
+                                                             backgroundColor: '#ffffff',
+                                                             padding: '0.15rem 0.4rem',
+                                                             borderRadius: '4px',
+                                                             border: '1px solid #fee2e2'
+                                                        }}>
+                                                            "{checkpoints[activeCpIndex]?.previousFailureRemark}"
+                                                        </span>
+                                                        {currentCpStatus === 'PASS' && (
+                                                            <span style={{
+                                                                color: '#15803d',
+                                                                fontWeight: 700,
+                                                                backgroundColor: '#dcfce7',
+                                                                padding: '0.15rem 0.45rem',
+                                                                borderRadius: '4px',
+                                                                marginLeft: '4px'
+                                                            }}>
+                                                                Defect Resolved / Passed
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {/* Remark on Fail */}
@@ -1740,9 +2063,9 @@ export const RrhIvi: React.FC = () => {
                                     <div className={`${styles.allConfirmedBanner} ${checkpoints.some(c => c.status === 'FAIL') ? styles.allConfirmedBannerFail : ''}`}>
                                         <div>
                                             {checkpoints.some(c => c.status === 'FAIL') ? (
-                                                <span>⚠️ Checkpoints verified with failure(s). Inspection status set to <strong>FAIL</strong> and defect remarks saved in RRH Unit Defect.</span>
+                                                <span>Checkpoints verified with failure(s). Inspection status set to <strong>FAIL</strong> and defect remarks saved in RRH Unit Defect.</span>
                                             ) : (
-                                                <span>✅ All 6 checkpoints verified and passed! RRH Unit Defect set to <strong>"no defect"</strong> and status set to <strong>PASS</strong>.</span>
+                                                <span>All 6 checkpoints verified and passed! RRH Unit Defect set to <strong>"no defect"</strong> and status set to <strong>PASS</strong>.</span>
                                             )}
                                         </div>
                                     </div>
@@ -1760,11 +2083,240 @@ export const RrhIvi: React.FC = () => {
                         </form>
                     </div>
 
+                    {/* ─── FAILED INSPECTIONS TABLE CARD (ONLY FAILED STATUS) ─────────────── */}
+                    <div className={styles.card} style={{ borderColor: '#fca5a5' }}>
+                        <div className={styles.recentHeader} style={{ marginBottom: '0.4rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <h3 className={styles.recentTitle} style={{ color: '#991b1b', margin: 0, paddingBottom: 0, borderBottom: 'none' }}>
+                                    Failed Inspections
+                                </h3>
+                                <span style={{
+                                    backgroundColor: '#fee2e2',
+                                    color: '#991b1b',
+                                    border: '1px solid #fca5a5',
+                                    padding: '0.2rem 0.65rem',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 700
+                                }}>
+                                    {failedInspections.length} Failed {failedInspections.length === 1 ? 'Unit' : 'Units'}
+                                </span>
+                            </div>
+
+                            {/* Export Excel button for Failed Inspections */}
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    style={{
+                                        backgroundColor: '#fef2f2',
+                                        color: '#991b1b',
+                                        borderColor: '#fca5a5',
+                                        fontWeight: 600,
+                                        fontSize: '0.85rem',
+                                        padding: '0.45rem 1rem'
+                                    }}
+                                    onClick={() => handleExportExcel(undefined, undefined, 'FAIL')}
+                                    disabled={exportingType !== null || failedInspections.length === 0}
+                                    title="Export failed inspections to Excel without action column"
+                                >
+                                    {exportingType === 'FAILED' ? 'Exporting...' : 'Export Excel'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#64748b' }}>
+                            Dedicated log for failed IVI inspections. Use the <strong>Action</strong> buttons to view stage failure remarks or jump to failed checkpoints to correct and re-inspect.
+                        </p>
+
+                        {/* Search Bar for Failed Inspections */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.25rem', maxWidth: '460px' }}>
+                            <input
+                                type="text"
+                                className={styles.input}
+                                placeholder="Search failed inspections (Serial, Defect, TPN, etc.)..."
+                                value={failedSearch}
+                                onChange={e => setFailedSearch(e.target.value)}
+                                style={{ padding: '0.55rem 0.85rem', fontSize: '0.9rem', width: '100%' }}
+                            />
+                            {failedSearch && (
+                                <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    onClick={() => setFailedSearch('')}
+                                    style={{ padding: '0.55rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+
+                        <div className={styles.tableContainer}>
+                            <table className={styles.table}>
+                                <thead>
+                                    <tr>
+                                        <th>S.No</th>
+                                        <th>Band Serial No</th>
+                                        <th>Tejas DC No</th>
+                                        <th>Tejas OBD No</th>
+                                        <th>Physical TPN</th>
+                                        <th>Band</th>
+                                        <th>Duplexer Make</th>
+                                        <th>Duplexer Part No</th>
+                                        <th style={{ minWidth: '180px' }}>Failed Stage Remarks</th>
+                                        <th>Status</th>
+                                        <th>Images</th>
+                                        <th>Scanned By</th>
+                                        <th>Date & Time</th>
+                                        <th style={{ minWidth: '200px', textAlign: 'center' }}>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {paginatedFailedInspections.map((row) => (
+                                        <tr key={`fail-${row.id}`}>
+                                            <td style={{ fontWeight: 600, color: '#64748b', textAlign: 'center' }}>{row.sl_no || '-'}</td>
+                                            <td style={{ fontWeight: 700, color: '#1e293b', fontFamily: 'monospace' }}>{row.band_serial_no || row.serial_number}</td>
+                                            <td>{row.tejas_dc_no || '—'}</td>
+                                            <td>{row.tejas_obd_no || '—'}</td>
+                                            <td style={{ fontFamily: 'monospace' }}>{row.physical_tpn || '—'}</td>
+                                            <td style={{ fontWeight: 700, color: '#2563eb' }}>
+                                                {row.band || getBandFromTpn(row.physical_tpn)}
+                                            </td>
+                                            <td>{row.duplexer_main || '—'}</td>
+                                            <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{row.duplexer_part_no || '—'}</td>
+                                            <td style={{ color: '#b91c1c', fontWeight: 600, maxWidth: '240px' }}>
+                                                {row.rrh_unit || 'Defect noted'}
+                                            </td>
+                                            <td>
+                                                <span className={styles.badgeFail}>FAIL</span>
+                                            </td>
+                                            <td>
+                                                {(() => {
+                                                    const imgs = parseImages(row.image_urls);
+                                                    if (imgs.length === 0) {
+                                                        return <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>—</span>;
+                                                    }
+                                                    return (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <button
+                                                                type="button"
+                                                                className={styles.secondaryButton}
+                                                                style={{
+                                                                    padding: '0.25rem 0.55rem',
+                                                                    fontSize: '0.8rem',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px',
+                                                                    backgroundColor: '#fef2f2',
+                                                                    color: '#991b1b',
+                                                                    borderColor: '#fca5a5',
+                                                                    fontWeight: 600
+                                                                }}
+                                                                onClick={() => {
+                                                                    setViewingImages({ serial: row.band_serial_no || row.serial_number, images: imgs });
+                                                                    setSelectedImageIndex(0);
+                                                                }}
+                                                                title="View inspection photos"
+                                                            >
+                                                                Photos ({imgs.length})
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </td>
+                                            <td>{row.scanned_by || '—'}</td>
+                                            <td style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap' }}>
+                                                {formatTimestamp(row.scanned_at)}
+                                            </td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                                                    <button
+                                                        type="button"
+                                                        className={styles.secondaryButton}
+                                                        style={{
+                                                            padding: '0.35rem 0.65rem',
+                                                            fontSize: '0.8rem',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                        onClick={() => setFailedModalRecord(row)}
+                                                        title="View failed stage remarks and all S.No details"
+                                                    >
+                                                        Details
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={styles.button}
+                                                        style={{
+                                                            padding: '0.35rem 0.75rem',
+                                                            fontSize: '0.8rem',
+                                                            backgroundColor: '#dc2626',
+                                                            borderColor: '#b91c1c',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                        onClick={() => handleReinspectFailedRecord(row)}
+                                                        title="Take to failed checkpoint to re-inspect and correct"
+                                                    >
+                                                        Re-inspect / Fix
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {filteredFailedInspections.length === 0 && (
+                                        <tr>
+                                            <td colSpan={14} style={{ textAlign: 'center', padding: '1.75rem', color: '#16a34a', fontWeight: 600 }}>
+                                                {failedSearch ? 'No matching failed inspections found for this search.' : 'No failed inspections recorded in this session.'}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Failed Table Pagination */}
+                        {filteredFailedInspections.length > failedLimit && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                    Showing {(failedPage - 1) * failedLimit + 1} to {Math.min(failedPage * failedLimit, filteredFailedInspections.length)} of {filteredFailedInspections.length} failed entries
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <button
+                                        type="button"
+                                        className={styles.secondaryButton}
+                                        onClick={() => setFailedPage(p => Math.max(1, p - 1))}
+                                        disabled={failedPage <= 1}
+                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', opacity: failedPage <= 1 ? 0.5 : 1, cursor: failedPage <= 1 ? 'not-allowed' : 'pointer' }}
+                                    >
+                                        Previous
+                                    </button>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                                        Page {failedPage} of {failedTotalPages}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className={styles.secondaryButton}
+                                        onClick={() => setFailedPage(p => Math.min(failedTotalPages, p + 1))}
+                                        disabled={failedPage >= failedTotalPages}
+                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', opacity: failedPage >= failedTotalPages ? 0.5 : 1, cursor: failedPage >= failedTotalPages ? 'not-allowed' : 'pointer' }}
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {/* ─── RECENT INSPECTIONS TABLE CARD ─────────────────────── */}
                     <div className={styles.card}>
                         <div className={styles.recentHeader} style={{ marginBottom: '0.4rem' }}>
                             <h3 className={styles.recentTitle}>
-                                Recent Inspections ({filteredRecentInspections.length}{filteredRecentInspections.length !== recentInspections.length ? ` of ${recentInspections.length}` : ''})
+                                Recent Inspections ({filteredRecentInspections.length}{filteredRecentInspections.length !== passedInspections.length ? ` of ${passedInspections.length}` : ''})
                             </h3>
 
                             {/* Export Excel button */}
@@ -1772,10 +2324,10 @@ export const RrhIvi: React.FC = () => {
                                 <button
                                     type="button"
                                     className={styles.exportExcelButton}
-                                    onClick={() => handleExportExcel()}
-                                    disabled={isExporting || recentInspections.length === 0}
+                                    onClick={() => handleExportExcel(undefined, undefined, 'PASS')}
+                                    disabled={exportingType !== null || passedInspections.length === 0}
                                 >
-                                    {isExporting ? 'Exporting...' : 'Export Excel 📊'}
+                                    {exportingType === 'RECENT' ? 'Exporting...' : 'Export Excel'}
                                 </button>
                             </div>
                         </div>
@@ -1815,15 +2367,16 @@ export const RrhIvi: React.FC = () => {
                                         <th>Duplexer Make</th>
                                         <th>Duplexer Part No</th>
                                         <th>RRH Unit Defect</th>
+                                        <th>Defect Fixed</th>
                                         <th>Status</th>
-                                        <th>Photos</th>
+                                        <th>Images</th>
                                         <th>Remarks</th>
                                         <th>Scanned By</th>
                                         <th>Date & Time</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredRecentInspections.map((row) => (
+                                    {paginatedRecentInspections.map((row) => (
                                         <tr key={row.id}>
                                             <td style={{ fontWeight: 600, color: '#64748b', textAlign: 'center' }}>{row.sl_no || '-'}</td>
                                             <td style={{ fontWeight: 700, color: '#1e293b', fontFamily: 'monospace' }}>{row.band_serial_no || row.serial_number}</td>
@@ -1836,9 +2389,38 @@ export const RrhIvi: React.FC = () => {
                                             <td>{row.duplexer_main || '—'}</td>
                                             <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{row.duplexer_part_no || '—'}</td>
                                             <td>{row.rrh_unit || '—'}</td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                {row.is_reinspected ? (
+                                                    <button
+                                                        type="button"
+                                                        className={styles.secondaryButton}
+                                                        style={{
+                                                            padding: '0.25rem 0.6rem',
+                                                            fontSize: '0.8rem',
+                                                            fontWeight: 600,
+                                                            color: '#c2410c',
+                                                            backgroundColor: '#fff7ed',
+                                                            borderColor: '#fed7aa',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px'
+                                                        }}
+                                                        onClick={() => setFixedDefectModalRecord(row)}
+                                                        title="View defect fixed details"
+                                                    >
+                                                        Details
+                                                    </button>
+                                                ) : (
+                                                    <span style={{ color: '#94a3b8' }}>-</span>
+                                                )}
+                                            </td>
                                             <td>
                                                 {row.status === 'PASS' ? (
-                                                    <span className={styles.badgePass}>PASS</span>
+                                                    row.is_reinspected ? (
+                                                        <span className={styles.badgeReinspectedPass} title="Passed after re-inspection/fix">PASS</span>
+                                                    ) : (
+                                                        <span className={styles.badgePass}>PASS</span>
+                                                    )
                                                 ) : (
                                                     <span className={styles.badgeFail}>FAIL</span>
                                                 )}
@@ -1871,7 +2453,8 @@ export const RrhIvi: React.FC = () => {
                                                                 }}
                                                                 title="View inspection photos"
                                                             >
-                                                                🖼️ View ({imgs.length})
+                                                                View ({imgs.length})
+                              
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -1885,7 +2468,7 @@ export const RrhIvi: React.FC = () => {
                                                                 onClick={() => handleDownloadImage(imgs[0], `IVI_${row.band_serial_no || row.serial_number}_photo_1.jpg`)}
                                                                 title="Download photo"
                                                             >
-                                                                📥
+                                                                Download
                                                             </button>
                                                         </div>
                                                     );
@@ -1902,13 +2485,43 @@ export const RrhIvi: React.FC = () => {
                                     ))}
                                     {filteredRecentInspections.length === 0 && (
                                         <tr>
-                                            <td colSpan={14} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
-                                                {inspectionSearch ? 'No matching inspections found for this search.' : 'No inspections recorded yet in this IVI session.'}
+                                            <td colSpan={15} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                                {inspectionSearch ? 'No matching inspections found for this search.' : 'No passed inspections recorded yet in this IVI session.'}
                                             </td>
                                         </tr>
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+
+                        {/* Recent Inspections Pagination (10 entries per page) */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                Showing {filteredRecentInspections.length === 0 ? 0 : (recentPage - 1) * recentLimit + 1} to {Math.min(recentPage * recentLimit, filteredRecentInspections.length)} of {filteredRecentInspections.length} entries
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    onClick={() => setRecentPage(p => Math.max(1, p - 1))}
+                                    disabled={recentPage <= 1}
+                                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', opacity: recentPage <= 1 ? 0.5 : 1, cursor: recentPage <= 1 ? 'not-allowed' : 'pointer' }}
+                                >
+                                    Previous
+                                </button>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                                    Page {recentPage} of {recentTotalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    onClick={() => setRecentPage(p => Math.min(recentTotalPages, p + 1))}
+                                    disabled={recentPage >= recentTotalPages}
+                                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', opacity: recentPage >= recentTotalPages ? 0.5 : 1, cursor: recentPage >= recentTotalPages ? 'not-allowed' : 'pointer' }}
+                                >
+                                    Next
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1995,7 +2608,7 @@ export const RrhIvi: React.FC = () => {
                             </div>
                         ) : remainingTotal === 0 ? (
                             <div style={{ textAlign: 'center', padding: '2.5rem', background: '#f0fdf4', borderRadius: '8px', border: '1px dashed #16a34a', color: '#166534', fontWeight: 600 }}>
-                                🎉 All inwarded units for this Work Order have been inspected for this session!
+                                All inwarded units for this Work Order have been inspected for this session!
                             </div>
                         ) : (
                             <>
@@ -2252,7 +2865,7 @@ export const RrhIvi: React.FC = () => {
                                         `IVI_${viewingImages.serial}_photo_${selectedImageIndex + 1}.jpg`
                                     )}
                                 >
-                                    📥 Download Photo
+                                    Download Photo
                                 </button>
                                 {viewingImages.images.length > 1 && (
                                     <button
@@ -2267,10 +2880,450 @@ export const RrhIvi: React.FC = () => {
                                             });
                                         }}
                                     >
-                                        📦 Download All ({viewingImages.images.length})
+                                        Download All ({viewingImages.images.length})
                                     </button>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── MODAL: FAILED INSPECTION DETAILS & STAGE REMARKS ──────────── */}
+            {failedModalRecord && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    width: '100vw',
+                    height: '100vh',
+                    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 99999,
+                    padding: '1.5rem'
+                }} onClick={() => setFailedModalRecord(null)}>
+                    <div style={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: '12px',
+                        width: '100%',
+                        maxWidth: '800px',
+                        maxHeight: '90vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                        border: '1px solid #e2e8f0'
+                    }} onClick={e => e.stopPropagation()}>
+                        {/* Modal Header */}
+                        <div style={{
+                            padding: '1.25rem 1.5rem',
+                            borderBottom: '1px solid #fee2e2',
+                            backgroundColor: '#fef2f2',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <div>
+                                <h3 style={{ margin: 0, color: '#991b1b', fontSize: '1.2rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    Failed Inspection Details — S.No: {failedModalRecord.sl_no || '—'}
+                                </h3>
+                                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: '#7f1d1d', fontFamily: 'monospace' }}>
+                                    Band Serial No: {failedModalRecord.band_serial_no || failedModalRecord.serial_number}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setFailedModalRecord(null)}
+                                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#991b1b', padding: '0.25rem', lineHeight: 1 }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div style={{ padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Failed Stage Remarks Highlight Box */}
+                            <div style={{
+                                backgroundColor: '#fef2f2',
+                                border: '1px solid #fecaca',
+                                borderRadius: '8px',
+                                padding: '1.25rem'
+                            }}>
+                                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#991b1b', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    Failed Stage(s) & Defect Remarks:
+                                </div>
+                                <div style={{ backgroundColor: '#ffffff', border: '1px solid #fca5a5', borderRadius: '6px', padding: '0.85rem', fontSize: '0.95rem', color: '#1e293b', fontWeight: 600 }}>
+                                    {failedModalRecord.rrh_unit || 'No specific defect remark provided.'}
+                                </div>
+
+                                {/* Checkpoints breakdown if available */}
+                                {(() => {
+                                    let cps: any[] = [];
+                                    if (failedModalRecord.checkpoints) {
+                                        try {
+                                            cps = typeof failedModalRecord.checkpoints === 'string'
+                                                ? JSON.parse(failedModalRecord.checkpoints)
+                                                : failedModalRecord.checkpoints;
+                                        } catch {}
+                                    }
+                                    const fails = Array.isArray(cps) ? cps.filter((c: any) => c.status === 'FAIL') : [];
+                                    if (fails.length === 0) return null;
+                                    return (
+                                        <div style={{ marginTop: '0.85rem' }}>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#991b1b', marginBottom: '0.4rem' }}>
+                                                Detailed Checkpoint Breakdown:
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                {fails.map((cp: any, idx: number) => (
+                                                    <div key={idx} style={{ backgroundColor: '#fff5f5', border: '1px solid #fecaca', borderRadius: '4px', padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>
+                                                        <span style={{ fontWeight: 700, color: '#dc2626' }}>Point {cp.id} ({cp.title}): </span>
+                                                        <span style={{ color: '#1e293b' }}>{cp.remark || 'Failed'}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* Full S.No Details Grid */}
+                            <div>
+                                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>
+                                    Unit Information (S.No: {failedModalRecord.sl_no || '—'})
+                                </h4>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                                    gap: '0.75rem',
+                                    backgroundColor: '#f8fafc',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    padding: '1rem'
+                                }}>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>S.No</span>
+                                        <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>{failedModalRecord.sl_no || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Band Serial No</span>
+                                        <span style={{ fontSize: '0.95rem', fontWeight: 700, fontFamily: 'monospace', color: '#1e293b' }}>{failedModalRecord.band_serial_no || failedModalRecord.serial_number}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Work Order</span>
+                                        <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{failedModalRecord.work_order_id}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Tejas DC No</span>
+                                        <span style={{ fontSize: '0.95rem' }}>{failedModalRecord.tejas_dc_no || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Tejas OBD No</span>
+                                        <span style={{ fontSize: '0.95rem' }}>{failedModalRecord.tejas_obd_no || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Physical TPN</span>
+                                        <span style={{ fontSize: '0.95rem', fontFamily: 'monospace' }}>{failedModalRecord.physical_tpn || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Band</span>
+                                        <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#2563eb' }}>{failedModalRecord.band || getBandFromTpn(failedModalRecord.physical_tpn)}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>BAT Lot No</span>
+                                        <span style={{ fontSize: '0.95rem' }}>{failedModalRecord.bat_lot_no || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Duplexer Make</span>
+                                        <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{failedModalRecord.duplexer_main}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Duplexer Part No</span>
+                                        <span style={{ fontSize: '0.95rem', fontFamily: 'monospace', fontWeight: 600 }}>{failedModalRecord.duplexer_part_no}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Status</span>
+                                        <span className={styles.badgeFail}>FAIL</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>General Remarks</span>
+                                        <span style={{ fontSize: '0.95rem' }}>{failedModalRecord.remarks || 'None'}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Scanned By</span>
+                                        <span style={{ fontSize: '0.95rem' }}>{failedModalRecord.scanned_by}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Inspection Timestamp</span>
+                                        <span style={{ fontSize: '0.95rem', color: '#64748b' }}>{formatTimestamp(failedModalRecord.scanned_at)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Inspection Photos (if attached) */}
+                            {(() => {
+                                const imgs = parseImages(failedModalRecord.image_urls);
+                                if (imgs.length === 0) return null;
+                                return (
+                                    <div>
+                                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>
+                                            Defect Photos ({imgs.length})
+                                        </h4>
+                                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                            {imgs.map((img, i) => (
+                                                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+                                                    <img
+                                                        src={img}
+                                                        alt={`Defect photo ${i + 1}`}
+                                                        style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #cbd5e1', cursor: 'pointer' }}
+                                                        onClick={() => {
+                                                            setViewingImages({ serial: failedModalRecord.band_serial_no || failedModalRecord.serial_number, images: imgs });
+                                                            setSelectedImageIndex(i);
+                                                        }}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        className={styles.secondaryButton}
+                                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                                                        onClick={() => handleDownloadImage(img, `IVI_${failedModalRecord.band_serial_no || failedModalRecord.serial_number}_photo_${i + 1}.jpg`)}
+                                                    >
+                                                        Download
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div style={{
+                            padding: '1rem 1.5rem',
+                            borderTop: '1px solid #e2e8f0',
+                            backgroundColor: '#f8fafc',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <button
+                                type="button"
+                                className={styles.secondaryButton}
+                                onClick={() => setFailedModalRecord(null)}
+                                style={{ padding: '0.5rem 1.25rem' }}
+                            >
+                                Close
+                            </button>
+                            <button
+                                type="button"
+                                className={styles.button}
+                                style={{ padding: '0.5rem 1.5rem', backgroundColor: '#dc2626', borderColor: '#b91c1c', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                onClick={() => handleReinspectFailedRecord(failedModalRecord)}
+                            >
+                                Re-inspect / Fix This Unit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* ─── MODAL: VIEW DEFECT FIXED DETAILS ──────────────── */}
+            {fixedDefectModalRecord && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                    backdropFilter: 'blur(4px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 99999,
+                    padding: '1.5rem'
+                }} onClick={() => setFixedDefectModalRecord(null)}>
+                    <div style={{
+                        background: '#ffffff',
+                        borderRadius: '12px',
+                        maxWidth: '650px',
+                        width: '100%',
+                        maxHeight: '90vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                        border: '1px solid #e2e8f0'
+                    }} onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div style={{
+                            padding: '1.25rem 1.5rem',
+                            borderBottom: '1px solid #e5e7eb',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            background: '#fff7ed'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '28px',
+                                    height: '28px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#ffedd5',
+                                    color: '#c2410c',
+                                    fontWeight: 700,
+                                    fontSize: '0.95rem'
+                                }}>
+                                    ✓
+                                </span>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#9a3412', fontWeight: 700 }}>
+                                        Fixed Defect Details
+                                    </h3>
+                                    <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: '#c2410c' }}>
+                                        Serial: <strong>{fixedDefectModalRecord.band_serial_no || fixedDefectModalRecord.serial_number}</strong> (S.No: {fixedDefectModalRecord.sl_no || '—'})
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setFixedDefectModalRecord(null)}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '1.4rem',
+                                    cursor: 'pointer',
+                                    color: '#64748b',
+                                    padding: '0.25rem',
+                                    lineHeight: 1
+                                }}
+                                title="Close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div style={{ padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            <div>
+                                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 700, color: '#334155' }}>
+                                    Defects Resolved During Re-inspection
+                                </h4>
+                                {(() => {
+                                    // Extract checkpoint remarks if available
+                                    let cps: any[] = [];
+                                    if (Array.isArray(fixedDefectModalRecord.checkpoints)) {
+                                        cps = fixedDefectModalRecord.checkpoints;
+                                    } else if (typeof fixedDefectModalRecord.checkpoints === 'string') {
+                                        try {
+                                            cps = JSON.parse(fixedDefectModalRecord.checkpoints);
+                                        } catch {
+                                            cps = [];
+                                        }
+                                    }
+                                    const fixedCps = cps.filter((c: any) => c.previousFailureRemark || (c.remark && c.remark !== 'no defect' && c.remark !== 'Pass'));
+                                    
+                                    if (fixedCps.length > 0) {
+                                        return (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                                {fixedCps.map((cp: any, idx: number) => (
+                                                    <div key={idx} style={{
+                                                        backgroundColor: '#fff7ed',
+                                                        border: '1px solid #fed7aa',
+                                                        borderRadius: '6px',
+                                                        padding: '0.75rem 1rem',
+                                                        fontSize: '0.88rem'
+                                                    }}>
+                                                        <div style={{ fontWeight: 700, color: '#c2410c', marginBottom: '0.25rem' }}>
+                                                            Point {cp.id} ({cp.title || `Checkpoint ${cp.id}`}):
+                                                        </div>
+                                                        <div style={{ color: '#1e293b' }}>
+                                                            <strong>Initial Defect Remark:</strong> {cp.previousFailureRemark || cp.remark}
+                                                        </div>
+                                                        <div style={{ color: '#15803d', fontSize: '0.8rem', marginTop: '0.25rem', fontWeight: 600 }}>
+                                                            Status: Rectified & Passed
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    }
+
+                                    // Fallback to defect_fixed text or rrh_unit
+                                    const defectText = fixedDefectModalRecord.defect_fixed || fixedDefectModalRecord.rrh_unit || fixedDefectModalRecord.remarks;
+                                    if (defectText && defectText !== 'no defect') {
+                                        return (
+                                            <div style={{
+                                                backgroundColor: '#fff7ed',
+                                                border: '1px solid #fed7aa',
+                                                borderRadius: '6px',
+                                                padding: '0.85rem 1rem',
+                                                fontSize: '0.9rem',
+                                                color: '#9a3412',
+                                                lineHeight: 1.5
+                                            }}>
+                                                {defectText}
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div style={{ color: '#64748b', fontStyle: 'italic', fontSize: '0.88rem' }}>
+                                            No specific defect remark recorded.
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* S.No info */}
+                            <div style={{
+                                backgroundColor: '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '8px',
+                                padding: '1rem',
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(2, 1fr)',
+                                gap: '0.75rem',
+                                fontSize: '0.85rem'
+                            }}>
+                                <div>
+                                    <span style={{ display: 'block', color: '#64748b', fontWeight: 600, fontSize: '0.75rem' }}>Work Order</span>
+                                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{fixedDefectModalRecord.work_order_id}</span>
+                                </div>
+                                <div>
+                                    <span style={{ display: 'block', color: '#64748b', fontWeight: 600, fontSize: '0.75rem' }}>Band</span>
+                                    <span style={{ fontWeight: 700, color: '#2563eb' }}>{fixedDefectModalRecord.band || getBandFromTpn(fixedDefectModalRecord.physical_tpn)}</span>
+                                </div>
+                                <div>
+                                    <span style={{ display: 'block', color: '#64748b', fontWeight: 600, fontSize: '0.75rem' }}>Physical TPN</span>
+                                    <span style={{ fontFamily: 'monospace' }}>{fixedDefectModalRecord.physical_tpn || '—'}</span>
+                                </div>
+                                <div>
+                                    <span style={{ display: 'block', color: '#64748b', fontWeight: 600, fontSize: '0.75rem' }}>Passed Date & Time</span>
+                                    <span style={{ color: '#64748b' }}>{formatTimestamp(fixedDefectModalRecord.scanned_at)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{
+                            padding: '0.85rem 1.5rem',
+                            borderTop: '1px solid #e2e8f0',
+                            backgroundColor: '#f8fafc',
+                            display: 'flex',
+                            justifyContent: 'flex-end'
+                        }}>
+                            <button
+                                type="button"
+                                className={styles.secondaryButton}
+                                onClick={() => setFixedDefectModalRecord(null)}
+                                style={{ padding: '0.5rem 1.25rem' }}
+                            >
+                                Close
+                            </button>
                         </div>
                     </div>
                 </div>

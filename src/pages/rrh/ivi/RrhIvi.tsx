@@ -1999,16 +1999,16 @@ export const RrhIvi: React.FC = () => {
                                                         fontWeight: 600,
                                                         boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
                                                     }}>
-                                                                                                                <span>Previous Defect Remark:</span>
+                                                        <span>Previous Defect Remark:</span>
                                                         <span style={{
-                                                             fontStyle: 'italic',
-                                                             fontWeight: 700,
-                                                             color: '#b91c1c',
-                                                             textDecoration: currentCpStatus === 'PASS' ? 'line-through' : 'none',
-                                                             backgroundColor: '#ffffff',
-                                                             padding: '0.15rem 0.4rem',
-                                                             borderRadius: '4px',
-                                                             border: '1px solid #fee2e2'
+                                                            fontStyle: 'italic',
+                                                            fontWeight: 700,
+                                                            color: '#b91c1c',
+                                                            textDecoration: currentCpStatus === 'PASS' ? 'line-through' : 'none',
+                                                            backgroundColor: '#ffffff',
+                                                            padding: '0.15rem 0.4rem',
+                                                            borderRadius: '4px',
+                                                            border: '1px solid #fee2e2'
                                                         }}>
                                                             "{checkpoints[activeCpIndex]?.previousFailureRemark}"
                                                         </span>
@@ -2454,7 +2454,7 @@ export const RrhIvi: React.FC = () => {
                                                                 title="View inspection photos"
                                                             >
                                                                 View ({imgs.length})
-                              
+
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -2966,7 +2966,7 @@ export const RrhIvi: React.FC = () => {
                                             cps = typeof failedModalRecord.checkpoints === 'string'
                                                 ? JSON.parse(failedModalRecord.checkpoints)
                                                 : failedModalRecord.checkpoints;
-                                        } catch {}
+                                        } catch { }
                                     }
                                     const fails = Array.isArray(cps) ? cps.filter((c: any) => c.status === 'FAIL') : [];
                                     if (fails.length === 0) return null;
@@ -3225,7 +3225,7 @@ export const RrhIvi: React.FC = () => {
                                         }
                                     }
                                     const fixedCps = cps.filter((c: any) => c.previousFailureRemark || (c.remark && c.remark !== 'no defect' && c.remark !== 'Pass'));
-                                    
+
                                     if (fixedCps.length > 0) {
                                         return (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>

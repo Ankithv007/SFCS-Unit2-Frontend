@@ -33,6 +33,7 @@ interface SmtTrackResult {
     quantity: number;
     line_id: string;
     sides: string;
+    is_double_sided?: boolean;
     has_smt?: boolean;
     has_backend?: boolean;
     selected_stages?: any;
@@ -43,6 +44,8 @@ interface SmtTrackResult {
     total_failures: number;
     total_reworks: number;
     total_passed: number;
+    step_status_top?: Record<string, string>;
+    step_status_bottom?: Record<string, string>;
     scan_history: ScanEntry[];
     backend_scan_history?: any[];
     backend_stages?: any[];
@@ -50,6 +53,14 @@ interface SmtTrackResult {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+export const isTopBottomWo = (sides: string | null | undefined): boolean => {
+    if (!sides) return false;
+    const s = sides.toLowerCase().trim();
+    return s.includes('+') || s.includes('/') || s.includes('both') || (s.includes('top') && s.includes('bottom'));
+};
+
+const PROCESS_COLUMNS = ['Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG', 'Status'];
 
 const SMT_PIPELINE = ['Serial Number', 'Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
 
@@ -126,10 +137,10 @@ const getProcessSelectionText = (d: any): string => {
 const normalizeStatus = (status: string): string => {
     switch ((status || '').toUpperCase()) {
         case 'ACCEPTED': return 'PASS';
-        case 'PASS':     return 'PASS';
-        case 'FAILED':   return 'FAIL';
-        case 'FAIL':     return 'FAIL';
-        case 'REWORK':   return 'REWORK';
+        case 'PASS': return 'PASS';
+        case 'FAILED': return 'FAIL';
+        case 'FAIL': return 'FAIL';
+        case 'REWORK': return 'REWORK';
         case 'RESOLVED': return 'RESOLVED';
         default: return (status || '').toUpperCase();
     }
@@ -168,6 +179,108 @@ const StatusBadge: React.FC<{ status: string; small?: boolean }> = ({ status, sm
     </span>
 );
 
+const DualSideStatusBadge: React.FC<{
+    topStatus?: string;
+    bottomStatus?: string;
+    small?: boolean;
+    style?: React.CSSProperties;
+    hideBottom?: boolean;
+}> = ({ topStatus = 'PENDING', bottomStatus = 'PENDING', small = false, style, hideBottom = false }) => {
+    const normTop = normalizeStatus(topStatus || 'PENDING');
+    const normBottom = normalizeStatus(bottomStatus || 'PENDING');
+
+    const renderSide = (label: 'TOP' | 'BOTTOM', status: string, isTop: boolean) => {
+        const color = statusColor(status);
+        const bg = statusBg(status);
+        const isNa = status === '-' || status === 'NA';
+        const displayStatus = isNa ? status : status.toUpperCase().replace(/_/g, ' ');
+
+        return (
+            <div
+                style={{
+                    background: bg,
+                    padding: small ? '3px 8px' : '6px 12px',
+                    borderBottom: isTop && !hideBottom ? '1px solid rgba(148, 163, 184, 0.25)' : 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    justifyContent: 'center',
+                    gap: '1px',
+                }}
+            >
+                <div
+                    style={{
+                        fontSize: small ? '0.62rem' : '0.68rem',
+                        fontWeight: 800,
+                        letterSpacing: '0.05em',
+                        color: '#475569',
+                        lineHeight: 1.1,
+                    }}
+                >
+                    {label}
+                </div>
+                <div
+                    style={{
+                        fontSize: small ? '0.68rem' : '0.75rem',
+                        fontWeight: 700,
+                        color: color,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        lineHeight: 1.2,
+                    }}
+                >
+                    {!isNa && (
+                        <span
+                            style={{
+                                width: small ? '5px' : '6px',
+                                height: small ? '5px' : '6px',
+                                borderRadius: '50%',
+                                background: color,
+                                display: 'inline-block',
+                                flexShrink: 0,
+                            }}
+                        />
+                    )}
+                    <span>{displayStatus}</span>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div
+            style={{
+                display: 'inline-flex',
+                flexDirection: 'column',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                overflow: 'hidden',
+                background: '#ffffff',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                minWidth: small ? '84px' : '100px',
+                textAlign: 'left',
+                ...style,
+            }}
+        >
+            {renderSide('TOP', normTop, true)}
+            {!hideBottom && renderSide('BOTTOM', normBottom, false)}
+        </div>
+    );
+};
+
+const resolveDoubleSideStage = (
+    stage: string,
+    topStatus?: string,
+    bottomStatus?: string,
+    isPostAoiPassed?: boolean
+) => {
+    const isSmtFg = stage === 'SMT FG';
+    const hideBottom = isSmtFg && (isPostAoiPassed || topStatus === 'PASS');
+    const top = isSmtFg && (isPostAoiPassed || topStatus === 'PASS') && topStatus !== 'FAIL' ? 'PASS' : (topStatus || 'PENDING');
+    return { top, bottom: bottomStatus || 'PENDING', hideBottom };
+};
+
 const StationIcon: React.FC<{ station: string }> = ({ station }) => {
     const s = station.toLowerCase();
     if (s === 'rework') return <RotateCcw size={16} />;
@@ -188,10 +301,10 @@ const SmtTrackItems: React.FC = () => {
     const [appeared, setAppeared] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [selectedPipelineView, setSelectedPipelineView] = useState<'smt' | 'backend'>('smt');
-    
+
     const navigate = useNavigate();
     const { showToast } = useToast();
-    
+
     // Filter State
     const [filterDate, setFilterDate] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
@@ -205,9 +318,9 @@ const SmtTrackItems: React.FC = () => {
     const printRef = useRef<HTMLDivElement>(null);
     const searchRequestIdRef = useRef<number>(0);
 
-    useEffect(() => { 
-        inputRef.current?.focus(); 
-        
+    useEffect(() => {
+        inputRef.current?.focus();
+
         const fetchWOs = async () => {
             try {
                 const res = await apiFetch('/api/smt/work-orders');
@@ -322,14 +435,98 @@ const SmtTrackItems: React.FC = () => {
         }
     };
 
+    const isDoubleSided = Boolean(data?.is_double_sided ?? isTopBottomWo(data?.sides));
+    const isWoDoubleSided = Boolean(woData?.is_double_sided ?? isTopBottomWo(woData?.sides));
+
     const visitedStages = new Set(data?.scan_history.map(h => h.process_step) ?? []);
 
     const getStageStatus = (stageName: string): string => {
-        const entries = data?.scan_history.filter(h => h.process_step === stageName) ?? [];
-        if (!entries.length) return 'pending';
-        const last = entries[entries.length - 1];
-        return normalizeStatus(last.status);
+        const stpNorm = stageName.toUpperCase().replace(/[\s_]/g, '');
+        const entries = (data?.scan_history || []).filter(h => {
+            const hStep = (h.process_step || '').toUpperCase().replace(/[\s_]/g, '');
+            return hStep === stpNorm;
+        });
+        if (!entries.length) {
+            return stageName.toUpperCase() === 'REWORK' ? '-' : 'PENDING';
+        }
+        return normalizeStatus(entries[entries.length - 1].status);
     };
+
+    const getStageStatusForSide = (stageName: string, side: 'Top' | 'Bottom'): string => {
+        const sideKey = side.toLowerCase();
+        const stpNorm = stageName.toUpperCase().replace(/[\s_]/g, '');
+
+        // 1. Check if backend returned step_status_top or step_status_bottom
+        if (sideKey === 'top' && data?.step_status_top?.[stageName]) {
+            return normalizeStatus(data.step_status_top[stageName]);
+        }
+        if (sideKey === 'bottom' && data?.step_status_bottom?.[stageName]) {
+            return normalizeStatus(data.step_status_bottom[stageName]);
+        }
+
+        // 2. Fall back to scan_history
+        const entries = (data?.scan_history || []).filter(h => {
+            const hStep = (h.process_step || '').toUpperCase().replace(/[\s_]/g, '');
+            const hSide = (h.side || '').toUpperCase();
+            return hStep === stpNorm && hSide === side.toUpperCase();
+        });
+
+        if (!entries.length) {
+            return stageName.toUpperCase() === 'REWORK' ? '-' : 'PENDING';
+        }
+        return normalizeStatus(entries[entries.length - 1].status);
+    };
+
+    const isPostAoiPassed = useMemo(() => {
+        if (!isDoubleSided) return false;
+        return getStageStatusForSide('Post AOI', 'Top') === 'PASS' ||
+            getStageStatusForSide('Post AOI', 'Bottom') === 'PASS' ||
+            getStageStatus('Post AOI') === 'PASS';
+    }, [data, isDoubleSided]);
+
+    const overallStatusLabel = useMemo(() => {
+        if (!data) return 'PENDING';
+
+        const rawFinal = (data.final_status_label || '').toUpperCase();
+        if (rawFinal === 'COMPLETED') return 'COMPLETED';
+        if (rawFinal === 'FAILED') return 'FAILED';
+        if (rawFinal === 'IN REWORK' || rawFinal === 'REWORK') return 'IN REWORK';
+
+        if (isDoubleSided) {
+            let topFg = getStageStatusForSide('SMT FG', 'Top');
+            if (isPostAoiPassed && topFg !== 'FAIL') topFg = 'PASS';
+
+            const activeCols = ['Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework'];
+            const anyFail = activeCols.some(c =>
+                getStageStatusForSide(c, 'Top') === 'FAIL' || getStageStatusForSide(c, 'Bottom') === 'FAIL'
+            ) || topFg === 'FAIL';
+            const anyRework = activeCols.some(c =>
+                getStageStatusForSide(c, 'Top') === 'REWORK' || getStageStatusForSide(c, 'Bottom') === 'REWORK'
+            ) || topFg === 'REWORK';
+
+            if (anyRework) return 'IN REWORK';
+            if (anyFail) return 'FAILED';
+            if (topFg === 'PASS') return 'COMPLETED';
+            return 'IN PROGRESS';
+        } else {
+            const smtFg = getStageStatus('SMT FG');
+            const activeCols = ['Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
+            const anyFail = activeCols.some(c => getStageStatus(c) === 'FAIL');
+            const anyRework = activeCols.some(c => getStageStatus(c) === 'REWORK');
+
+            if (anyRework) return 'IN REWORK';
+            if (anyFail) return 'FAILED';
+            if (smtFg === 'PASS') return 'COMPLETED';
+            return 'IN PROGRESS';
+        }
+    }, [data, isDoubleSided, isPostAoiPassed]);
+
+    const overallCurrentStatus = useMemo(() => {
+        if (overallStatusLabel === 'COMPLETED') return 'PASS';
+        if (overallStatusLabel === 'FAILED') return 'FAIL';
+        if (overallStatusLabel === 'IN REWORK') return 'REWORK';
+        return 'PENDING';
+    }, [overallStatusLabel]);
 
     const isCurrentStage = (stageName: string) => data?.current_stage === stageName;
 
@@ -360,7 +557,7 @@ const SmtTrackItems: React.FC = () => {
         if (!serialNo && !woId) return;
         setIsExporting(true);
         try {
-            const endpoint = serialNo 
+            const endpoint = serialNo
                 ? `/api/smt/track/export/serial/${encodeURIComponent(serialNo)}`
                 : `/api/smt/track/export/wo/${encodeURIComponent(woId!)}`;
             const blob = await apiFetch(endpoint) as Blob;
@@ -438,7 +635,7 @@ const SmtTrackItems: React.FC = () => {
                 <div style={{ display: 'flex', gap: '8px' }}>
                     {(data || woData) && (
                         <>
-                            <button 
+                            <button
                                 type="button"
                                 onClick={handleDownloadPdf}
                                 disabled={isDownloading}
@@ -454,7 +651,7 @@ const SmtTrackItems: React.FC = () => {
                                 <Download size={18} />
                                 {isDownloading ? 'Generating PDF...' : 'Download PDF'}
                             </button>
-                            <button 
+                            <button
                                 type="button"
                                 onClick={handleDownloadExcel}
                                 disabled={isExporting}
@@ -484,42 +681,42 @@ const SmtTrackItems: React.FC = () => {
             {/* ── Search ── */}
             <div className={styles.searchPanel}>
                 <form onSubmit={handleSearch} className={styles.searchForm}>
-                            <div className={styles.searchInputWrap}>
-                                <Search size={20} className={styles.searchLeadIcon} />
-                                <select 
-                                    value={searchType} 
-                                    onChange={e => setSearchType(e.target.value as 'serial' | 'wo')}
-                                    style={{ padding: '0 8px', border: 'none', background: 'transparent', outline: 'none', color: '#64748b', fontWeight: 600, borderRight: '1px solid #cbd5e1' }}
-                                >
-                                    <option value="serial">Serial Number</option>
-                                    <option value="wo">Work Order</option>
-                                </select>
-                                {searchType === 'wo' ? (
-                                    <select
-                                        className={styles.searchInput}
-                                        value={query}
-                                        onChange={e => setQuery(e.target.value)}
-                                        disabled={loading}
-                                        style={{ appearance: 'none', background: 'transparent', outline: 'none', paddingLeft: '8px' }}
-                                    >
-                                        <option value="" disabled>Select Work Order...</option>
-                                        {workOrdersList.map(wo => (
-                                            <option key={wo} value={wo}>{wo}</option>
-                                        ))}
-                                    </select>
-                                ) : (
-                                    <input
-                                        ref={inputRef}
-                                        type="text"
-                                        className={styles.searchInput}
-                                        placeholder="Scan or enter Serial Number..."
-                                        value={query}
-                                        onChange={e => setQuery(e.target.value)}
-                                        disabled={loading}
-                                        autoComplete="off"
-                                    />
-                                )}
-                            </div>
+                    <div className={styles.searchInputWrap}>
+                        <Search size={20} className={styles.searchLeadIcon} />
+                        <select
+                            value={searchType}
+                            onChange={e => setSearchType(e.target.value as 'serial' | 'wo')}
+                            style={{ padding: '0 8px', border: 'none', background: 'transparent', outline: 'none', color: '#64748b', fontWeight: 600, borderRight: '1px solid #cbd5e1' }}
+                        >
+                            <option value="serial">Serial Number</option>
+                            <option value="wo">Work Order</option>
+                        </select>
+                        {searchType === 'wo' ? (
+                            <select
+                                className={styles.searchInput}
+                                value={query}
+                                onChange={e => setQuery(e.target.value)}
+                                disabled={loading}
+                                style={{ appearance: 'none', background: 'transparent', outline: 'none', paddingLeft: '8px' }}
+                            >
+                                <option value="" disabled>Select Work Order...</option>
+                                {workOrdersList.map(wo => (
+                                    <option key={wo} value={wo}>{wo}</option>
+                                ))}
+                            </select>
+                        ) : (
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                className={styles.searchInput}
+                                placeholder="Scan or enter Serial Number..."
+                                value={query}
+                                onChange={e => setQuery(e.target.value)}
+                                disabled={loading}
+                                autoComplete="off"
+                            />
+                        )}
+                    </div>
                     <button type="submit" className={styles.searchBtn} disabled={loading}>
                         {loading ? (
                             <span className={styles.spinner} />
@@ -543,358 +740,333 @@ const SmtTrackItems: React.FC = () => {
                 <>
                     <div className={`${styles.resultsWrap} ${appeared ? styles.revealed : ''}`} style={{ padding: '20px', background: '#fff', borderRadius: '12px' }}>
 
-                    {/* ── Summary Cards Row ── */}
-                    <div className={styles.summaryRow}>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
-                                <Package size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Serial Number</div>
-                                <div className={styles.summaryValue}>{data.serial_number}</div>
-                            </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}>
-                                <FileText size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Work Order</div>
-                                <div className={styles.summaryValue} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', minWidth: '150px' }}>
-                                    {data.work_order_id}
-                                    <button 
-                                        onClick={() => handleTrackWorkOrder(data.work_order_id)}
-                                        title="Track this Work Order"
-                                        style={{ 
-                                            background: '#f8fafc', border: '1px solid #cbd5e1', 
-                                            borderRadius: '4px', cursor: 'pointer', padding: '4px', 
-                                            display: 'flex', alignItems: 'center', color: '#8b5cf6',
-                                            transition: 'all 0.2s'
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                                        onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
-                                    >
-                                        <Search size={14} />
-                                    </button>
+                        {/* ── Summary Cards Row ── */}
+                        <div className={styles.summaryRow}>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
+                                    <Package size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Serial Number</div>
+                                    <div className={styles.summaryValue}>{data.serial_number}</div>
                                 </div>
                             </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
-                                <TrendingUp size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Product</div>
-                                <div className={styles.summaryValue}>{data.product_name}</div>
-                            </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: 'rgba(244,114,182,0.12)', color: '#ec4899' }}>
-                                <Cpu size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Line ID</div>
-                                <div className={styles.summaryValue}>{data.line_id}</div>
-                            </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>
-                                <Layers size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Process Selection</div>
-                                <div className={styles.summaryValue}>
-                                    <span style={{
-                                        background: 'rgba(99,102,241,0.12)',
-                                        color: '#6366f1',
-                                        border: '1px solid rgba(99,102,241,0.3)',
-                                        borderRadius: '9999px',
-                                        padding: '2px 10px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: 700,
-                                        letterSpacing: '0.03em',
-                                        display: 'inline-block'
-                                    }}>
-                                        {getProcessSelectionText(data)}
-                                    </span>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}>
+                                    <FileText size={22} />
                                 </div>
-                            </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
-                                <Zap size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Sides</div>
-                                <div className={styles.summaryValue}>{data.sides || '-'}</div>
-                            </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: statusBg(data.current_status), color: statusColor(data.current_status) }}>
-                                <MapPin size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Current Stage</div>
-                                <div className={styles.summaryValue}>{data.current_stage}</div>
-                            </div>
-                        </div>
-                        <div className={styles.summaryCard}>
-                            <div className={styles.summaryIcon} style={{ background: statusBg(data.current_status), color: statusColor(data.current_status) }}>
-                                <Activity size={22} />
-                            </div>
-                            <div>
-                                <div className={styles.summaryLabel}>Status</div>
-                                <StatusBadge status={data.current_status} />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ── Stats Row ── */}
-                    <div className={styles.statsRow}>
-                        <div className={styles.statPill} style={{ '--c': '#10b981' } as React.CSSProperties}>
-                            <span className={styles.statNum}>{data.total_passed}</span>
-                            <span className={styles.statLbl}>Total Stages Passed</span>
-                        </div>
-                        <div className={styles.statPill} style={{ '--c': '#f59e0b' } as React.CSSProperties}>
-                            <span className={styles.statNum}>{data.total_reworks}</span>
-                            <span className={styles.statLbl}>Rework Events</span>
-                        </div>
-                        <div className={styles.statPill} style={{ '--c': '#ef4444' } as React.CSSProperties}>
-                            <span className={styles.statNum}>{data.total_failures}</span>
-                            <span className={styles.statLbl}>Total Failures</span>
-                        </div>
-                        <div className={styles.finalStatus} style={{ background: statusBg(data.current_status), borderColor: `${statusColor(data.current_status)}44`, color: statusColor(data.current_status) }}>
-                            <Zap size={16} />
-                            {data.final_status_label}
-                        </div>
-                    </div>
-                    
-                    {/* Solder Paste Preparation Details removed per Enhancement 2 */}
-
-                    {/* ── Main two-column layout ── */}
-                    <div className={styles.mainGrid}>
-
-                        {/* LEFT: Pipeline Flow */}
-                        <div className={styles.pipelinePanel}>
-                            <div style={{ marginBottom: '1.25rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-                                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <ChevronRight size={18} /> Production Pipeline
-                                </h3>
-                                {(data.has_smt && data.has_backend) && (
-                                    <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', marginTop: '10px', border: '1px solid #e2e8f0' }}>
+                                <div>
+                                    <div className={styles.summaryLabel}>Work Order</div>
+                                    <div className={styles.summaryValue} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', minWidth: '150px' }}>
+                                        {data.work_order_id}
                                         <button
-                                            type="button"
-                                            onClick={() => setSelectedPipelineView('smt')}
+                                            onClick={() => handleTrackWorkOrder(data.work_order_id)}
+                                            title="Track this Work Order"
                                             style={{
-                                                flex: 1,
-                                                padding: '6px 10px',
-                                                fontSize: '11px',
-                                                fontWeight: 700,
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                cursor: 'pointer',
-                                                background: selectedPipelineView === 'smt' ? '#3b82f6' : 'transparent',
-                                                color: selectedPipelineView === 'smt' ? '#ffffff' : '#64748b',
-                                                boxShadow: selectedPipelineView === 'smt' ? '0 1px 3px rgba(59,130,246,0.3)' : 'none',
-                                                transition: 'all 0.2s',
-                                                textAlign: 'center'
+                                                background: '#f8fafc', border: '1px solid #cbd5e1',
+                                                borderRadius: '4px', cursor: 'pointer', padding: '4px',
+                                                display: 'flex', alignItems: 'center', color: '#8b5cf6',
+                                                transition: 'all 0.2s'
                                             }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                                            onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
                                         >
-                                            SMT Pipeline
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelectedPipelineView('backend')}
-                                            style={{
-                                                flex: 1,
-                                                padding: '6px 10px',
-                                                fontSize: '11px',
-                                                fontWeight: 700,
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                cursor: 'pointer',
-                                                background: selectedPipelineView === 'backend' ? '#3b82f6' : 'transparent',
-                                                color: selectedPipelineView === 'backend' ? '#ffffff' : '#64748b',
-                                                boxShadow: selectedPipelineView === 'backend' ? '0 1px 3px rgba(59,130,246,0.3)' : 'none',
-                                                transition: 'all 0.2s',
-                                                textAlign: 'center'
-                                            }}
-                                        >
-                                            Backend Pipeline
+                                            <Search size={14} />
                                         </button>
                                     </div>
-                                )}
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
+                                    <TrendingUp size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Product</div>
+                                    <div className={styles.summaryValue}>{data.product_name}</div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(244,114,182,0.12)', color: '#ec4899' }}>
+                                    <Cpu size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Line ID</div>
+                                    <div className={styles.summaryValue}>{data.line_id}</div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>
+                                    <Layers size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Process Selection</div>
+                                    <div className={styles.summaryValue}>
+                                        <span style={{
+                                            background: 'rgba(99,102,241,0.12)',
+                                            color: '#6366f1',
+                                            border: '1px solid rgba(99,102,241,0.3)',
+                                            borderRadius: '9999px',
+                                            padding: '2px 10px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            letterSpacing: '0.03em',
+                                            display: 'inline-block'
+                                        }}>
+                                            {getProcessSelectionText(data)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
+                                    <Zap size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Sides</div>
+                                    <div className={styles.summaryValue}>{data.sides || '-'}</div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: statusBg(data.current_status), color: statusColor(data.current_status) }}>
+                                    <MapPin size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Current Stage</div>
+                                    <div className={styles.summaryValue}>{data.current_stage}</div>
+                                </div>
+                            </div>
+                            <div className={styles.summaryCard}>
+                                <div className={styles.summaryIcon} style={{ background: statusBg(overallCurrentStatus), color: statusColor(overallCurrentStatus) }}>
+                                    <Activity size={22} />
+                                </div>
+                                <div>
+                                    <div className={styles.summaryLabel}>Status</div>
+                                    <StatusBadge status={overallCurrentStatus} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ── Stats Row ── */}
+                        <div className={styles.statsRow}>
+                            <div className={styles.statPill} style={{ '--c': '#10b981' } as React.CSSProperties}>
+                                <span className={styles.statNum}>{data.total_passed}</span>
+                                <span className={styles.statLbl}>Total Stages Passed</span>
+                            </div>
+                            <div className={styles.statPill} style={{ '--c': '#f59e0b' } as React.CSSProperties}>
+                                <span className={styles.statNum}>{data.total_reworks}</span>
+                                <span className={styles.statLbl}>Rework Events</span>
+                            </div>
+                            <div className={styles.statPill} style={{ '--c': '#ef4444' } as React.CSSProperties}>
+                                <span className={styles.statNum}>{data.total_failures}</span>
+                                <span className={styles.statLbl}>Total Failures</span>
+                            </div>
+                            <div className={styles.finalStatus} style={{ background: statusBg(overallCurrentStatus), borderColor: `${statusColor(overallCurrentStatus)}44`, color: statusColor(overallCurrentStatus) }}>
+                                <Zap size={16} />
+                                {overallStatusLabel}
+                            </div>
+                        </div>
+
+                        {/* ── SMT Process Status Overview (All Process Columns) ── */}
+                        <div style={{
+                            background: '#fff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '12px',
+                            padding: '1.25rem',
+                            marginBottom: '1.5rem',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '8px' }}>
+                                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Activity size={18} /> SMT Process Status
+                                </h3>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
+                                    Work Order PCB Side: <strong style={{ color: '#1e293b' }}>{data.sides || '-'}</strong>
+                                    {isDoubleSided && (
+                                        <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: '4px', marginLeft: '8px', fontSize: '11px', fontWeight: 700 }}>
+                                            Dual-Sided (Top + Bottom)
+                                        </span>
+                                    )}
+                                </span>
                             </div>
 
-                            {selectedPipelineView === 'backend' ? (
-                                <div className={styles.pipeline}>
-                                    {BACKEND_PIPELINE.map((stage, idx) => {
-                                        const isSelected = isBackendStageSelected(stage, data.selected_stages);
-                                        const isLast = idx === BACKEND_PIPELINE.length - 1;
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+                                    <thead>
+                                        <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                            {PROCESS_COLUMNS.map(col => (
+                                                <th key={col} style={{ padding: '10px 14px', fontSize: '12px', fontWeight: 700, border: '1px solid #cbd5e1' }}>
+                                                    {col}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr style={{ background: '#f8fafc' }}>
+                                            {PROCESS_COLUMNS.map(col => {
+                                                if (col === 'Status') {
+                                                    const isCompleted = overallStatusLabel === 'COMPLETED';
+                                                    const isFailed = overallStatusLabel === 'FAILED';
+                                                    const isRework = overallStatusLabel === 'IN REWORK';
+                                                    const bg = isCompleted ? '#dcfce7' : isFailed ? '#fee2e2' : isRework ? '#fef3c7' : '#f1f5f9';
+                                                    const color = isCompleted ? '#166534' : isFailed ? '#991b1b' : isRework ? '#92400e' : '#475569';
+                                                    const border = isCompleted ? '#86efac' : isFailed ? '#fca5a5' : isRework ? '#fde68a' : '#cbd5e1';
+                                                    return (
+                                                        <td key={col} style={{ padding: '12px 14px', border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>
+                                                            <span style={{
+                                                                display: 'inline-block',
+                                                                fontSize: '11px',
+                                                                fontWeight: 800,
+                                                                padding: '6px 14px',
+                                                                borderRadius: '6px',
+                                                                background: bg,
+                                                                color: color,
+                                                                border: `1px solid ${border}`,
+                                                                letterSpacing: '0.04em'
+                                                            }}>
+                                                                {overallStatusLabel}
+                                                            </span>
+                                                        </td>
+                                                    );
+                                                }
 
-                                        if (!isSelected) {
+                                                if (isDoubleSided) {
+                                                    const { top, bottom, hideBottom } = resolveDoubleSideStage(
+                                                        col,
+                                                        getStageStatusForSide(col, 'Top'),
+                                                        getStageStatusForSide(col, 'Bottom'),
+                                                        isPostAoiPassed
+                                                    );
+
+                                                    return (
+                                                        <td key={col} style={{ padding: '10px 12px', border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>
+                                                            <DualSideStatusBadge
+                                                                topStatus={top}
+                                                                bottomStatus={bottom}
+                                                                hideBottom={hideBottom}
+                                                            />
+                                                        </td>
+                                                    );
+                                                }
+
+                                                const status = getStageStatus(col);
+                                                return (
+                                                    <td key={col} style={{ padding: '12px 14px', border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>
+                                                        <StatusBadge status={status} />
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Solder Paste Preparation Details removed per Enhancement 2 */}
+
+                        {/* ── Main two-column layout ── */}
+                        <div className={styles.mainGrid}>
+
+                            {/* LEFT: Pipeline Flow */}
+                            <div className={styles.pipelinePanel}>
+                                <div style={{ marginBottom: '1.25rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <ChevronRight size={18} /> Production Pipeline
+                                    </h3>
+                                    {(data.has_smt && data.has_backend) && (
+                                        <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', marginTop: '10px', border: '1px solid #e2e8f0' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedPipelineView('smt')}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '6px 10px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 700,
+                                                    borderRadius: '6px',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    background: selectedPipelineView === 'smt' ? '#3b82f6' : 'transparent',
+                                                    color: selectedPipelineView === 'smt' ? '#ffffff' : '#64748b',
+                                                    boxShadow: selectedPipelineView === 'smt' ? '0 1px 3px rgba(59,130,246,0.3)' : 'none',
+                                                    transition: 'all 0.2s',
+                                                    textAlign: 'center'
+                                                }}
+                                            >
+                                                SMT Pipeline
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedPipelineView('backend')}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '6px 10px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 700,
+                                                    borderRadius: '6px',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    background: selectedPipelineView === 'backend' ? '#3b82f6' : 'transparent',
+                                                    color: selectedPipelineView === 'backend' ? '#ffffff' : '#64748b',
+                                                    boxShadow: selectedPipelineView === 'backend' ? '0 1px 3px rgba(59,130,246,0.3)' : 'none',
+                                                    transition: 'all 0.2s',
+                                                    textAlign: 'center'
+                                                }}
+                                            >
+                                                Backend Pipeline
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {selectedPipelineView === 'backend' ? (
+                                    <div className={styles.pipeline}>
+                                        {BACKEND_PIPELINE.map((stage, idx) => {
+                                            const isSelected = isBackendStageSelected(stage, data.selected_stages);
+                                            const isLast = idx === BACKEND_PIPELINE.length - 1;
+
+                                            if (!isSelected) {
+                                                return (
+                                                    <React.Fragment key={stage.code}>
+                                                        <div className={styles.pipelineNode}>
+                                                            <div className={styles.pipelineNodeDot} style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', boxShadow: 'none' }}>
+                                                                <Zap size={16} style={{ color: '#94a3b8' }} />
+                                                            </div>
+                                                            <div className={styles.pipelineNodeLabel} style={{ color: '#94a3b8' }}>{stage.name}</div>
+                                                            <span style={{ fontSize: '9px', background: 'rgba(148,163,184,0.12)', color: '#94a3b8', border: '1px solid #cbd5e133', padding: '2px 8px', borderRadius: '9999px', fontWeight: 700 }}>N/A</span>
+                                                        </div>
+                                                        {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                                    </React.Fragment>
+                                                );
+                                            }
+
+                                            const bHistory = data.backend_scan_history || [];
+                                            const entries = bHistory.filter((h: any) => {
+                                                const sc = normalizeStageId(h.stage_code || '');
+                                                const st = normalizeStageId(h.station || '');
+                                                const cn = normalizeStageId(stage.code);
+                                                const nn = normalizeStageId(stage.name);
+                                                const ln = normalizeStageId(stage.label);
+                                                return sc === cn || st === cn || st === nn || st === ln;
+                                            });
+                                            const visited = entries.length > 0;
+                                            const rawStatus = visited ? entries[entries.length - 1].status : '';
+                                            const stStatus = visited ? normalizeStatus(rawStatus) : 'PENDING';
+                                            const color = visited ? statusColor(stStatus) : '#cbd5e1';
+
                                             return (
                                                 <React.Fragment key={stage.code}>
                                                     <div className={styles.pipelineNode}>
-                                                        <div className={styles.pipelineNodeDot} style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', boxShadow: 'none' }}>
-                                                            <Zap size={16} style={{ color: '#94a3b8' }} />
-                                                        </div>
-                                                        <div className={styles.pipelineNodeLabel} style={{ color: '#94a3b8' }}>{stage.name}</div>
-                                                        <span style={{ fontSize: '9px', background: 'rgba(148,163,184,0.12)', color: '#94a3b8', border: '1px solid #cbd5e133', padding: '2px 8px', borderRadius: '9999px', fontWeight: 700 }}>N/A</span>
-                                                    </div>
-                                                    {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
-                                                </React.Fragment>
-                                            );
-                                        }
-
-                                        const bHistory = data.backend_scan_history || [];
-                                        const entries = bHistory.filter((h: any) => {
-                                            const sc = normalizeStageId(h.stage_code || '');
-                                            const st = normalizeStageId(h.station || '');
-                                            const cn = normalizeStageId(stage.code);
-                                            const nn = normalizeStageId(stage.name);
-                                            const ln = normalizeStageId(stage.label);
-                                            return sc === cn || st === cn || st === nn || st === ln;
-                                        });
-                                        const visited = entries.length > 0;
-                                        const rawStatus = visited ? entries[entries.length - 1].status : '';
-                                        const stStatus = visited ? normalizeStatus(rawStatus) : 'PENDING';
-                                        const color = visited ? statusColor(stStatus) : '#cbd5e1';
-
-                                        return (
-                                            <React.Fragment key={stage.code}>
-                                                <div className={styles.pipelineNode}>
-                                                    <div className={styles.pipelineNodeDot} style={{ background: visited ? color : '#f1f5f9', border: visited ? 'none' : '1px dashed #94a3b8', boxShadow: visited ? `0 0 0 4px ${color}22` : 'none' }}>
-                                                        <Zap size={16} style={{ color: visited ? '#fff' : '#94a3b8' }} />
-                                                    </div>
-                                                    <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
-                                                        {stage.name}
-                                                    </div>
-                                                    {visited ? (
-                                                        <StatusBadge status={stStatus} small />
-                                                    ) : (
-                                                        <span className={styles.pendingTag}>Pending</span>
-                                                    )}
-                                                    {entries.length > 1 && <span className={styles.rescannedTag}>×{entries.length} scans</span>}
-                                                </div>
-                                                {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
-                                            </React.Fragment>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                            /* TOP/BOTTOM dual pipeline */
-                            (() => {
-                                const isDoubleSided = (data.sides || '').toLowerCase().includes('/');
-                                const SIDE_STAGES = ['Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework'];
-
-                                const renderNode = (stage: string, side: string | null) => {
-                                    const entries = side
-                                        ? data.scan_history.filter(h => h.process_step === stage && h.side && h.side.toLowerCase() === side.toLowerCase())
-                                        : data.scan_history.filter(h => h.process_step === stage);
-                                    const visited = entries.length > 0;
-                                    const stStatus = visited ? normalizeStatus(entries[entries.length - 1].status) : 'pending';
-                                    const isCurrent = isCurrentStage(stage) && (!side || !data.current_stage);
-                                    const color = visited ? statusColor(stStatus) : '#cbd5e1';
-                                    return (
-                                        <div key={`${stage}-${side ?? ''}`} className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
-                                            <div className={styles.pipelineNodeDot} style={{
-                                                background: color,
-                                                boxShadow: isCurrent ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` : `0 0 0 4px ${color}22`,
-                                            }}>
-                                                <StationIcon station={stage} />
-                                            </div>
-                                            <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
-                                                {side ? <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', marginRight: '4px', opacity: 0.7 }}>{side.toUpperCase()}</span> : null}{stage}
-                                            </div>
-                                            {visited ? (
-                                                (isCurrent && stStatus.toUpperCase() === 'FAIL') ? (
-                                                    <button onClick={() => navigate(STAGE_ROUTES[stage])} title="Click to fix this failure" style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#ef4444', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'uppercase' }} onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'} onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>
-                                                        FAIL • Fix
-                                                    </button>
-                                                ) : (
-                                                    <StatusBadge status={stStatus} small />
-                                                )
-                                            ) : <span className={styles.pendingTag}>{stage === 'Rework' ? 'NA' : 'Pending'}</span>}
-                                            {entries.length > 1 && <span className={styles.rescannedTag}>×{entries.length} scans</span>}
-                                        </div>
-                                    );
-                                };
-
-                                if (isDoubleSided) {
-                                    // Serial Number node
-                                    const snEntries = data.scan_history.filter(h => h.process_step === 'Serial Number');
-                                    const snVisited = snEntries.length > 0;
-                                    const snStatus = snVisited ? normalizeStatus(snEntries[snEntries.length - 1].status) : 'pending';
-                                    const snColor = snVisited ? statusColor(snStatus) : '#cbd5e1';
-                                    return (
-                                        <div className={styles.pipeline}>
-                                            {/* Serial Number */}
-                                            <div className={styles.pipelineNode}>
-                                                <div className={styles.pipelineNodeDot} style={{ background: snColor, boxShadow: `0 0 0 4px ${snColor}22` }}><StationIcon station="Serial Number" /></div>
-                                                <div className={styles.pipelineNodeLabel} style={{ color: snVisited ? '#1e293b' : '#94a3b8' }}>Serial Number</div>
-                                                {snVisited ? <StatusBadge status={snStatus} small /> : <span className={styles.pendingTag}>Pending</span>}
-                                            </div>
-                                            <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
-
-                                            {/* BOTTOM side group */}
-                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', marginBottom: '4px', background: '#f8fafc' }}>
-                                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#6366f1', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>▼ BOTTOM Side</div>
-                                                {SIDE_STAGES.map((stage, i) => (
-                                                    <React.Fragment key={`bottom-${stage}`}>
-                                                        {renderNode(stage, 'Bottom')}
-                                                        {i < SIDE_STAGES.length - 1 && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
-                                                    </React.Fragment>
-                                                ))}
-                                            </div>
-                                            <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
-
-                                            {/* TOP side group */}
-                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', marginBottom: '4px', background: '#f8fafc' }}>
-                                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#10b981', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>▼ TOP Side</div>
-                                                {SIDE_STAGES.map((stage, i) => (
-                                                    <React.Fragment key={`top-${stage}`}>
-                                                        {renderNode(stage, 'Top')}
-                                                        {i < SIDE_STAGES.length - 1 && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
-                                                    </React.Fragment>
-                                                ))}
-                                            </div>
-                                            <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
-
-                                            {/* SMT FG */}
-                                            {renderNode('SMT FG', null)}
-                                        </div>
-                                    );
-                                }
-
-                                // Single-sided: existing behaviour unchanged
-                                return (
-                                    <div className={styles.pipeline}>
-                                        {SMT_PIPELINE.map((stage, idx) => {
-                                            const visited = visitedStages.has(stage);
-                                            const stStatus = visited ? getStageStatus(stage) : 'pending';
-                                            const isCurrent = isCurrentStage(stage);
-                                            const color = visited ? statusColor(stStatus) : '#cbd5e1';
-                                            const entries = data.scan_history.filter(h => h.process_step === stage);
-                                            const isLast = idx === SMT_PIPELINE.length - 1;
-                                            return (
-                                                <React.Fragment key={stage}>
-                                                    <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
-                                                        <div className={styles.pipelineNodeDot} style={{ background: color, boxShadow: isCurrent ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` : `0 0 0 4px ${color}22` }}>
-                                                            <StationIcon station={stage} />
+                                                        <div className={styles.pipelineNodeDot} style={{ background: visited ? color : '#f1f5f9', border: visited ? 'none' : '1px dashed #94a3b8', boxShadow: visited ? `0 0 0 4px ${color}22` : 'none' }}>
+                                                            <Zap size={16} style={{ color: visited ? '#fff' : '#94a3b8' }} />
                                                         </div>
                                                         <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
-                                                            {stage}{isCurrent && <span className={styles.liveTag}>LIVE</span>}
+                                                            {stage.name}
                                                         </div>
                                                         {visited ? (
-                                                            (isCurrent && stStatus.toUpperCase() === 'FAIL') ? (
-                                                                <button onClick={() => navigate(STAGE_ROUTES[stage])} title="Click to fix this failure" style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#ef4444', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'uppercase' }} onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'} onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>
-                                                                    FAIL • Fix
-                                                                </button>
-                                                            ) : (
-                                                                <StatusBadge status={stStatus} small />
-                                                            )
-                                                        ) : <span className={styles.pendingTag}>{stage === 'Rework' ? 'NA' : 'Pending'}</span>}
+                                                            <StatusBadge status={stStatus} small />
+                                                        ) : (
+                                                            <span className={styles.pendingTag}>Pending</span>
+                                                        )}
                                                         {entries.length > 1 && <span className={styles.rescannedTag}>×{entries.length} scans</span>}
                                                     </div>
                                                     {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
@@ -902,52 +1074,148 @@ const SmtTrackItems: React.FC = () => {
                                             );
                                         })}
                                     </div>
-                                );
-                            })()
-                            )}
-                        </div>
+                                ) : (
+                                    /* TOP/BOTTOM dual pipeline */
+                                    (() => {
+                                        if (isDoubleSided) {
+                                            return (
+                                                <div className={styles.pipeline}>
+                                                    {/* Serial Number */}
+                                                    <div className={styles.pipelineNode}>
+                                                        <div className={styles.pipelineNodeDot} style={{ background: '#10b981', boxShadow: '0 0 0 4px rgba(16,185,129,0.2)' }}>
+                                                            <StationIcon station="Serial Number" />
+                                                        </div>
+                                                        <div className={styles.pipelineNodeLabel} style={{ color: '#1e293b' }}>
+                                                            Serial Number
+                                                        </div>
+                                                        <StatusBadge status="PASS" small />
+                                                    </div>
+                                                    <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>
 
-                        {/* RIGHT: Scan History Table (SMT + Backend combined) */}
-                        <div className={styles.historyPanel}>
-                            <h3 className={styles.panelTitle}><Clock size={18} /> Scan History</h3>
+                                                    {/* Stages: Printing, SPI, Pre AOI, Post AOI, Rework, SMT FG */}
+                                                    {['Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'].map((stage, idx, arr) => {
+                                                        const { top: topSt, bottom: botSt, hideBottom } = resolveDoubleSideStage(
+                                                            stage,
+                                                            getStageStatusForSide(stage, 'Top'),
+                                                            getStageStatusForSide(stage, 'Bottom'),
+                                                            isPostAoiPassed
+                                                        );
+                                                        const hasFail = topSt === 'FAIL' || (!hideBottom && botSt === 'FAIL');
+                                                        const hasRework = topSt === 'REWORK' || (!hideBottom && botSt === 'REWORK');
+                                                        const hasPass = topSt === 'PASS' || (!hideBottom && botSt === 'PASS');
+                                                        const nodeColor = hasFail ? '#ef4444' : hasRework ? '#f59e0b' : hasPass ? '#10b981' : '#cbd5e1';
+                                                        const isCurrent = isCurrentStage(stage);
+                                                        const isLast = idx === arr.length - 1;
 
-                            <div className={styles.tableContainer}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
-                                            <thead>
-                                                <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
-                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>#</th>
-                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Source</th>
-                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Process Step</th>
-                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Status</th>
-                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Scanned By</th>
-                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Scanned At</th>
-                                                    <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Remark</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {combinedHistory.length === 0 ? (
-                                                    <tr><td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No records.</td></tr>
-                                                ) : combinedHistory.map((row, idx) => (
-                                                    <tr key={idx} style={{ background: row.status === 'REWORK' ? 'rgba(245,158,11,0.05)' : row.status === 'FAIL' ? 'rgba(239,68,68,0.05)' : '#f9fafb' }}>
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{idx + 1}</td>
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
-                                                            <span style={{ fontSize: '9px', background: row.source === 'SMT' ? 'rgba(59,130,246,0.12)' : 'rgba(16,185,129,0.12)', color: row.source === 'SMT' ? '#3b82f6' : '#10b981', border: `1px solid ${row.source === 'SMT' ? '#3b82f633' : '#10b98133'}`, padding: '2px 6px', borderRadius: '3px', fontWeight: 700 }}>{row.source}</span>
-                                                        </td>
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{row.process_step}</td>
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
-                                                            <span style={{ fontSize: '9px', background: statusBg(row.status), color: statusColor(row.status), border: `1px solid ${statusColor(row.status)}33`, padding: '2px 6px', borderRadius: '3px' }}>{row.status.toUpperCase()}</span>
-                                                        </td>
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
-                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>{row.remark || '—'}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                        return (
+                                                            <React.Fragment key={stage}>
+                                                                <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
+                                                                    <div className={styles.pipelineNodeDot} style={{
+                                                                        background: nodeColor,
+                                                                        boxShadow: isCurrent ? `0 0 0 6px ${nodeColor}33, 0 0 20px ${nodeColor}44` : `0 0 0 4px ${nodeColor}22`
+                                                                    }}>
+                                                                        <StationIcon station={stage} />
+                                                                    </div>
+                                                                    <div className={styles.pipelineNodeLabel} style={{ color: (hasPass || hasFail || hasRework) ? '#1e293b' : '#94a3b8' }}>
+                                                                        {stage}
+                                                                        {isCurrent && <span className={styles.liveTag}>LIVE</span>}
+                                                                    </div>
+                                                                    <DualSideStatusBadge
+                                                                        topStatus={topSt}
+                                                                        bottomStatus={botSt}
+                                                                        hideBottom={hideBottom}
+                                                                        small
+                                                                    />
+                                                                </div>
+                                                                {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        }
+
+                                        // Single-sided: existing behaviour unchanged
+                                        return (
+                                            <div className={styles.pipeline}>
+                                                {SMT_PIPELINE.map((stage, idx) => {
+                                                    const visited = visitedStages.has(stage);
+                                                    const stStatus = visited ? getStageStatus(stage) : 'pending';
+                                                    const isCurrent = isCurrentStage(stage);
+                                                    const color = visited ? statusColor(stStatus) : '#cbd5e1';
+                                                    const entries = data.scan_history.filter(h => h.process_step === stage);
+                                                    const isLast = idx === SMT_PIPELINE.length - 1;
+                                                    return (
+                                                        <React.Fragment key={stage}>
+                                                            <div className={`${styles.pipelineNode} ${isCurrent ? styles.pipelineNodeActive : ''}`}>
+                                                                <div className={styles.pipelineNodeDot} style={{ background: color, boxShadow: isCurrent ? `0 0 0 6px ${color}33, 0 0 20px ${color}44` : `0 0 0 4px ${color}22` }}>
+                                                                    <StationIcon station={stage} />
+                                                                </div>
+                                                                <div className={styles.pipelineNodeLabel} style={{ color: visited ? '#1e293b' : '#94a3b8' }}>
+                                                                    {stage}{isCurrent && <span className={styles.liveTag}>LIVE</span>}
+                                                                </div>
+                                                                {visited ? (
+                                                                    (isCurrent && stStatus.toUpperCase() === 'FAIL') ? (
+                                                                        <button onClick={() => navigate(STAGE_ROUTES[stage])} title="Click to fix this failure" style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#ef4444', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'uppercase' }} onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'} onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>
+                                                                            FAIL • Fix
+                                                                        </button>
+                                                                    ) : (
+                                                                        <StatusBadge status={stStatus} small />
+                                                                    )
+                                                                ) : <span className={styles.pendingTag}>{stage === 'Rework' ? 'NA' : 'Pending'}</span>}
+                                                                {entries.length > 1 && <span className={styles.rescannedTag}>×{entries.length} scans</span>}
+                                                            </div>
+                                                            {!isLast && <div className={styles.pipelineConnector}><ArrowDown size={14} /></div>}
+                                                        </React.Fragment>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()
+                                )}
                             </div>
-                        </div>
 
-                    </div>
+                            {/* RIGHT: Scan History Table (SMT + Backend combined) */}
+                            <div className={styles.historyPanel}>
+                                <h3 className={styles.panelTitle}><Clock size={18} /> Scan History</h3>
+
+                                <div className={styles.tableContainer}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                                        <thead>
+                                            <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>#</th>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Source</th>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Process Step</th>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Status</th>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Scanned By</th>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Scanned At</th>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Remark</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {combinedHistory.length === 0 ? (
+                                                <tr><td colSpan={7} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No records.</td></tr>
+                                            ) : combinedHistory.map((row, idx) => (
+                                                <tr key={idx} style={{ background: row.status === 'REWORK' ? 'rgba(245,158,11,0.05)' : row.status === 'FAIL' ? 'rgba(239,68,68,0.05)' : '#f9fafb' }}>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{idx + 1}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
+                                                        <span style={{ fontSize: '9px', background: row.source === 'SMT' ? 'rgba(59,130,246,0.12)' : 'rgba(16,185,129,0.12)', color: row.source === 'SMT' ? '#3b82f6' : '#10b981', border: `1px solid ${row.source === 'SMT' ? '#3b82f633' : '#10b98133'}`, padding: '2px 6px', borderRadius: '3px', fontWeight: 700 }}>{row.source}</span>
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{row.process_step}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
+                                                        <span style={{ fontSize: '9px', background: statusBg(row.status), color: statusColor(row.status), border: `1px solid ${statusColor(row.status)}33`, padding: '2px 6px', borderRadius: '3px' }}>{row.status.toUpperCase()}</span>
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>{row.remark || '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                        </div>
 
                     </div>
                 </>
@@ -957,7 +1225,7 @@ const SmtTrackItems: React.FC = () => {
             {woData && (
                 <>
                     <div className={`${styles.resultsWrap} ${appeared ? styles.revealed : ''}`} style={{ padding: '20px', background: '#fff', borderRadius: '12px' }}>
-                        
+
                         {/* Summary for WO */}
                         <div className={styles.summaryRow}>
                             <div className={styles.summaryCard}>
@@ -1040,16 +1308,16 @@ const SmtTrackItems: React.FC = () => {
                                     Pending: {pendingCount}
                                 </span>
                                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', minWidth: '240px' }}>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Search Serial Number / Barcode..." 
+                                    <input
+                                        type="text"
+                                        placeholder="Search Serial Number / Barcode..."
                                         value={serialSearch}
                                         onChange={(e) => setSerialSearch(e.target.value)}
-                                        style={{ 
-                                            width: '100%', 
-                                            padding: '6px 12px', 
-                                            fontSize: '12px', 
-                                            border: '1px solid #cbd5e1', 
+                                        style={{
+                                            width: '100%',
+                                            padding: '6px 12px',
+                                            fontSize: '12px',
+                                            border: '1px solid #cbd5e1',
                                             borderRadius: '6px',
                                             outline: 'none'
                                         }}
@@ -1100,12 +1368,12 @@ const SmtTrackItems: React.FC = () => {
                                                 <td style={{ padding: '12px 16px', fontWeight: 600, color: '#334155' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                                                         {s.serial_number}
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleTrackSerial(s.serial_number)}
                                                             title="Track this Serial Number"
-                                                            style={{ 
-                                                                background: '#f8fafc', border: '1px solid #cbd5e1', 
-                                                                borderRadius: '4px', cursor: 'pointer', padding: '4px', 
+                                                            style={{
+                                                                background: '#f8fafc', border: '1px solid #cbd5e1',
+                                                                borderRadius: '4px', cursor: 'pointer', padding: '4px',
                                                                 display: 'flex', alignItems: 'center', color: '#3b82f6',
                                                                 transition: 'all 0.2s'
                                                             }}
@@ -1116,24 +1384,55 @@ const SmtTrackItems: React.FC = () => {
                                                         </button>
                                                     </div>
                                                 </td>
-                                                {SMT_PIPELINE.map((step: any) => (
-                                                    <td key={step} style={{ padding: '12px 16px' }}>
-                                                        {s.step_status && s.step_status[step] && s.step_status[step] !== '-' ? (
-                                                            <StatusBadge status={s.step_status[step]} small />
-                                                        ) : (
-                                                            <span style={{ color: '#94a3b8' }}>-</span>
-                                                        )}
-                                                    </td>
-                                                ))}
+                                                {SMT_PIPELINE.map((step: any) => {
+                                                    if (step === 'Serial Number') {
+                                                        return (
+                                                            <td key={step} style={{ padding: '12px 16px' }}>
+                                                                <StatusBadge status={s.step_status && s.step_status[step] && s.step_status[step] !== '-' ? s.step_status[step] : 'PASS'} small />
+                                                            </td>
+                                                        );
+                                                    }
+
+                                                    if (isWoDoubleSided) {
+                                                        const postAoiPass = s.step_status_top?.['Post AOI'] === 'PASS' || s.step_status_bottom?.['Post AOI'] === 'PASS';
+                                                        const { top, bottom, hideBottom } = resolveDoubleSideStage(
+                                                            step,
+                                                            s.step_status_top?.[step],
+                                                            s.step_status_bottom?.[step],
+                                                            postAoiPass
+                                                        );
+
+                                                        return (
+                                                            <td key={step} style={{ padding: '8px 12px', verticalAlign: 'middle' }}>
+                                                                <DualSideStatusBadge
+                                                                    topStatus={top}
+                                                                    bottomStatus={bottom}
+                                                                    hideBottom={hideBottom}
+                                                                    small
+                                                                />
+                                                            </td>
+                                                        );
+                                                    }
+
+                                                    return (
+                                                        <td key={step} style={{ padding: '12px 16px' }}>
+                                                            {s.step_status && s.step_status[step] && s.step_status[step] !== '-' ? (
+                                                                <StatusBadge status={s.step_status[step]} small />
+                                                            ) : (
+                                                                <span style={{ color: '#94a3b8' }}>-</span>
+                                                            )}
+                                                        </td>
+                                                    );
+                                                })}
                                                 <td style={{ padding: '12px 16px' }}>
-                                                    <span style={{ 
-                                                        fontSize: '10px', 
-                                                        background: s.final_status_label === 'Completed' ? '#dcfce7' : '#fef3c7', 
-                                                        border: `1px solid ${s.final_status_label === 'Completed' ? '#86efac' : '#fde68a'}`, 
-                                                        padding: '4px 8px', 
-                                                        borderRadius: '4px', 
+                                                    <span style={{
+                                                        fontSize: '10px',
+                                                        background: s.final_status_label === 'Completed' ? '#dcfce7' : '#fef3c7',
+                                                        border: `1px solid ${s.final_status_label === 'Completed' ? '#86efac' : '#fde68a'}`,
+                                                        padding: '4px 8px',
+                                                        borderRadius: '4px',
                                                         color: s.final_status_label === 'Completed' ? '#166534' : '#92400e',
-                                                        fontWeight: 600
+                                                        fontWeight: 700
                                                     }}>
                                                         {s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING'}
                                                     </span>
@@ -1148,14 +1447,14 @@ const SmtTrackItems: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-                            
+
                             {totalPages > 1 && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 16px' }}>
                                     <div style={{ fontSize: '12px', color: '#64748b' }}>
                                         Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, woData.total_filtered)} of {woData.total_filtered} entries
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button 
+                                        <button
                                             onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                             disabled={currentPage === 1}
                                             style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', background: currentPage === 1 ? '#f8fafc' : '#fff', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600 }}
@@ -1165,7 +1464,7 @@ const SmtTrackItems: React.FC = () => {
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', fontSize: '12px', fontWeight: 600, color: '#334155', background: '#f1f5f9', borderRadius: '4px' }}>
                                             Page {currentPage} of {totalPages}
                                         </div>
-                                        <button 
+                                        <button
                                             onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                             disabled={currentPage === totalPages}
                                             style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #cbd5e1', background: currentPage === totalPages ? '#f8fafc' : '#fff', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 600 }}
@@ -1187,7 +1486,7 @@ const SmtTrackItems: React.FC = () => {
                     <div style={{ padding: '20px', background: '#fff', fontFamily: 'Arial, sans-serif' }}>
                         <h1 style={{ marginBottom: '10px', color: '#1e293b', fontSize: '20px' }}>SMT Serial Traceability Report</h1>
                         <p style={{ color: '#64748b', marginBottom: '20px', fontSize: '12px' }}>Generated on {new Date().toLocaleString('en-IN')}</p>
-                        
+
                         {/* Metadata Box */}
                         <div style={{ marginBottom: '15px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
                             <p style={{ margin: 0 }}><strong>Serial Number:</strong> {data.serial_number}</p>
@@ -1216,6 +1515,54 @@ const SmtTrackItems: React.FC = () => {
                                 <div style={{ fontSize: '18px', fontWeight: 800, color: '#991b1b' }}>{data.total_failures}</div>
                                 <div style={{ fontSize: '10px', fontWeight: 600, color: '#b91c1c' }}>Total Failures</div>
                             </div>
+                        </div>
+
+                        {/* SMT Process Status Overview Table */}
+                        <div style={{ marginBottom: '15px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            <h3 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>SMT Process Status</h3>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'center' }}>
+                                <thead>
+                                    <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                        {PROCESS_COLUMNS.map(col => (
+                                            <th key={col} style={{ padding: '6px', border: '1px solid #cbd5e1' }}>{col}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        {PROCESS_COLUMNS.map(col => {
+                                            if (col === 'Status') {
+                                                return (
+                                                    <td key={col} style={{ padding: '6px', border: '1px solid #cbd5e1', fontWeight: 700, color: overallStatusLabel === 'COMPLETED' ? '#166534' : overallStatusLabel === 'FAILED' ? '#991b1b' : '#92400e' }}>
+                                                        {overallStatusLabel}
+                                                    </td>
+                                                );
+                                            }
+                                            if (isDoubleSided) {
+                                                const { top, bottom, hideBottom } = resolveDoubleSideStage(
+                                                    col,
+                                                    getStageStatusForSide(col, 'Top'),
+                                                    getStageStatusForSide(col, 'Bottom'),
+                                                    isPostAoiPassed
+                                                );
+
+                                                return (
+                                                    <td key={col} style={{ padding: '6px', border: '1px solid #cbd5e1', fontSize: '10px' }}>
+                                                        <div style={{ color: statusColor(top), fontWeight: 700 }}>TOP: {top}</div>
+                                                        {!hideBottom && <div style={{ color: statusColor(bottom), fontWeight: 700, marginTop: '2px' }}>BOT: {bottom}</div>}
+                                                    </td>
+                                                );
+                                            }
+                                            const st = getStageStatus(col);
+                                            return (
+                                                <td key={col} style={{ padding: '6px', border: '1px solid #cbd5e1', fontWeight: 700, color: statusColor(st) }}>
+                                                    {st}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
 
                         {/* Production Pipeline Status */}
@@ -1267,7 +1614,7 @@ const SmtTrackItems: React.FC = () => {
                     <div style={{ padding: '20px', background: '#fff', fontFamily: 'Arial, sans-serif' }}>
                         <h1 style={{ marginBottom: '10px', color: '#1e293b' }}>SMT Work Order Report</h1>
                         <p style={{ color: '#64748b', marginBottom: '20px' }}>Generated on {new Date().toLocaleString('en-IN')}</p>
-                        
+
                         <div style={{ marginBottom: '20px', padding: '15px', background: '#f1f5f9', borderRadius: '8px' }}>
                             <p><strong>Work Order:</strong> {woData.work_order_id}</p>
                             <p><strong>Product:</strong> {woData.product_name}</p>
@@ -1288,19 +1635,36 @@ const SmtTrackItems: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {currentSerials.map((s: any, idx: number) => (
-                                    <tr key={idx}>
-                                        <td style={{ padding: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold' }}>{s.serial_number}</td>
-                                        {SMT_PIPELINE.map(step => (
-                                            <td key={step} style={{ padding: '6px', border: '1px solid #cbd5e1' }}>
-                                                {s.step_status && s.step_status[step] && s.step_status[step] !== '-' ? s.step_status[step] : '-'}
+                                {currentSerials.map((s: any, idx: number) => {
+                                    const postAoiPassed = s.step_status_top?.['Post AOI'] === 'PASS' || s.step_status_bottom?.['Post AOI'] === 'PASS' || s.step_status?.['Post AOI'] === 'PASS';
+                                    return (
+                                        <tr key={idx}>
+                                            <td style={{ padding: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold' }}>{s.serial_number}</td>
+                                            {SMT_PIPELINE.map(step => (
+                                                <td key={step} style={{ padding: '6px', border: '1px solid #cbd5e1', fontSize: '10px' }}>
+                                                    {step === 'Serial Number' ? (
+                                                        s.step_status && s.step_status[step] && s.step_status[step] !== '-' ? s.step_status[step] : 'PASS'
+                                                    ) : isWoDoubleSided ? (
+                                                        (() => {
+                                                            const { top, bottom, hideBottom } = resolveDoubleSideStage(step, s.step_status_top?.[step], s.step_status_bottom?.[step], postAoiPassed);
+                                                            return (
+                                                                <div>
+                                                                    <div style={{ color: statusColor(top), fontWeight: 700 }}>T: {top}</div>
+                                                                    {!hideBottom && <div style={{ color: statusColor(bottom), fontWeight: 700 }}>B: {bottom}</div>}
+                                                                </div>
+                                                            );
+                                                        })()
+                                                    ) : (
+                                                        s.step_status && s.step_status[step] && s.step_status[step] !== '-' ? s.step_status[step] : '-'
+                                                    )}
+                                                </td>
+                                            ))}
+                                            <td style={{ padding: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold', color: s.final_status_label === 'Completed' ? '#166534' : '#92400e' }}>
+                                                {s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING'}
                                             </td>
-                                        ))}
-                                        <td style={{ padding: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold' }}>
-                                            {s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING'}
-                                        </td>
-                                    </tr>
-                                ))}
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

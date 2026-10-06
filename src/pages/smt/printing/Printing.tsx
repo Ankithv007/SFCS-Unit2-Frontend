@@ -584,9 +584,18 @@ export const Printing: React.FC = () => {
                     } else {
                         addToast(`Barcode "${code}" registered: PASS.`, 'success');
                     }
+                    // Update stats numbers directly from the scan response (no extra HTTP request needed).
+                    if (res.statistics) setStats(prev => ({ ...prev, ...res.statistics }));
+                    if (res.isCompleted && activeSession?.status !== 'Completed') {
+                        addToast('Printing Session completed successfully.', 'success');
+                        setActiveSession(prev => prev ? { ...prev, status: 'Completed' } : null);
+                        fetchSessionsLists();
+                    }
+                    // Fetch the scan list (table rows) separately.
                     fetchSessionStats(activeSession.id);
                 } else {
                     addToast(res.message || `Invalid Serial Number. This Serial Number does not belong to the selected Work Order.`, 'error');
+                    if (res.statistics) setStats(prev => ({ ...prev, ...res.statistics }));
                     fetchSessionStats(activeSession.id);
                 }
             }

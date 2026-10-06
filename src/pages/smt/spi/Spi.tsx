@@ -183,14 +183,14 @@ const Spi: React.FC = () => {
         units: prevStageUnits,
         count: prevStageCount,
         previousStage: resolvedPrevStage,
-        loading: prevStageLoading,
-        refetch: refetchPrevStage
+        loading: prevStageLoading
     } = usePreviousStagePassed({
         workOrderId: activeSession?.work_order_id,
         side: activeSession?.side,
         stage: 'SPI',
         sessionId: activeSession?.id,
-        enabled: !!activeSession
+        enabled: !!activeSession,
+        pollingIntervalMs: 30000  // 30s: panel is informational; manual refetch on scan was removed.
     });
 
     const [selectedScanToRepair, setSelectedScanToRepair] = useState<{ barcode: string } | null>(null);
@@ -462,9 +462,11 @@ const Spi: React.FC = () => {
             }
         } catch (err: any) {
             console.error('Error loading session stats:', err);
-        } finally {
-            refetchPrevStage();
         }
+        // NOTE: refetchPrevStage() intentionally NOT called here.
+        // The previous-stage panel is updated by the background poll (every 30s).
+        // Triggering it after every scan was causing the expensive CTE + cross-DB
+        // queries to fire on every barcode scan, adding 500ms–14s to scan response time.
     };
 
     // ─── Setup Session Submit ────────────────────────────────────────────────
@@ -556,9 +558,19 @@ const Spi: React.FC = () => {
                     } else {
                         addToast(`Barcode "${code}" registered: PASS.`, 'success');
                     }
+                    // Update stats numbers directly from the scan response (no extra HTTP request needed).
+                    // The scan API already returns statistics: { passed, failed, pending, invalid, duplicate }.
+                    if (res.statistics) setStats(prev => ({ ...prev, ...res.statistics }));
+                    if (res.isCompleted && activeSession?.status !== 'Completed') {
+                        addToast('SPI Session completed successfully.', 'success');
+                        setActiveSession(prev => prev ? { ...prev, status: 'Completed' } : null);
+                        fetchSessionsLists();
+                    }
+                    // Fetch the scan list (table rows) separately — does not block scan feedback.
                     fetchSessionStats(activeSession.id);
                 } else {
                     addToast(res.message || `Invalid Serial Number. This Serial Number does not belong to the selected Work Order.`, 'error');
+                    if (res.statistics) setStats(prev => ({ ...prev, ...res.statistics }));
                     fetchSessionStats(activeSession.id);
                 }
             }

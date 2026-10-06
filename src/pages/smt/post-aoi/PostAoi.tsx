@@ -184,14 +184,14 @@ const PostAoi: React.FC = () => {
         units: prevStageUnits,
         count: prevStageCount,
         previousStage: resolvedPrevStage,
-        loading: prevStageLoading,
-        refetch: refetchPrevStage
+        loading: prevStageLoading
     } = usePreviousStagePassed({
         workOrderId: activeSession?.work_order_id,
         side: activeSession?.side,
         stage: 'Post-AOI',
         sessionId: activeSession?.id,
-        enabled: !!activeSession
+        enabled: !!activeSession,
+        pollingIntervalMs: 30000  // 30s: panel is informational; manual refetch on scan was removed.
     });
 
     const [selectedScanToRepair, setSelectedScanToRepair] = useState<{ barcode: string } | null>(null);
@@ -514,9 +514,9 @@ const PostAoi: React.FC = () => {
             }
         } catch (err: any) {
             console.error('Error loading session stats:', err);
-        } finally {
-            refetchPrevStage();
         }
+        // NOTE: refetchPrevStage() intentionally NOT called here.
+        // The previous-stage panel is updated by the background poll (every 30s).
     };
 
     // ─── Setup Session Submit ────────────────────────────────────────────────
@@ -608,9 +608,17 @@ const PostAoi: React.FC = () => {
                     } else {
                         addToast(`Barcode "${code}" registered: PASS.`, 'success');
                     }
+                    // Update stats numbers directly from the scan response.
+                    if (res.statistics) setStats(prev => ({ ...prev, ...res.statistics }));
+                    if (res.isCompleted && activeSession?.status !== 'Completed') {
+                        addToast('Post AOI Session completed successfully.', 'success');
+                        setActiveSession(prev => prev ? { ...prev, status: 'Completed' } : null);
+                        fetchSessionsLists();
+                    }
                     fetchSessionStats(activeSession.id);
                 } else {
                     addToast(res.message || `Invalid Serial Number. This Serial Number does not belong to the selected Work Order.`, 'error');
+                    if (res.statistics) setStats(prev => ({ ...prev, ...res.statistics }));
                     fetchSessionStats(activeSession.id);
                 }
             }

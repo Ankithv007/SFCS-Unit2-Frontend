@@ -23,6 +23,21 @@ const getBandFromTpn = (tpn: string | null | undefined): string => {
     return SKU_TO_BAND_MAP[clean] || SKU_TO_BAND_MAP[tpn.trim()] || '—';
 };
 
+// ─── Helper to clean defect text (removes 'Point 1:', 'Point 1 -', 'point2:', etc.) ─────────
+export const cleanDefectDescription = (text: string | null | undefined): string => {
+    if (!text || text === '—' || text === '-' || text === 'no defect') return text || '—';
+    const parts = String(text).split(/;\s*|\n+/);
+    const cleaned = parts
+        .map((p) => {
+            let s = p.trim();
+            s = s.replace(/^(?:point\s*\d+[\s:\-–.]*|point[\s:\-–.]*|:?\s*\d+\s*[:\-–.]\s*)/i, '').trim();
+            return s;
+        })
+        .filter((p) => p.length > 0 && p !== '—' && p !== '-');
+
+    return cleaned.length > 0 ? cleaned.join('; ') : (text ? String(text).trim() : '—');
+};
+
 // ─── Toaster Notification System ─────────────────────────────────────────────
 interface Toast {
     id: number;
@@ -325,8 +340,8 @@ export const RrhIvi: React.FC = () => {
             setRrhUnit('no defect');
             setStatusVal('PASS');
         } else {
-            const defectText = failedCps.map(c => `Point ${c.id}: ${c.remark.trim()}`).filter(Boolean).join('; ');
-            setRrhUnit(defectText);
+            const defectText = failedCps.map(c => c.remark?.trim() ? cleanDefectDescription(c.remark.trim()) : '').filter(Boolean).join('; ');
+            setRrhUnit(defectText || 'Defect noted');
             setStatusVal('FAIL');
         }
 
@@ -580,7 +595,8 @@ export const RrhIvi: React.FC = () => {
         // Recalculate RRH unit defect and overall status
         const failedCps = newCheckpoints.filter(c => c.status === 'FAIL');
         if (failedCps.length > 0) {
-            setRrhUnit(failedCps.map(c => `Point ${c.id}: ${c.remark}`).filter(Boolean).join('; '));
+            const defectText = failedCps.map(c => c.remark?.trim() ? cleanDefectDescription(c.remark.trim()) : '').filter(Boolean).join('; ');
+            setRrhUnit(defectText || 'Defect noted');
             setStatusVal('FAIL');
         } else {
             setRrhUnit('no defect');
@@ -2185,7 +2201,7 @@ export const RrhIvi: React.FC = () => {
                                             <td>{row.duplexer_main || '—'}</td>
                                             <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{row.duplexer_part_no || '—'}</td>
                                             <td style={{ color: '#b91c1c', fontWeight: 600, maxWidth: '240px' }}>
-                                                {row.rrh_unit || 'Defect noted'}
+                                                {cleanDefectDescription(row.rrh_unit) || 'Defect noted'}
                                             </td>
                                             <td>
                                                 <span className={styles.badgeFail}>FAIL</span>

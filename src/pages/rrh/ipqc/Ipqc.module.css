@@ -1,0 +1,1441 @@
+/* ─── RRH IPQC Module Stylesheet (Exact Match to RRH IVI) ─────────────────── */
+.container {
+    padding: 2rem;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #111827;
+}
+
+.header {
+    margin-bottom: 1.5rem;
+}
+
+.header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #333333;
+    margin: 0 0 0.5rem 0;
+}
+
+.header p {
+    color: #6b7280;
+    font-size: 1rem;
+    margin: 0;
+}
+
+/* ─── Cards ───────────────────────────────────────────────────────────────── */
+.card {
+    background: #ffffff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e7eb;
+    margin-bottom: 2rem;
+}
+
+.card h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+/* ─── Buttons (Matching IVI) ──────────────────────────────────────────────── */
+.button {
+    padding: 0.75rem 2rem;
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+}
+
+.button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);
+    filter: brightness(110%);
+}
+
+.button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.secondaryButton {
+    padding: 0.5rem 1rem;
+    background-color: white;
+    color: #4b5563;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.secondaryButton:hover:not(:disabled) {
+    background-color: #f3f4f6;
+    color: #111827;
+}
+
+.secondaryButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.detailBackButton {
+    padding: 0.6rem 1.1rem;
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    color: #1f2937;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.detailBackButton:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #111827;
+}
+
+.cancelClearButton {
+    padding: 0.4rem 1.1rem;
+    background: #ffffff;
+    color: #dc2626;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.cancelClearButton:hover {
+    background: #fef2f2;
+    border-color: #f87171;
+}
+
+.downloadMasterButton {
+    padding: 0.45rem 1rem;
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #86efac;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.downloadMasterButton:hover {
+    background: #dcfce7;
+    border-color: #4ade80;
+}
+
+.exportExcelButton {
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
+
+.exportExcelButton:hover:not(:disabled) {
+    filter: brightness(110%);
+    transform: translateY(-1px);
+}
+
+.greenReportButton {
+    padding: 0.45rem 1rem;
+    background: #10b981;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.2s;
+}
+
+.greenReportButton:hover:not(:disabled) {
+    background: #059669;
+}
+
+.cyanExportButton {
+    padding: 0.45rem 1rem;
+    background: #0284c7;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.2s;
+}
+
+.cyanExportButton:hover:not(:disabled) {
+    background: #0369a1;
+}
+
+.inspectUnitButton {
+    padding: 0.35rem 0.85rem;
+    background: #0284c7;
+    color: #ffffff;
+    border: none;
+    border-radius: 5px;
+    font-weight: 600;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.inspectUnitButton:hover {
+    background: #0369a1;
+}
+
+/* ─── Input & Select ──────────────────────────────────────────────────────── */
+.input,
+.select {
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    background-color: #f9fafb;
+    width: 100%;
+    color: #111827;
+}
+
+.input:focus,
+.select:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    background-color: white;
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.inputGroup label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+/* ─── Work Order Details Panel (PreAoi unified style from IVI) ─────────────── */
+.infoPanel {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+.infoPanelTitle {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+}
+
+.infoPanelGrid {
+    padding: 0;
+}
+
+.infoItem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.infoLabel {
+    font-size: 0.75rem;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.infoValue {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+/* ─── Top Session Nav & Info (Photo 2) ────────────────────────────────────── */
+.topNavRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.topNavRight {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 0.95rem;
+}
+
+.woInfoCard {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.25rem 2rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.woInfoGrid4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .woInfoGrid4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.woInfoValueBlue {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #2563eb;
+}
+
+.woInfoValueGreen {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #16a34a;
+}
+
+/* ─── 5 Stats Cards Grid (Matching IVI & Photo 2) ────────────────────────── */
+.statsGrid5 {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+@media (max-width: 1024px) {
+    .statsGrid5 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .statsGrid5 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.statCard {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.statCardBlue {
+    border-left: 4px solid #2563eb;
+}
+
+.statCardGreen {
+    border-left: 4px solid #10b981;
+}
+
+.statCardAmber {
+    border-left: 4px solid #f59e0b;
+}
+
+.statCardPurple {
+    border-left: 4px solid #8b5cf6;
+}
+
+.statCardCyan {
+    border-left: 4px solid #06b6d4;
+}
+
+.statLabel {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: capitalize;
+}
+
+.statValue {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #1e293b;
+    margin: 0;
+    line-height: 1.2;
+}
+
+/* ─── High-Speed Scanner Bar (Matching IVI) ──────────────────────────────── */
+.scannerCard {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.scannerHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.scannerTitle {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+}
+
+.scannerStatus {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.blinkingDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #16a34a;
+    display: inline-block;
+    animation: blink 1.5s infinite ease-in-out;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.85); }
+}
+
+.scannerRow {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.scannerInput {
+    flex: 1;
+    padding: 0.75rem 1.1rem;
+    border: 2px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 1rem;
+    background: #f8fafc;
+    color: #0f172a;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.scannerInput:focus {
+    outline: none;
+    border-color: #4f46e5;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.scannerHelpText {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0;
+}
+
+/* ─── Unit Readout Info Panel (Photo 2) ──────────────────────────────────── */
+.scannedInfoPanel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #3b82f6;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.75rem;
+}
+
+.scannedInfoGridRow1 {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+@media (max-width: 1400px) {
+    .scannedInfoGridRow1 {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .scannedInfoGridRow1 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.scannedInfoGridRow2 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    .scannedInfoGridRow2 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.scannedInfoItem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.scannedInfoLabel {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.scannedInfoValue {
+    font-size: 0.95rem;
+    color: #0f172a;
+    font-weight: 700;
+    word-break: break-all;
+}
+
+.bandText {
+    color: #2563eb;
+    font-weight: 800;
+}
+
+.duplexerText {
+    color: #059669;
+    font-weight: 700;
+}
+
+/* ─── Unit & Component Tracking Section (Photo 1) ────────────────────────── */
+.trackingSection {
+    margin-bottom: 2rem;
+    padding-top: 0.5rem;
+}
+
+.trackingHeaderRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.35rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.trackingTitle {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.trackingBadge {
+    padding: 0.25rem 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    background: #f8fafc;
+}
+
+.trackingSubtitle {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0 0 1.25rem 0;
+}
+
+.formGrid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+@media (max-width: 768px) {
+    .formGrid2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.formGrid6 {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+@media (max-width: 1200px) {
+    .formGrid6 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .formGrid6 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.fieldLabel {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+.formInput {
+    padding: 0.7rem 0.95rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.92rem;
+    background: #ffffff;
+    color: #0f172a;
+    transition: all 0.2s;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.formInput:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+/* ─── 7 Checkpoints List (Photo 1) ───────────────────────────────────────── */
+.checklistSection {
+    border-top: 1px solid #f1f5f9;
+    padding-top: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.checklistItem {
+    padding: 1.25rem 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.checklistItem:last-child {
+    border-bottom: none;
+}
+
+.checklistItemHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.85rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.checkpointTitle {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+}
+
+.badgeInitial {
+    padding: 0.2rem 0.65rem;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: lowercase;
+}
+
+.badgeConfirmedPass {
+    padding: 0.2rem 0.65rem;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #166534;
+}
+
+.badgeConfirmedFail {
+    padding: 0.2rem 0.65rem;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #991b1b;
+}
+
+.checkpointButtonsRow {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.passSelectButton {
+    padding: 0.5rem 1.4rem;
+    background: #ffffff;
+    color: #10b981;
+    border: 1px solid #10b981;
+    border-radius: 5px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.passSelectButtonActive {
+    background: #10b981;
+    color: #ffffff;
+    border-color: #10b981;
+}
+
+.failSelectButton {
+    padding: 0.5rem 1.4rem;
+    background: #ffffff;
+    color: #ef4444;
+    border: 1px solid #ef4444;
+    border-radius: 5px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.failSelectButtonActive {
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #ef4444;
+}
+
+.confirmBox {
+    margin-top: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.confirmPassButton {
+    padding: 0.5rem 1.25rem;
+    background: #16a34a;
+    color: #ffffff;
+    border: none;
+    border-radius: 5px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.15s;
+}
+
+.confirmPassButton:hover {
+    background: #15803d;
+}
+
+.confirmFailButton {
+    padding: 0.5rem 1.25rem;
+    background: #dc2626;
+    color: #ffffff;
+    border: none;
+    border-radius: 5px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.15s;
+}
+
+.confirmFailButton:hover {
+    background: #b91c1c;
+}
+
+.checkpointRemarkTextarea {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    font-family: inherit;
+    font-size: 0.92rem;
+    box-sizing: border-box;
+    background: #ffffff;
+    resize: vertical;
+}
+
+.checkpointRemarkTextarea:focus {
+    outline: none;
+    border-color: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
+.submitInspectionFullButton {
+    width: 100%;
+    padding: 0.9rem 1.5rem;
+    background: #4f46e5;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(79, 70, 229, 0.25);
+    margin-top: 1.5rem;
+}
+
+.submitInspectionFullButton:hover:not(:disabled) {
+    background: #4338ca;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(79, 70, 229, 0.35);
+}
+
+.submitInspectionFullButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ─── Table Common (Matching IVI) ─────────────────────────────────────────── */
+.tableContainer {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+
+.table th {
+    background-color: #f8fafc;
+    color: #475569;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.table td {
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: 0.95rem;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.table tr:last-child td {
+    border-bottom: none;
+}
+
+.table tr:nth-child(even) {
+    background-color: #f9fafb;
+}
+
+.table tr:hover td {
+    background-color: #f1f5f9;
+}
+
+.tableCard {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tableHeaderRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.tableTitle {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+}
+
+.tableSubtitle {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0.25rem 0 0 0;
+}
+
+.tableControlsRight {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.tableSearchInput {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    min-width: 260px;
+    background: #f9fafb;
+}
+
+.tableSearchInput:focus {
+    outline: none;
+    border-color: #4f46e5;
+    background: #ffffff;
+}
+
+.tableWrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+/* ─── Table Badges & Specific Colors ─────────────────────────────────────── */
+.bandSerialText {
+    color: #059669;
+    font-weight: 600;
+}
+
+.physicalSerialText {
+    color: #c2410c;
+    font-weight: 600;
+}
+
+.woLink {
+    color: #4f46e5;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.woLink:hover {
+    text-decoration: underline;
+}
+
+.statusBadgePass {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    border-radius: 1rem;
+    color: #166534;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.statusBadgeCompleted {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    color: #334155;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.statusBadgeFail {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 1rem;
+    color: #991b1b;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+/* ─── Pagination Footer ───────────────────────────────────────────────────── */
+.paginationRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: #64748b;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.paginationButtons {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* ─── Re-inspection Banner ────────────────────────────────────────────────── */
+.reinspectionBanner {
+    background: #fffbeb;
+    border: 1px solid #fef3c7;
+    border-left: 4px solid #f59e0b;
+    padding: 0.85rem 1.25rem;
+    border-radius: 0 6px 6px 0;
+    color: #92400e;
+    margin-bottom: 1.25rem;
+    font-size: 0.92rem;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+/* ─── Standard IVI Tables & Badges ────────────────────────────────────────── */
+.tableContainer {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+
+.table th {
+    background-color: #f8fafc;
+    color: #475569;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.table td {
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: 0.95rem;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.table tr:last-child td {
+    border-bottom: none;
+}
+
+.table tr:nth-child(even) {
+    background-color: #f9fafb;
+}
+
+.table tr:hover td {
+    background-color: #f1f5f9;
+}
+
+.badgePass {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background-color: #dcfce7;
+    color: #15803d;
+}
+
+.badgeReinspectedPass {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background-color: #ffedd5;
+    color: #c2410c;
+    border: 1px solid #fdba74;
+}
+
+.badgeFail {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background-color: #fee2e2;
+    color: #b91c1c;
+}
+
+.badgeProgress {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background-color: #e0e7ff;
+    color: #4338ca;
+}
+
+.badgeCompleted {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background-color: #dcfce7;
+    color: #15803d;
+}
+
+.recentHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.4rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.recentTitle {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+}
+
+.exportExcelButton {
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
+
+.exportExcelButton:hover:not(:disabled) {
+    filter: brightness(110%);
+    transform: translateY(-1px);
+}
+
+.exportExcelButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.tableContainer {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+
+.table th {
+    background-color: #f8fafc;
+    color: #475569;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.table td {
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: 0.95rem;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.table tr:last-child td {
+    border-bottom: none;
+}
+
+.table tr:nth-child(even) {
+    background-color: #f9fafb;
+}
+
+.table tr:hover td {
+    background-color: #f1f5f9;
+}
+
+/* ─── Production Scanner Feature (Matching Inward & IVI RRH) ───────────────────── */
+.detailScanCard {
+    background: #f9fafb;
+    border: 1px dashed #d1d5db;
+    border-radius: 0.75rem;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.detailScanForm {
+    display: grid;
+    gap: 1rem;
+}
+
+.detailScanRow {
+    display: flex;
+    gap: 0.85rem;
+    align-items: center;
+}
+
+.detailScanInput {
+    flex: 1;
+    min-width: 0;
+    height: 52px;
+    padding: 0 1.1rem;
+    border: 2px solid #6366f1;
+    border-radius: 0.65rem;
+    color: #111827;
+    background: white;
+    font-size: 1.1rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.detailScanInput:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.14);
+}
+
+.detailScanButton {
+    height: 52px;
+    padding: 0 2rem;
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    color: white;
+    border: none;
+    border-radius: 0.65rem;
+    box-shadow: 0 6px 14px rgba(79, 70, 229, 0.22);
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.detailScanButton:hover:not(:disabled) {
+    filter: brightness(110%);
+    transform: translateY(-1px);
+}
+
+.detailScanButton:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+}
+
+@keyframes blinkAnimation {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.85); }
+}
+
+.blinkingDot {
+    animation: blinkAnimation 1.5s infinite ease-in-out;
+}
+
+.clearButton {
+    padding: 0.75rem 1.5rem;
+    background: #475569;
+    color: #ffffff;
+    border: none;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.clearButton:hover {
+    background: #334155;
+}
+
+/* Readout panel for scanned serial */
+.scannedInfoPanel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.scannedInfoGridRow1 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.scannedInfoGridRow2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1.25rem;
+}
+
+.scannedInfoItem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.scannedInfoLabel {
+    font-size: 0.75rem;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.scannedInfoValue {
+    font-size: 0.95rem;
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.bandText {
+    color: #2563eb;
+    font-weight: 700;
+}
+
+.detailBackButton {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    color: #1f2937;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.detailBackButton:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #111827;
+}
+
+.badgeProgress {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    background: #e0e7ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 1rem;
+    color: #4338ca;
+    font-size: 0.8rem;
+    font-weight: 700;
+}

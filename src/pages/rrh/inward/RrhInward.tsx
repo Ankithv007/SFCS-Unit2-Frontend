@@ -358,10 +358,10 @@ const Inward: React.FC = () => {
 
     // ─── Fetching Methods ────────────────────────────────────────────────────
 
-    // 1. Fetch Eligible Work Orders (NO PCB-Side filtering!)
+    // 1. Fetch Eligible Work Orders (Excluding active or completed in Inward)
     const fetchEligibleWorkOrders = async () => {
         try {
-            const response = await apiFetch('/api/rrh/work-orders?limit=all');
+            const response = await apiFetch('/api/rrh/inward/eligible-work-orders');
             setEligibleWos(response?.data || []);
         } catch (err: any) {
             console.error('Error fetching eligible work orders:', err);
@@ -453,6 +453,7 @@ const Inward: React.FC = () => {
     const fetchSessionsLists = () => {
         fetchActiveSessions(activePage, activeLimit, activeSearch);
         fetchCompletedSessions(completedPage, completedLimit, completedSearch);
+        fetchEligibleWorkOrders();
     };
 
     // 5. Fetch Session Statistics and Scanned Products

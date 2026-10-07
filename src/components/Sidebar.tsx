@@ -64,6 +64,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
     const [expandedModule, setExpandedModule] = useState<string | null>(null);
     const [isStencilMgmtExpanded, setIsStencilMgmtExpanded] = useState(false);
     const [isSmtLineExpanded, setIsSmtLineExpanded] = useState(false);
+    const [isRrhEcnExpanded, setIsRrhEcnExpanded] = useState(false);
+    const [isRrhNonEcnExpanded, setIsRrhNonEcnExpanded] = useState(false);
 
     const isSuperAdmin = user?.role === 'Super Admin';
 
@@ -86,7 +88,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
 
     useEffect(() => {
         if (location.pathname.startsWith('/pre-testing')) setExpandedModule('pre-testing');
-        else if (location.pathname.startsWith('/rrh')) setExpandedModule('rrh');
+        else if (location.pathname.startsWith('/rrh')) {
+            setExpandedModule('rrh');
+            if (location.pathname.startsWith('/rrh/ipqc') || location.pathname.startsWith('/rrh/ecn')) {
+                setIsRrhEcnExpanded(true);
+            }
+            if (location.pathname.startsWith('/rrh/non-ecn')) {
+                setIsRrhNonEcnExpanded(true);
+            }
+        }
         else if (location.pathname.startsWith('/smt')) {
             if (location.pathname !== '/smt/work-order') {
                 setExpandedModule('smt');
@@ -638,12 +648,50 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             )}
                             {hasPermission('rrh_ipqc') && (
                                 <div
-                                    className={`${styles.submenuItem} ${isActive('/rrh/ipqc') ? styles.activeSubmenu : ''}`}
-                                    onClick={() => navigate('/rrh/ipqc')}
+                                    className={`${styles.submenuItem} ${isRrhEcnExpanded ? styles.activeSubmenuParent : ''}`}
+                                    onClick={() => setIsRrhEcnExpanded(!isRrhEcnExpanded)}
                                 >
                                     <span className={styles.menuIcon}>
-                                        <ShieldCheck size={18} />
-                                    </span> IPQC
+                                        <FileCheck size={18} />
+                                    </span> ECN
+                                </div>
+                            )}
+                            {isRrhEcnExpanded && isExpanded && (
+                                <div className={styles.subSubmenu}>
+                                    {hasPermission('rrh_ipqc') && (
+                                        <div
+                                            className={`${styles.subSubmenuItem} ${isActive('/rrh/ipqc') ? styles.activeSubSubmenu : ''}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate('/rrh/ipqc');
+                                            }}
+                                        >
+                                            <span className={styles.menuIcon}>
+                                                <ShieldCheck size={16} />
+                                            </span> IPQC
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {(isSuperAdmin || hasPermission('rrh_inward') || hasPermission('rrh_ivi')) && (
+                                <div
+                                    className={`${styles.submenuItem} ${isRrhNonEcnExpanded ? styles.activeSubmenuParent : ''}`}
+                                    onClick={() => setIsRrhNonEcnExpanded(!isRrhNonEcnExpanded)}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <Layers size={18} />
+                                    </span> Non-ECN
+                                </div>
+                            )}
+                            {isRrhNonEcnExpanded && isExpanded && (
+                                <div className={styles.subSubmenu}>
+                                    <div
+                                        className={styles.subSubmenuItem}
+                                        style={{ fontStyle: 'italic', opacity: 0.6, cursor: 'default' }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        (No items)
+                                    </div>
                                 </div>
                             )}
                             {hasPermission('rrh_debug') && (

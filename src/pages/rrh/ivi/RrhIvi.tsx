@@ -235,6 +235,9 @@ export const RrhIvi: React.FC = () => {
     }, []);
     const removeToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
+    // ─── Process Routing / Stage Selection State (ECN or Non-ECN, single selection) ───
+    const [selectedRoute, setSelectedRoute] = useState<'ECN' | 'NON_ECN'>('ECN');
+
     // ─── Session Setup State ─────────────────────────────────────────────────
     const [eligibleWos, setEligibleWos] = useState<EligibleWorkOrder[]>([]);
     const [selectedWoId, setSelectedWoId] = useState('');
@@ -1198,12 +1201,16 @@ export const RrhIvi: React.FC = () => {
                 formData.append('images', img);
             }
 
+            // Append route destination
+            formData.append('route', selectedRoute);
+            formData.append('selected_route', selectedRoute);
+
             await apiFetch(`/api/rrh/ivi/sessions/${activeSession.id}/inspections`, {
                 method: 'POST',
                 body: formData
             });
 
-            addToast(`Inspection submitted successfully with status: ${statusVal}`, 'success');
+            addToast(`Inspection submitted successfully with status: ${statusVal} (Route: ${selectedRoute === 'ECN' ? 'ECN -> IPQC' : 'Non-ECN'})`, 'success');
 
             // Refresh recent inspections & stats
             fetchSessionData(activeSession.id);
@@ -1365,7 +1372,107 @@ export const RrhIvi: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                            {/* --- PROCESS ROUTING / STAGE SELECTION CARD --- */}
+                            <div style={{
+                                backgroundColor: '#ffffff',
+                                borderRadius: '0.75rem',
+                                border: '1px solid #e2e8f0',
+                                padding: '1.25rem',
+                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                                boxSizing: 'border-box'
+                            }}>
+                                {/* Card Header */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                                    <span style={{ fontSize: '1.2rem' }}>🔀</span>
+                                    <div>
+                                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1e293b' }}>
+                                            RRH Process Routing / Stage Selection
+                                        </h4>
+                                        <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>
+                                            Select the quality check and production stages required for this Work Order. Process steps execute strictly in ascending order.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Stage Pills / Chips (Strictly Single Selection at a time) */}
+                                <div style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '0.75rem',
+                                    marginTop: '0.75rem',
+                                    alignItems: 'center'
+                                }}>
+                                    {/* ECN Option */}
+                                    <label
+                                        onClick={() => setSelectedRoute('ECN')}
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            padding: '0.5rem 0.85rem',
+                                            borderRadius: '0.5rem',
+                                            fontSize: '0.875rem',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            userSelect: 'none',
+                                            transition: 'all 0.15s ease-in-out',
+                                            backgroundColor: selectedRoute === 'ECN' ? '#eff6ff' : '#f8fafc',
+                                            color: selectedRoute === 'ECN' ? '#1d4ed8' : '#475569',
+                                            border: selectedRoute === 'ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                            boxShadow: selectedRoute === 'ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedRoute === 'ECN'}
+                                            onChange={() => setSelectedRoute('ECN')}
+                                            style={{
+                                                width: '16px',
+                                                height: '16px',
+                                                accentColor: '#2563eb',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span>ECN</span>
+                                    </label>
+
+                                    {/* Non-ECN Option */}
+                                    <label
+                                        onClick={() => setSelectedRoute('NON_ECN')}
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            padding: '0.5rem 0.85rem',
+                                            borderRadius: '0.5rem',
+                                            fontSize: '0.875rem',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            userSelect: 'none',
+                                            transition: 'all 0.15s ease-in-out',
+                                            backgroundColor: selectedRoute === 'NON_ECN' ? '#eff6ff' : '#f8fafc',
+                                            color: selectedRoute === 'NON_ECN' ? '#1d4ed8' : '#475569',
+                                            border: selectedRoute === 'NON_ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                            boxShadow: selectedRoute === 'NON_ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedRoute === 'NON_ECN'}
+                                            onChange={() => setSelectedRoute('NON_ECN')}
+                                            style={{
+                                                width: '16px',
+                                                height: '16px',
+                                                accentColor: '#2563eb',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span>Non-ECN</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
                                 <button
                                     onClick={handleStartSession}
                                     className={styles.button}
@@ -1923,6 +2030,108 @@ export const RrhIvi: React.FC = () => {
                                         onChange={e => setRemarksVal(e.target.value)}
                                         placeholder="Enter optional additional remarks..."
                                     />
+                                </div>
+                            </div>
+
+                            {/* --- PROCESS ROUTING / STAGE SELECTION CARD (DIRECTLY IN INSPECTION FORM) --- */}
+                            <div style={{
+                                backgroundColor: '#ffffff',
+                                borderRadius: '0.75rem',
+                                border: '1px solid #e2e8f0',
+                                padding: '1.25rem',
+                                marginTop: '1.25rem',
+                                marginBottom: '1.25rem',
+                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                                boxSizing: 'border-box'
+                            }}>
+                                {/* Card Header */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                                    <span style={{ fontSize: '1.2rem' }}>🔀</span>
+                                    <div>
+                                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1e293b' }}>
+                                            RRH Process Routing / Stage Selection
+                                        </h4>
+                                        <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>
+                                            Select the quality check and production stages required for this Work Order. Process steps execute strictly in ascending order.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Stage Pills / Chips (Strictly Single Selection at a time) */}
+                                <div style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '0.75rem',
+                                    marginTop: '0.75rem',
+                                    alignItems: 'center'
+                                }}>
+                                    {/* ECN Pill */}
+                                    <label
+                                        onClick={() => setSelectedRoute('ECN')}
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            padding: '0.5rem 0.85rem',
+                                            borderRadius: '0.5rem',
+                                            fontSize: '0.875rem',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            userSelect: 'none',
+                                            transition: 'all 0.15s ease-in-out',
+                                            backgroundColor: selectedRoute === 'ECN' ? '#eff6ff' : '#f8fafc',
+                                            color: selectedRoute === 'ECN' ? '#1d4ed8' : '#475569',
+                                            border: selectedRoute === 'ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                            boxShadow: selectedRoute === 'ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedRoute === 'ECN'}
+                                            onChange={() => setSelectedRoute('ECN')}
+                                            style={{
+                                                width: '16px',
+                                                height: '16px',
+                                                accentColor: '#2563eb',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span>ECN</span>
+                                    </label>
+
+                                    {/* Non-ECN Pill */}
+                                    <label
+                                        onClick={() => setSelectedRoute('NON_ECN')}
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            padding: '0.5rem 0.85rem',
+                                            borderRadius: '0.5rem',
+                                            fontSize: '0.875rem',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            userSelect: 'none',
+                                            transition: 'all 0.15s ease-in-out',
+                                            backgroundColor: selectedRoute === 'NON_ECN' ? '#eff6ff' : '#f8fafc',
+                                            color: selectedRoute === 'NON_ECN' ? '#1d4ed8' : '#475569',
+                                            border: selectedRoute === 'NON_ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                            boxShadow: selectedRoute === 'NON_ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedRoute === 'NON_ECN'}
+                                            onChange={() => setSelectedRoute('NON_ECN')}
+                                            style={{
+                                                width: '16px',
+                                                height: '16px',
+                                                accentColor: '#2563eb',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span>Non-ECN</span>
+                                    </label>
                                 </div>
                             </div>
 

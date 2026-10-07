@@ -78,7 +78,7 @@ interface PostAoiSession {
 interface ScanRecord {
     scan_id: string;
     barcode: string;
-    result: 'PASS' | 'FAIL' | 'INVALID';
+    result: 'PASS' | 'FAIL';
     remark: string | null;
     scanned_by: string;
     scanned_at: string;
@@ -134,16 +134,12 @@ const PostAoi: React.FC = () => {
         passed: number;
         failed: number;
         pending: number;
-        invalid: number;
-        duplicate: number;
         scans: ScanRecord[];
     }>({
         workOrderQuantity: 0,
         passed: 0,
         failed: 0,
         pending: 0,
-        invalid: 0,
-        duplicate: 0,
         scans: []
     });
     const [scanBarcodeVal, setScanBarcodeVal] = useState('');
@@ -970,8 +966,6 @@ const PostAoi: React.FC = () => {
             const p = prod.passed ?? 0;
             const f = prod.failed ?? 0;
             const pend = prod.pending ?? 0;
-            const inv = prod.invalid ?? 0;
-            const dup = prod.duplicate ?? prod.duplicate_scan_count ?? 0;
 
             const yieldVal = (q && q > 0)
                 ? (((p || 0) / q) * 100).toFixed(2) + '%'
@@ -982,9 +976,7 @@ const PostAoi: React.FC = () => {
                 ['Passed Quantity', val(p)],
                 ['Yield (%)', yieldVal],
                 ['Failed Quantity', val(f)],
-                ['Pending Quantity', val(pend)],
-                ['Invalid Scan Quantity', val(inv)],
-                ['Duplicate Scan Quantity', val(dup)]
+                ['Pending Quantity', val(pend)]
             ].forEach(([l, v], i) => kvRow(l, v, i % 2 === 0));
 
             y += 5;
@@ -1238,8 +1230,6 @@ const PostAoi: React.FC = () => {
             bg = '#dcfce7'; color = '#15803d';
         } else if (lower === 'fail') {
             bg = '#fee2e2'; color = '#b91c1c';
-        } else if (lower === 'invalid') {
-            bg = '#fef3c7'; color = '#b45309';
         }
 
         return (
@@ -1852,14 +1842,6 @@ const PostAoi: React.FC = () => {
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Pending</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#475569' }}>{stats.pending}</h2>
                         </div>
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #d97706', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Invalid</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b45309' }}>{stats.invalid}</h2>
-                        </div>
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #ea580c', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Duplicate</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#c2410c' }}>{stats.duplicate}</h2>
-                        </div>
                     </div>
 
                     {/* Barcode Scanner Input */}
@@ -2026,7 +2008,7 @@ const PostAoi: React.FC = () => {
                                                 {renderRemarkCell(scan.repair_remark, 'Repair')}
                                             </td>
                                             <td style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                                {activeSession.status !== 'Completed' && scan.result !== 'INVALID' && (
+                                                {activeSession.status !== 'Completed' && (
                                                     <button
                                                         className={styles.secondaryButton}
                                                         title="Edit barcode"
@@ -2046,16 +2028,14 @@ const PostAoi: React.FC = () => {
                                                         ❌
                                                     </button>
                                                 )}
-                                                {scan.result !== 'INVALID' && (
-                                                    <button
-                                                        className={styles.secondaryButton}
-                                                        title="View QR code"
-                                                        style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
-                                                        onClick={() => setSelectedQrBarcode(scan.barcode)}
-                                                    >
-                                                        🔳
-                                                    </button>
-                                                )}
+                                                <button
+                                                    className={styles.secondaryButton}
+                                                    title="View QR code"
+                                                    style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
+                                                    onClick={() => setSelectedQrBarcode(scan.barcode)}
+                                                >
+                                                    🔳
+                                                </button>
                                             </td>
                                         </tr>
                                     );

@@ -77,7 +77,7 @@ interface FgSession {
 interface ScanRecord {
     scan_id: string;
     barcode: string;
-    result: 'PASS' | 'INVALID';
+    result: 'PASS';
     remark: string | null;
     scanned_by: string;
     scanned_at: string;
@@ -133,16 +133,12 @@ const SMTFG: React.FC = () => {
         passed: number;
         failed: number;
         pending: number;
-        invalid: number;
-        duplicate: number;
         scans: ScanRecord[];
     }>({
         workOrderQuantity: 0,
         passed: 0,
         failed: 0,
         pending: 0,
-        invalid: 0,
-        duplicate: 0,
         scans: []
     });
     const [scanBarcodeVal, setScanBarcodeVal] = useState('');
@@ -281,8 +277,6 @@ const SMTFG: React.FC = () => {
                     passed: data.passed || 0,
                     failed: data.failed || 0,
                     pending: data.pending || 0,
-                    invalid: data.invalid || 0,
-                    duplicate: data.duplicate || 0,
                     scans: data.scans || []
                 });
 
@@ -629,8 +623,6 @@ const SMTFG: React.FC = () => {
         addKVRow('Passed Quantity:', (data.passed ?? data.production?.passed ?? 0).toString());
         addKVRow('Failed Quantity:', (data.failed ?? data.production?.failed ?? 0).toString());
         addKVRow('Pending Quantity:', (data.pending ?? data.production?.pending ?? 0).toString());
-        addKVRow('Invalid Scan Quantity:', (data.invalid ?? data.production?.invalid ?? 0).toString());
-        addKVRow('Duplicate Scan Quantity:', (data.duplicate ?? data.duplicate_scan_count ?? data.production?.duplicate ?? 0).toString());
 
         // Page Break for Scan Logs Table
         doc.addPage();
@@ -803,8 +795,6 @@ const SMTFG: React.FC = () => {
         switch (result) {
             case 'PASS':
                 return <span className={styles.detailPassedBadge}>PASS</span>;
-            case 'INVALID':
-                return <span className={`${styles.detailPendingBadge} ${styles.statusRed}`}>INVALID</span>;
             default:
                 return <span className={styles.detailPendingBadge}>{result}</span>;
         }
@@ -1364,14 +1354,6 @@ const SMTFG: React.FC = () => {
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #f59e0b', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Pending</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b45309' }}>{stats.pending}</h2>
-                        </div>
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #d97706', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Invalid</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b45309' }}>{stats.invalid}</h2>
-                        </div>
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #ea580c', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Duplicate</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#c2410c' }}>{stats.duplicate}</h2>
                         </div>
                     </div>
 

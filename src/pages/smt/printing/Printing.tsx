@@ -11,10 +11,10 @@ import { jsPDF } from 'jspdf';
 import SMTCountDetailsModal from '../../../components/SMTCountDetailsModal';
 
 // ─── Toaster ─────────────────────────────────────────────────────────────────
-interface Toast { 
-    id: number; 
-    message: string; 
-    type: 'success' | 'error' | 'info'; 
+interface Toast {
+    id: number;
+    message: string;
+    type: 'success' | 'error' | 'info';
 }
 
 const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = ({ toasts, onRemove }) => (
@@ -94,7 +94,7 @@ interface PrintingSession {
 interface ScanRecord {
     scan_id: string;
     barcode: string;
-    result: 'PASS' | 'FAIL' | 'INVALID';
+    result: 'PASS' | 'FAIL';
     remark: string | null;
     scanned_by: string;
     scanned_at: string;
@@ -152,16 +152,12 @@ export const Printing: React.FC = () => {
         passed: number;
         failed: number;
         pending: number;
-        invalid: number;
-        duplicate: number;
         scans: ScanRecord[];
     }>({
         workOrderQuantity: 0,
         passed: 0,
         failed: 0,
         pending: 0,
-        invalid: 0,
-        duplicate: 0,
         scans: []
     });
     const [scanBarcodeVal, setScanBarcodeVal] = useState('');
@@ -302,31 +298,31 @@ export const Printing: React.FC = () => {
                 margin: 2,
                 errorCorrectionLevel: 'M'
             })
-            .then(url => {
-                // Create a canvas composite to draw text below QR
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 250;
-                    canvas.height = 295;
-                    const ctx = canvas.getContext('2d');
-                    if (ctx) {
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0);
-                        ctx.font = 'bold 15px monospace';
-                        ctx.fillStyle = '#000000';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(selectedQrBarcode, canvas.width / 2, 275);
-                        setSingleQrDataUrl(canvas.toDataURL('image/png'));
-                    }
-                };
-                img.src = url;
-            })
-            .catch(err => {
-                console.error('QR code generation error:', err);
-                setSingleQrDataUrl(null);
-            });
+                .then(url => {
+                    // Create a canvas composite to draw text below QR
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 250;
+                        canvas.height = 295;
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0);
+                            ctx.font = 'bold 15px monospace';
+                            ctx.fillStyle = '#000000';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(selectedQrBarcode, canvas.width / 2, 275);
+                            setSingleQrDataUrl(canvas.toDataURL('image/png'));
+                        }
+                    };
+                    img.src = url;
+                })
+                .catch(err => {
+                    console.error('QR code generation error:', err);
+                    setSingleQrDataUrl(null);
+                });
         } else {
             setSingleQrDataUrl(null);
         }
@@ -466,7 +462,7 @@ export const Printing: React.FC = () => {
             const data = await apiFetch(`/api/smt/printing/sessions/${sessionId}/stats`);
             if (data) {
                 setStats(data);
-                
+
                 // If backend flags the session as completed, update status locally to Completed
                 if (data.isCompleted && activeSession?.status !== 'Completed') {
                     addToast('Printing Session completed successfully.', 'success');
@@ -950,8 +946,6 @@ export const Printing: React.FC = () => {
             const p = prod.passed ?? 0;
             const f = prod.failed ?? 0;
             const pend = prod.pending ?? 0;
-            const inv = prod.invalid ?? 0;
-            const dup = prod.duplicate ?? prod.duplicate_scan_count ?? 0;
 
             const yieldVal = (q && q > 0)
                 ? (((p || 0) / q) * 100).toFixed(2) + '%'
@@ -962,9 +956,7 @@ export const Printing: React.FC = () => {
                 ['Passed Quantity', val(p)],
                 ['Yield (%)', yieldVal],
                 ['Failed Quantity', val(f)],
-                ['Pending Quantity', val(pend)],
-                ['Invalid Scan Quantity', val(inv)],
-                ['Duplicate Scan Quantity', val(dup)]
+                ['Pending Quantity', val(pend)]
             ].forEach(([l, v], i) => kvRow(l, v, i % 2 === 0));
 
             y += 5;
@@ -1016,7 +1008,7 @@ export const Printing: React.FC = () => {
                     doc.setFont('helvetica', 'normal');
                     doc.setFontSize(7);
                     doc.setTextColor(30, 41, 59);
-                    
+
                     doc.text(val(scan.barcode), cols[0].x + 1, y + 5);
                     doc.text(val(scan.scanned_by), cols[1].x + 1, y + 5);
                     doc.text(fmt(scan.scanned_at), cols[2].x + 1, y + 5);
@@ -1030,7 +1022,7 @@ export const Printing: React.FC = () => {
 
                     doc.setFont('helvetica', 'normal');
                     doc.setTextColor(30, 41, 59);
-                    
+
                     const remark = val(scan.remark);
                     const truncRemark = remark.length > 20 ? remark.slice(0, 18) + '…' : remark;
                     doc.text(truncRemark, cols[4].x + 1, y + 5);
@@ -1063,30 +1055,30 @@ export const Printing: React.FC = () => {
                 margin: 2,
                 errorCorrectionLevel: 'M'
             })
-            .then(url => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 250;
-                    canvas.height = 295;
-                    const ctx = canvas.getContext('2d');
-                    if (ctx) {
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0);
-                        ctx.font = 'bold 15px monospace';
-                        ctx.fillStyle = '#000000';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(barcode, canvas.width / 2, 275);
-                        resolve(canvas.toDataURL('image/png'));
-                    } else {
-                        reject(new Error('Canvas context failed'));
-                    }
-                };
-                img.onerror = reject;
-                img.src = url;
-            })
-            .catch(reject);
+                .then(url => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 250;
+                        canvas.height = 295;
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0);
+                            ctx.font = 'bold 15px monospace';
+                            ctx.fillStyle = '#000000';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(barcode, canvas.width / 2, 275);
+                            resolve(canvas.toDataURL('image/png'));
+                        } else {
+                            reject(new Error('Canvas context failed'));
+                        }
+                    };
+                    img.onerror = reject;
+                    img.src = url;
+                })
+                .catch(reject);
         });
     };
 
@@ -1223,8 +1215,6 @@ export const Printing: React.FC = () => {
             bg = '#dcfce7'; color = '#15803d';
         } else if (lower === 'fail') {
             bg = '#fee2e2'; color = '#b91c1c';
-        } else if (lower === 'invalid') {
-            bg = '#fef3c7'; color = '#b45309';
         }
 
         return (
@@ -1242,7 +1232,7 @@ export const Printing: React.FC = () => {
     return (
         <div className={styles.container}>
             <Toaster toasts={toasts} onRemove={removeToast} />
-            
+
             {/* Top title and Navigation */}
             <div className={styles.header}>
                 <h2>🖨️ SMT Printing Process</h2>
@@ -1254,7 +1244,7 @@ export const Printing: React.FC = () => {
                 // VIEW 1: SETUP & SESSION SELECTION
                 // ─────────────────────────────────────────────────────────────
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
-                    
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
                         {/* Session Setup Card */}
                         <div className={styles.card}>
@@ -1541,7 +1531,7 @@ export const Printing: React.FC = () => {
                                         </tbody>
                                     </table>
                                 </div>
-                                
+
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                                     <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
                                         Showing {Math.min((activePage - 1) * activeLimit + 1, activeTotal)} to {Math.min(activePage * activeLimit, activeTotal)} of {activeTotal} entries
@@ -1754,13 +1744,13 @@ export const Printing: React.FC = () => {
                 // VIEW 2: ACTIVE SCANNING & DETAILS VIEW
                 // ─────────────────────────────────────────────────────────────
                 <div>
-                    
+
                     {/* Header bar and controls */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
                         <button className={styles.detailBackButton} onClick={() => { setActiveSession(null); fetchSessionsLists(); }}>
                             ← Back to Session Setup
                         </button>
-                        
+
                         {/* Status controls removed to simplify workflow */}
                     </div>
 
@@ -1806,7 +1796,7 @@ export const Printing: React.FC = () => {
 
                     {/* Stats Dashboard Grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                        
+
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #2563eb', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>WO Quantity</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#1e293b' }}>{stats.workOrderQuantity}</h2>
@@ -1817,8 +1807,8 @@ export const Printing: React.FC = () => {
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#15803d' }}>{stats.passed}</h2>
                         </div>
 
-                        <div 
-                            className={styles.card} 
+                        <div
+                            className={styles.card}
                             style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #dc2626', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', cursor: 'pointer' }}
                             onClick={() => setShowFailedModal(true)}
                             title="Click to view Failed units"
@@ -1831,17 +1821,6 @@ export const Printing: React.FC = () => {
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Pending</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#475569' }}>{stats.pending}</h2>
                         </div>
-
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #d97706', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Invalid</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b45309' }}>{stats.invalid}</h2>
-                        </div>
-
-                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #ea580c', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Duplicate</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#c2410c' }}>{stats.duplicate}</h2>
-                        </div>
-
                     </div>
 
                     {/* Barcode Scanner Input */}
@@ -1892,7 +1871,7 @@ export const Printing: React.FC = () => {
                             </div>
                             <div className={styles.searchContainer}>
                                 <BarcodeSearch value={scansSearchQuery} onChange={setScansSearchQuery} onFocus={() => setIsSearchFocused(true)} onBlur={() => setIsSearchFocused(false)} />
-                                
+
                                 {/* Exports & Download Bar */}
                                 <div className={styles.searchReports}>
                                     <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600, marginRight: 2 }}>Reports:</span>
@@ -1960,105 +1939,103 @@ export const Printing: React.FC = () => {
                                             );
                                             return (
                                                 <tr key={scan.scan_id} className={`${scan.result === 'FAIL' ? styles.detailPendingRow : ''} ${isMatch ? styles.searchMatchRow : ''}`.trim()}>
-                                            
-                                            {/* Barcode number cell (Inline editable) */}
-                                            <td style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.5px' }}>
-                                                {editingScanId === scan.scan_id ? (
-                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                        <input
-                                                            type="text"
-                                                            className={styles.input}
-                                                            style={{ padding: '0.35rem 0.5rem', width: '220px', fontSize: '0.9rem' }}
-                                                            value={editingBarcodeText}
-                                                            onChange={e => setEditingBarcodeText(e.target.value)}
-                                                            onKeyDown={e => {
-                                                                 if (e.key === 'Enter') submitInlineEdit(scan.scan_id);
-                                                                 if (e.key === 'Escape') setEditingScanId(null);
-                                                            }}
-                                                            autoFocus
-                                                        />
+
+                                                    {/* Barcode number cell (Inline editable) */}
+                                                    <td style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.5px' }}>
+                                                        {editingScanId === scan.scan_id ? (
+                                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                                <input
+                                                                    type="text"
+                                                                    className={styles.input}
+                                                                    style={{ padding: '0.35rem 0.5rem', width: '220px', fontSize: '0.9rem' }}
+                                                                    value={editingBarcodeText}
+                                                                    onChange={e => setEditingBarcodeText(e.target.value)}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === 'Enter') submitInlineEdit(scan.scan_id);
+                                                                        if (e.key === 'Escape') setEditingScanId(null);
+                                                                    }}
+                                                                    autoFocus
+                                                                />
+                                                                <button
+                                                                    className={styles.secondaryButton}
+                                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: '#dcfce7', color: '#15803d', borderColor: '#86efac' }}
+                                                                    onClick={() => submitInlineEdit(scan.scan_id)}
+                                                                >
+                                                                    Save
+                                                                </button>
+                                                                <button
+                                                                    className={styles.secondaryButton}
+                                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: '#fee2e2', color: '#b91c1c', borderColor: '#fca5a5' }}
+                                                                    onClick={() => setEditingScanId(null)}
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <span>{scan.barcode}</span>
+                                                        )}
+                                                    </td>
+
+                                                    <td>{scan.scanned_by}</td>
+
+                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                        {formatTimestamp(scan.scanned_at)}
+                                                    </td>
+
+                                                    <td>{getScanResultBadge(scan.result)}</td>
+
+                                                    <td style={{ color: scan.remark ? '#b91c1c' : '#64748b', fontWeight: scan.remark ? 600 : 'normal' }}>
+                                                        {renderRemarkCell(scan.remark, 'Failure')}
+                                                    </td>
+
+                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                        {formatTimestamp(scan.repair_time)}
+                                                    </td>
+
+                                                    <td style={{ color: scan.repair_remark ? '#166534' : '#64748b', fontWeight: scan.repair_remark ? 600 : 'normal' }}>
+                                                        {renderRemarkCell(scan.repair_remark, 'Repair')}
+                                                    </td>
+
+                                                    <td style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                                        {/* Edit Barcode – icon only */}
+                                                        {activeSession.status !== 'Completed' && (
+                                                            <button
+                                                                className={styles.secondaryButton}
+                                                                title="Edit barcode"
+                                                                style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
+                                                                onClick={() => startInlineEdit(scan)}
+                                                            >
+                                                                ✏️
+                                                            </button>
+                                                        )}
+
+                                                        {/* Transition PASS to FAIL – icon only */}
+                                                        {activeSession.status !== 'Completed' && scan.result === 'PASS' && (
+                                                            <button
+                                                                className={styles.secondaryButton}
+                                                                title="Mark as Failed"
+                                                                style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px', color: '#dc2626', borderColor: '#fca5a5' }}
+                                                                onClick={() => triggerFailRow(scan)}
+                                                            >
+                                                                ❌
+                                                            </button>
+                                                        )}
+
+                                                        {/* Single QR Preview Modal Trigger – icon only */}
                                                         <button
                                                             className={styles.secondaryButton}
-                                                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: '#dcfce7', color: '#15803d', borderColor: '#86efac' }}
-                                                            onClick={() => submitInlineEdit(scan.scan_id)}
+                                                            title="View QR code"
+                                                            style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
+                                                            onClick={() => setSelectedQrBarcode(scan.barcode)}
                                                         >
-                                                            Save
+                                                            🔳
                                                         </button>
-                                                        <button
-                                                            className={styles.secondaryButton}
-                                                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: '#fee2e2', color: '#b91c1c', borderColor: '#fca5a5' }}
-                                                            onClick={() => setEditingScanId(null)}
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <span>{scan.barcode}</span>
-                                                )}
-                                            </td>
+                                                    </td>
 
-                                            <td>{scan.scanned_by}</td>
-
-                                            <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                                {formatTimestamp(scan.scanned_at)}
-                                            </td>
-
-                                            <td>{getScanResultBadge(scan.result)}</td>
-                                            
-                                            <td style={{ color: scan.remark ? '#b91c1c' : '#64748b', fontWeight: scan.remark ? 600 : 'normal' }}>
-                                                {renderRemarkCell(scan.remark, 'Failure')}
-                                            </td>
-
-                                            <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                                {formatTimestamp(scan.repair_time)}
-                                            </td>
-
-                                            <td style={{ color: scan.repair_remark ? '#166534' : '#64748b', fontWeight: scan.repair_remark ? 600 : 'normal' }}>
-                                                {renderRemarkCell(scan.repair_remark, 'Repair')}
-                                            </td>
-
-                                            <td style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                                {/* Edit Barcode – icon only */}
-                                                {activeSession.status !== 'Completed' && scan.result !== 'INVALID' && (
-                                                    <button
-                                                        className={styles.secondaryButton}
-                                                        title="Edit barcode"
-                                                        style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
-                                                        onClick={() => startInlineEdit(scan)}
-                                                    >
-                                                        ✏️
-                                                    </button>
-                                                )}
-
-                                                {/* Transition PASS to FAIL – icon only */}
-                                                {activeSession.status !== 'Completed' && scan.result === 'PASS' && (
-                                                    <button
-                                                        className={styles.secondaryButton}
-                                                        title="Mark as Failed"
-                                                        style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px', color: '#dc2626', borderColor: '#fca5a5' }}
-                                                        onClick={() => triggerFailRow(scan)}
-                                                    >
-                                                        ❌
-                                                    </button>
-                                                )}
-
-                                                {/* Single QR Preview Modal Trigger – icon only */}
-                                                {scan.result !== 'INVALID' && (
-                                                    <button
-                                                        className={styles.secondaryButton}
-                                                        title="View QR code"
-                                                        style={{ padding: '0.3rem 0.45rem', fontSize: '1rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 'auto', borderRadius: '6px' }}
-                                                        onClick={() => setSelectedQrBarcode(scan.barcode)}
-                                                    >
-                                                        🔳
-                                                    </button>
-                                                )}
-                                            </td>
-
-                                        </tr>
-                                    );
-                                })
-                            )}
+                                                </tr>
+                                            );
+                                        })
+                                    )}
                                     {stats.scans.length === 0 && (
                                         <tr>
                                             <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
@@ -2198,7 +2175,7 @@ export const Printing: React.FC = () => {
                         <h3 style={{ borderBottom: 'none', padding: 0, marginBottom: '1.5rem', width: '100%', textAlign: 'center' }}>
                             PCB Barcode QR Code
                         </h3>
-                        
+
                         {singleQrDataUrl ? (
                             <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '1rem', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <img src={singleQrDataUrl} alt="QR Code Label" style={{ width: '200px', height: '236px', display: 'block' }} />
@@ -2221,7 +2198,7 @@ export const Printing: React.FC = () => {
                                 PDF Label 📥
                             </button>
                         </div>
-                        
+
                         <button
                             className={styles.button}
                             style={{ width: '100%', backgroundColor: '#64748b', backgroundImage: 'none' }}

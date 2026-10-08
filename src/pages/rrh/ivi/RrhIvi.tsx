@@ -146,13 +146,17 @@ interface InspectionRecord {
     duplexer_part_no: string;
     rrh_unit: string | null;
     image_urls?: string[];
-    status: 'PASS' | 'FAIL';
+    status: 'PASS' | 'FAIL' | 'SCRAP';
     remarks: string | null;
     scanned_by: string;
     scanned_at: string;
     checkpoints?: any;
     is_reinspected?: boolean;
     defect_fixed?: string | null;
+    route?: string;
+    passed_to_next_stage?: boolean;
+    passed_to_next_stage_at?: string;
+    passed_to_next_stage_by?: string;
 }
 
 interface SessionStats {
@@ -161,6 +165,7 @@ interface SessionStats {
     remainingInward?: number;
     passed: number;
     failed: number;
+    scrapped?: number;
     pending: number;
     total: number;
     yield: string | number;
@@ -287,7 +292,7 @@ export const RrhIvi: React.FC = () => {
     const [duplexerMain, setDuplexerMain] = useState('');
     const [duplexerPartNo, setDuplexerPartNo] = useState('');
     const [rrhUnit, setRrhUnit] = useState('');
-    const [statusVal, setStatusVal] = useState<'PASS' | 'FAIL'>('PASS');
+    const [statusVal, setStatusVal] = useState<'PASS' | 'FAIL' | 'SCRAP'>('PASS');
     const [remarksVal, setRemarksVal] = useState('');
     const [selectedImages, setSelectedImages] = useState<File[]>([]);
     const [isCompressing, setIsCompressing] = useState(false);
@@ -373,7 +378,7 @@ export const RrhIvi: React.FC = () => {
     const [inspectionSearch, setInspectionSearch] = useState('');
     const [recentPage, setRecentPage] = useState(1);
     const recentLimit = 10;
-    const [exportingType, setExportingType] = useState<'RECENT' | 'FAILED' | null>(null);
+    const [exportingType, setExportingType] = useState<'RECENT' | 'FAILED' | 'SCRAP' | null>(null);
     const [viewingImages, setViewingImages] = useState<{ serial: string; images: string[] } | null>(null);
     const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
@@ -478,6 +483,44 @@ export const RrhIvi: React.FC = () => {
         const start = (failedPage - 1) * failedLimit;
         return filteredFailedInspections.slice(start, start + failedLimit);
     }, [filteredFailedInspections, failedPage, failedLimit]);
+
+    // Dedicated Scrap Inspections table state, search & pagination
+    const [scrapSearch, setScrapSearch] = useState('');
+    const [scrapPage, setScrapPage] = useState(1);
+    const scrapLimit = 10;
+
+    const scrapInspections = useMemo(() => {
+        return recentInspections.filter(r => r.status === 'SCRAP');
+    }, [recentInspections]);
+
+    useEffect(() => {
+        setScrapPage(1);
+    }, [scrapSearch]);
+
+    const filteredScrapInspections = useMemo(() => {
+        if (!scrapSearch.trim()) return scrapInspections;
+        const q = scrapSearch.trim().toLowerCase();
+        return scrapInspections.filter(item => {
+            return (
+                (item.band_serial_no && item.band_serial_no.toLowerCase().includes(q)) ||
+                (item.serial_number && item.serial_number.toLowerCase().includes(q)) ||
+                (item.physical_tpn && item.physical_tpn.toLowerCase().includes(q)) ||
+                (item.tejas_dc_no && item.tejas_dc_no.toLowerCase().includes(q)) ||
+                (item.tejas_obd_no && item.tejas_obd_no.toLowerCase().includes(q)) ||
+                (item.band && item.band.toLowerCase().includes(q)) ||
+                (item.duplexer_main && item.duplexer_main.toLowerCase().includes(q)) ||
+                (item.duplexer_part_no && item.duplexer_part_no.toLowerCase().includes(q)) ||
+                (item.remarks && item.remarks.toLowerCase().includes(q)) ||
+                (item.scanned_by && item.scanned_by.toLowerCase().includes(q))
+            );
+        });
+    }, [scrapInspections, scrapSearch]);
+
+    const scrapTotalPages = Math.max(1, Math.ceil(filteredScrapInspections.length / scrapLimit));
+    const paginatedScrapInspections = useMemo(() => {
+        const start = (scrapPage - 1) * scrapLimit;
+        return filteredScrapInspections.slice(start, start + scrapLimit);
+    }, [filteredScrapInspections, scrapPage, scrapLimit]);
 
     // Re-inspect a failed unit: loads serial, Duplexer data, restores checkpoints with previous failure remark, and jumps to the failed checkpoint
     const handleReinspectFailedRecord = (row: InspectionRecord) => {
@@ -620,6 +663,30 @@ export const RrhIvi: React.FC = () => {
         }, 120);
 
         addToast(`Loaded failed serial ${serial}. Navigated to failed Checkpoint ${targetIdx + 1}: ${newCheckpoints[targetIdx].title}.`, 'info');
+    };
+
+    // Pass failed inspection unit to next stage (IPQC for ECN, Post Burn-in for Non-ECN)
+    const [passingStageId, setPassingStageId] = useState<number | string | null>(null);
+    const handlePassToNextStage = async (record: InspectionRecord) => {
+        const dest = record.route === 'NON_ECN' ? 'Post Burn-in Test' : 'IPQC';
+        if (!window.confirm(`Are you sure you want to pass failed unit "${record.band_serial_no || record.serial_number}" to ${dest}?`)) {
+            return;
+        }
+
+        setPassingStageId(record.id);
+        try {
+            await apiFetch(`/api/rrh/ivi/inspections/${record.id}/pass-to-next-stage`, {
+                method: 'PATCH'
+            });
+            addToast(`Unit "${record.band_serial_no || record.serial_number}" passed to ${dest} successfully.`, 'success');
+            if (activeSession) {
+                fetchSessionData(activeSession.id);
+            }
+        } catch (err: any) {
+            addToast(err.message || 'Failed to pass unit to next stage.', 'error');
+        } finally {
+            setPassingStageId(null);
+        }
     };
 
     // Remaining Inward Master Data List State
@@ -1136,30 +1203,36 @@ export const RrhIvi: React.FC = () => {
             return;
         }
 
-        if (!duplexerMain.trim()) {
-            addToast('Duplexer Make is required.', 'warning');
-            return;
+        let cleanPartNo = duplexerPartNo.trim();
+        if (statusVal !== 'SCRAP') {
+            if (!duplexerMain.trim()) {
+                addToast('Duplexer Make is required.', 'warning');
+                return;
+            }
+
+            if (!duplexerPartNo.trim()) {
+                addToast('Duplexer Part No. is required.', 'warning');
+                return;
+            }
+
+            // Validate: number and alphabets mix
+            const hasLetter = /[a-zA-Z]/.test(cleanPartNo);
+            const hasNumber = /[0-9]/.test(cleanPartNo);
+            if (!hasLetter || !hasNumber) {
+                addToast('Duplexer Part No. must contain a mix of numbers and alphabets.', 'error');
+                return;
+            }
+        } else {
+            if (!cleanPartNo) cleanPartNo = '—';
         }
 
-        if (!duplexerPartNo.trim()) {
-            addToast('Duplexer Part No. is required.', 'warning');
-            return;
-        }
-
-        // Validate: number and alphabets mix
-        const cleanPartNo = duplexerPartNo.trim();
-        const hasLetter = /[a-zA-Z]/.test(cleanPartNo);
-        const hasNumber = /[0-9]/.test(cleanPartNo);
-        if (!hasLetter || !hasNumber) {
-            addToast('Duplexer Part No. must contain a mix of numbers and alphabets.', 'error');
-            return;
-        }
-
-        // Checkpoints verification check
-        const allCpConfirmed = checkpoints.every(c => c.confirmed);
-        if (!allCpConfirmed) {
-            addToast('Please complete and confirm all 6 inspection checkpoints before submitting.', 'warning');
-            return;
+        // Checkpoints verification check (only required for PASS and FAIL, bypassed for SCRAP)
+        if (statusVal !== 'SCRAP') {
+            const allCpConfirmed = checkpoints.every(c => c.confirmed);
+            if (!allCpConfirmed) {
+                addToast('Please complete and confirm all 6 inspection checkpoints before submitting.', 'warning');
+                return;
+            }
         }
 
         if (isCompressing) {
@@ -1172,8 +1245,8 @@ export const RrhIvi: React.FC = () => {
             const formData = new FormData();
             formData.append('work_order_id', activeSession.work_order_id);
             formData.append('serial_number', serialInput.trim().toUpperCase());
-            formData.append('duplexer_make', duplexerMain.trim());
-            formData.append('duplexer_main', duplexerMain.trim());
+            formData.append('duplexer_make', duplexerMain.trim() || '—');
+            formData.append('duplexer_main', duplexerMain.trim() || '—');
             formData.append('duplexer_part_no', cleanPartNo);
             if (rrhUnit.trim()) {
                 formData.append('rrh_unit', rrhUnit.trim());
@@ -1210,7 +1283,9 @@ export const RrhIvi: React.FC = () => {
                 body: formData
             });
 
-            addToast(`Inspection submitted successfully with status: ${statusVal} (Route: ${selectedRoute === 'ECN' ? 'ECN -> IPQC' : 'Non-ECN'})`, 'success');
+            addToast(statusVal === 'SCRAP' 
+                ? `Unit ${serialInput.trim().toUpperCase()} marked as SCRAP successfully and saved in Scrap Inspections.` 
+                : `Inspection submitted successfully with status: ${statusVal} (Route: ${selectedRoute === 'ECN' ? 'ECN -> IPQC' : 'Non-ECN'})`, 'success');
 
             // Refresh recent inspections & stats
             fetchSessionData(activeSession.id);
@@ -1225,13 +1300,14 @@ export const RrhIvi: React.FC = () => {
     };
 
     // ─── 10. Export to Excel ─────────────────────────────────────────────────
-    const handleExportExcel = async (customSessionId?: string | number, customWoId?: string, statusFilter?: 'PASS' | 'FAIL') => {
+    const handleExportExcel = async (customSessionId?: string | number, customWoId?: string, statusFilter?: 'PASS' | 'FAIL' | 'SCRAP') => {
         const sId = customSessionId || activeSession?.id;
         const woId = customWoId || activeSession?.work_order_id || 'Unknown';
         if (!sId) return;
 
         const isFailed = statusFilter === 'FAIL';
-        setExportingType(isFailed ? 'FAILED' : 'RECENT');
+        const isScrap = statusFilter === 'SCRAP';
+        setExportingType(isFailed ? 'FAILED' : (isScrap ? 'SCRAP' : 'RECENT'));
         try {
             const token = localStorage.getItem('auth_token');
             const queryParams = new URLSearchParams();
@@ -1253,13 +1329,15 @@ export const RrhIvi: React.FC = () => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = isFailed ? `RRH_IVI_Failed_Inspections_${woId}.xlsx` : `RRH_IVI_Inspections_${woId}.xlsx`;
+            a.download = isFailed 
+                ? `RRH_IVI_Failed_Inspections_${woId}.xlsx` 
+                : (isScrap ? `RRH_IVI_Scrap_Inspections_${woId}.xlsx` : `RRH_IVI_Inspections_${woId}.xlsx`);
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
 
-            addToast(`${isFailed ? 'Failed' : 'Recent'} inspections Excel downloaded successfully.`, 'success');
+            addToast(`${isFailed ? 'Failed' : (isScrap ? 'Scrap' : 'Recent')} inspections Excel downloaded successfully.`, 'success');
         } catch (err: any) {
             addToast(err.message || 'Failed to export Excel.', 'error');
         } finally {
@@ -1289,6 +1367,8 @@ export const RrhIvi: React.FC = () => {
         const s = (status || '').toUpperCase();
         if (s === 'PASS' || s === 'COMPLETED') {
             return <span className={styles.badgePass}>{status}</span>;
+        } else if (s === 'SCRAP') {
+            return <span className={styles.badgeScrap}>{status}</span>;
         } else if (s === 'FAIL' || s === 'ABORTED' || s === 'CANCELLED') {
             return <span className={styles.badgeFail}>{status}</span>;
         } else {
@@ -1812,7 +1892,7 @@ export const RrhIvi: React.FC = () => {
                         </div>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #8b5cf6', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Remaining Lot Quantity</p>
-                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#6d28d9', fontWeight: 800 }}>{stats.pending ?? Math.max(0, (stats.lotQuantity || activeSession.lot_quantity || selectedWoDetails?.lotQuantity || 0) - stats.passed)}</h2>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#6d28d9', fontWeight: 800 }}>{stats.pending ?? Math.max(0, (stats.lotQuantity || activeSession.lot_quantity || selectedWoDetails?.lotQuantity || 0) - stats.passed - (stats.scrapped || 0))}</h2>
                         </div>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #0ea5e9', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Inward Passed</p>
@@ -1825,6 +1905,10 @@ export const RrhIvi: React.FC = () => {
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #dc2626', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Failed</p>
                             <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#b91c1c', fontWeight: 800 }}>{stats.failed}</h2>
+                        </div>
+                        <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #64748b', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Scrapped</p>
+                            <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#475569', fontWeight: 800 }}>{stats.scrapped ?? 0}</h2>
                         </div>
                         <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #0d9488', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Yield (%)</p>
@@ -1930,25 +2014,25 @@ export const RrhIvi: React.FC = () => {
                             {/* Row 1: Duplexer Make * | Duplexer Part No. * */}
                             <div className={styles.formGrid2Col}>
                                 <div className={styles.fieldGroup}>
-                                    <label className={styles.fieldLabel}>Duplexer Make *</label>
+                                    <label className={styles.fieldLabel}>Duplexer Make {statusVal !== 'SCRAP' ? '*' : '(Optional)'}</label>
                                     <input
                                         type="text"
                                         className={styles.fieldInput}
                                         value={duplexerMain}
                                         onChange={e => setDuplexerMain(e.target.value)}
                                         placeholder="Enter Duplexer Make"
-                                        required
+                                        required={statusVal !== 'SCRAP'}
                                     />
                                 </div>
                                 <div className={styles.fieldGroup}>
-                                    <label className={styles.fieldLabel}>Duplexer Part No. *</label>
+                                    <label className={styles.fieldLabel}>Duplexer Part No. {statusVal !== 'SCRAP' ? '*' : '(Optional)'}</label>
                                     <input
                                         type="text"
                                         className={styles.fieldInput}
                                         value={duplexerPartNo}
                                         onChange={e => setDuplexerPartNo(e.target.value)}
                                         placeholder="Enter Duplexer Part No. (mix of letters & numbers)"
-                                        required
+                                        required={statusVal !== 'SCRAP'}
                                     />
                                 </div>
                             </div>
@@ -2011,291 +2095,321 @@ export const RrhIvi: React.FC = () => {
                                     <select
                                         className={styles.fieldSelect}
                                         value={statusVal}
-                                        onChange={e => setStatusVal(e.target.value as 'PASS' | 'FAIL')}
+                                        onChange={e => setStatusVal(e.target.value as 'PASS' | 'FAIL' | 'SCRAP')}
                                         required
                                     >
                                         <option value="PASS">PASS</option>
                                         <option value="FAIL">FAIL</option>
+                                        <option value="SCRAP">SCRAP</option>
                                     </select>
                                     <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem', display: 'block' }}>
-                                        Automatically updated by inspection checkpoints.
+                                        {statusVal === 'SCRAP' ? 'Unit will be permanently scrapped and logged in Scrap Inspections.' : 'Automatically updated by inspection checkpoints.'}
                                     </span>
                                 </div>
                                 <div className={styles.fieldGroup}>
-                                    <label className={styles.fieldLabel}>Remarks</label>
+                                    <label className={styles.fieldLabel}>Remarks {statusVal === 'SCRAP' ? '(Scrap Reason)' : ''}</label>
                                     <input
                                         type="text"
                                         className={styles.fieldInput}
                                         value={remarksVal}
                                         onChange={e => setRemarksVal(e.target.value)}
-                                        placeholder="Enter optional additional remarks..."
+                                        placeholder={statusVal === 'SCRAP' ? "Enter reason for scrap..." : "Enter optional additional remarks..."}
                                     />
                                 </div>
                             </div>
 
-                            {/* --- PROCESS ROUTING / STAGE SELECTION CARD (DIRECTLY IN INSPECTION FORM) --- */}
-                            <div style={{
-                                backgroundColor: '#ffffff',
-                                borderRadius: '0.75rem',
-                                border: '1px solid #e2e8f0',
-                                padding: '1.25rem',
-                                marginTop: '1.25rem',
-                                marginBottom: '1.25rem',
-                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-                                boxSizing: 'border-box'
-                            }}>
-                                {/* Card Header */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                                    <span style={{ fontSize: '1.2rem' }}>🔀</span>
+                            {/* --- SCRAP BANNER WHEN SCRAP IS SELECTED --- */}
+                            {statusVal === 'SCRAP' && (
+                                <div style={{
+                                    backgroundColor: '#f8fafc',
+                                    border: '1.5px dashed #94a3b8',
+                                    borderRadius: '0.75rem',
+                                    padding: '1.25rem',
+                                    marginTop: '1.25rem',
+                                    marginBottom: '1.25rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.85rem'
+                                }}>
+                                    <span style={{ fontSize: '1.75rem' }}>🗑️</span>
                                     <div>
-                                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1e293b' }}>
-                                            RRH Process Routing / Stage Selection
+                                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#334155' }}>
+                                            Unit Marked as SCRAP
                                         </h4>
-                                        <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>
-                                            Select the quality check and production stages required for this Work Order. Process steps execute strictly in ascending order.
+                                        <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#64748b' }}>
+                                            RRH Process Routing and Visual Inspection Checkpoints are hidden. This unit will be recorded in the dedicated Scrap Inspections table and permanently excluded from further production stages.
                                         </p>
                                     </div>
                                 </div>
+                            )}
 
-                                {/* Stage Pills / Chips (Strictly Single Selection at a time) */}
+                            {/* --- PROCESS ROUTING / STAGE SELECTION CARD (HIDDEN WHEN SCRAP) --- */}
+                            {statusVal !== 'SCRAP' && (
                                 <div style={{
-                                    display: 'flex',
-                                    flexWrap: 'wrap',
-                                    gap: '0.75rem',
-                                    marginTop: '0.75rem',
-                                    alignItems: 'center'
+                                    backgroundColor: '#ffffff',
+                                    borderRadius: '0.75rem',
+                                    border: '1px solid #e2e8f0',
+                                    padding: '1.25rem',
+                                    marginTop: '1.25rem',
+                                    marginBottom: '1.25rem',
+                                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                                    boxSizing: 'border-box'
                                 }}>
-                                    {/* ECN Pill */}
-                                    <label
-                                        onClick={() => setSelectedRoute('ECN')}
-                                        style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '0.5rem',
-                                            padding: '0.5rem 0.85rem',
-                                            borderRadius: '0.5rem',
-                                            fontSize: '0.875rem',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                            userSelect: 'none',
-                                            transition: 'all 0.15s ease-in-out',
-                                            backgroundColor: selectedRoute === 'ECN' ? '#eff6ff' : '#f8fafc',
-                                            color: selectedRoute === 'ECN' ? '#1d4ed8' : '#475569',
-                                            border: selectedRoute === 'ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                                            boxShadow: selectedRoute === 'ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
-                                        }}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedRoute === 'ECN'}
-                                            onChange={() => setSelectedRoute('ECN')}
-                                            style={{
-                                                width: '16px',
-                                                height: '16px',
-                                                accentColor: '#2563eb',
-                                                cursor: 'pointer'
-                                            }}
-                                        />
-                                        <span>ECN</span>
-                                    </label>
-
-                                    {/* Non-ECN Pill */}
-                                    <label
-                                        onClick={() => setSelectedRoute('NON_ECN')}
-                                        style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '0.5rem',
-                                            padding: '0.5rem 0.85rem',
-                                            borderRadius: '0.5rem',
-                                            fontSize: '0.875rem',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                            userSelect: 'none',
-                                            transition: 'all 0.15s ease-in-out',
-                                            backgroundColor: selectedRoute === 'NON_ECN' ? '#eff6ff' : '#f8fafc',
-                                            color: selectedRoute === 'NON_ECN' ? '#1d4ed8' : '#475569',
-                                            border: selectedRoute === 'NON_ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                                            boxShadow: selectedRoute === 'NON_ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
-                                        }}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedRoute === 'NON_ECN'}
-                                            onChange={() => setSelectedRoute('NON_ECN')}
-                                            style={{
-                                                width: '16px',
-                                                height: '16px',
-                                                accentColor: '#2563eb',
-                                                cursor: 'pointer'
-                                            }}
-                                        />
-                                        <span>Non-ECN</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            {/* Visual Inspection Checkpoints (Matching Reference UI — positioned above Submit Inspection) */}
-                            <div id="ivi-checkpoints-section" className={styles.checkpointSection}>
-                                <h3 className={styles.checkpointHeading}>Visual Inspection Checkpoints</h3>
-                                <p className={styles.attemptInfo}>
-                                    Mark <strong>Pass</strong> or <strong>Fail</strong> for each checkpoint. Confirm each selection to advance.
-                                </p>
-
-                                {/* Step Navigation Tracker */}
-                                <div className={styles.stepNavRow}>
-                                    {checkpoints.map((cp, idx) => {
-                                        const isActive = idx === activeCpIndex;
-                                        let statusClass = '';
-                                        let statusIcon = null;
-                                        if (cp.confirmed) {
-                                            if (cp.status === 'PASS') {
-                                                statusClass = styles.stepNavPillPass;
-                                                statusIcon = '✓ ';
-                                            } else if (cp.status === 'FAIL') {
-                                                statusClass = styles.stepNavPillFail;
-                                                statusIcon = '✕ ';
-                                            }
-                                        }
-                                        return (
-                                            <button
-                                                key={cp.id}
-                                                type="button"
-                                                className={`${styles.stepNavPill} ${isActive ? styles.stepNavPillActive : ''} ${statusClass}`}
-                                                onClick={() => handleJumpToCp(idx)}
-                                                title={cp.description}
-                                            >
-                                                {statusIcon}Point {cp.id}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Active Checkpoint Content */}
-                                {(() => {
-                                    const currentCp = IVI_CHECKPOINTS[activeCpIndex];
-                                    const isConfirmed = checkpoints[activeCpIndex]?.confirmed;
-                                    return (
+                                    {/* Card Header */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                                        <span style={{ fontSize: '1.2rem' }}>🔀</span>
                                         <div>
-                                            {/* Status Badge */}
-                                            <div className={styles.checkpointStatusBox}>
-                                                <strong>Status:</strong> Checkpoint {activeCpIndex + 1} of {IVI_CHECKPOINTS.length} — {currentCp.title}
-                                                {isConfirmed && (
-                                                    <span style={{ marginLeft: '10px', fontSize: '0.85rem', fontWeight: 700, color: checkpoints[activeCpIndex].status === 'PASS' ? '#16a34a' : '#dc2626' }}>
-                                                        ({checkpoints[activeCpIndex].status === 'PASS' ? 'Confirmed: PASS' : 'Confirmed: FAIL'})
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {/* Prompt */}
-                                            <div className={styles.checkpointPrompt}>
-                                                {currentCp.id}. {currentCp.description}
-                                            </div>
-
-                                            {/* Pass / Fail Buttons */}
-                                            <div className={styles.statusButtons} style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                                                <button
-                                                    type="button"
-                                                    className={`${styles.statusBtn} ${currentCpStatus === 'PASS' ? styles.passActive : ''}`}
-                                                    onClick={() => handleSelectCpStatus('PASS')}
-                                                >
-                                                    Pass
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={`${styles.statusBtn} ${currentCpStatus === 'FAIL' ? styles.failActive : ''}`}
-                                                    onClick={() => handleSelectCpStatus('FAIL')}
-                                                >
-                                                    Fail
-                                                </button>
-
-                                                {/* When that defect is passed, show what will be the remark just aside the pass/fail checkpoint */}
-                                                {(currentCpStatus === 'PASS' || checkpoints[activeCpIndex]?.status === 'PASS') && checkpoints[activeCpIndex]?.previousFailureRemark && (
-                                                    <div style={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '8px',
-                                                        padding: '0.4rem 0.85rem',
-                                                        borderRadius: '6px',
-                                                        backgroundColor: '#fef2f2',
-                                                        border: '1px solid #fecaca',
-                                                        color: '#991b1b',
-                                                        fontSize: '0.85rem',
-                                                        fontWeight: 600,
-                                                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
-                                                    }}>
-                                                        <span>Previous Defect Remark:</span>
-                                                        <span style={{
-                                                            fontStyle: 'italic',
-                                                            fontWeight: 700,
-                                                            color: '#b91c1c',
-                                                            textDecoration: currentCpStatus === 'PASS' ? 'line-through' : 'none',
-                                                            backgroundColor: '#ffffff',
-                                                            padding: '0.15rem 0.4rem',
-                                                            borderRadius: '4px',
-                                                            border: '1px solid #fee2e2'
-                                                        }}>
-                                                            "{checkpoints[activeCpIndex]?.previousFailureRemark}"
-                                                        </span>
-                                                        {currentCpStatus === 'PASS' && (
-                                                            <span style={{
-                                                                color: '#15803d',
-                                                                fontWeight: 700,
-                                                                backgroundColor: '#dcfce7',
-                                                                padding: '0.15rem 0.45rem',
-                                                                borderRadius: '4px',
-                                                                marginLeft: '4px'
-                                                            }}>
-                                                                Defect Resolved / Passed
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Remark on Fail */}
-                                            {currentCpStatus === 'FAIL' && (
-                                                <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>
-                                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#374151', marginBottom: '0.4rem' }}>
-                                                        Defect Remark *
-                                                    </label>
-                                                    <textarea
-                                                        className={styles.checkpointTextarea}
-                                                        rows={3}
-                                                        placeholder="Explain why this checkpoint failed..."
-                                                        value={currentCpRemark}
-                                                        onChange={e => setCurrentCpRemark(e.target.value)}
-                                                        required
-                                                    />
-                                                </div>
-                                            )}
-
-                                            {/* Confirm Button */}
-                                            <button
-                                                type="button"
-                                                className={styles.confirmBtn}
-                                                onClick={handleConfirmCurrentCheckpoint}
-                                                style={{ marginTop: '0.5rem' }}
-                                            >
-                                                Confirm Checkpoint
-                                            </button>
-                                        </div>
-                                    );
-                                })()}
-
-                                {/* All Confirmed Summary Banner */}
-                                {checkpoints.every(c => c.confirmed) && (
-                                    <div className={`${styles.allConfirmedBanner} ${checkpoints.some(c => c.status === 'FAIL') ? styles.allConfirmedBannerFail : ''}`}>
-                                        <div>
-                                            {checkpoints.some(c => c.status === 'FAIL') ? (
-                                                <span>Checkpoints verified with failure(s). Inspection status set to <strong>FAIL</strong> and defect remarks saved in RRH Unit Defect.</span>
-                                            ) : (
-                                                <span>All 6 checkpoints verified and passed! RRH Unit Defect set to <strong>"no defect"</strong> and status set to <strong>PASS</strong>.</span>
-                                            )}
+                                            <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1e293b' }}>
+                                                RRH Process Routing / Stage Selection
+                                            </h4>
+                                            <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>
+                                                Select the quality check and production stages required for this Work Order. Process steps execute strictly in ascending order.
+                                            </p>
                                         </div>
                                     </div>
-                                )}
-                            </div>
+
+                                    {/* Stage Pills / Chips (Strictly Single Selection at a time) */}
+                                    <div style={{
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '0.75rem',
+                                        marginTop: '0.75rem',
+                                        alignItems: 'center'
+                                    }}>
+                                        {/* ECN Pill */}
+                                        <label
+                                            onClick={() => setSelectedRoute('ECN')}
+                                            style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                                padding: '0.5rem 0.85rem',
+                                                borderRadius: '0.5rem',
+                                                fontSize: '0.875rem',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                                userSelect: 'none',
+                                                transition: 'all 0.15s ease-in-out',
+                                                backgroundColor: selectedRoute === 'ECN' ? '#eff6ff' : '#f8fafc',
+                                                color: selectedRoute === 'ECN' ? '#1d4ed8' : '#475569',
+                                                border: selectedRoute === 'ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                                boxShadow: selectedRoute === 'ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
+                                            }}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedRoute === 'ECN'}
+                                                onChange={() => setSelectedRoute('ECN')}
+                                                style={{
+                                                    width: '16px',
+                                                    height: '16px',
+                                                    accentColor: '#2563eb',
+                                                    cursor: 'pointer'
+                                                }}
+                                            />
+                                            <span>ECN</span>
+                                        </label>
+
+                                        {/* Non-ECN Pill */}
+                                        <label
+                                            onClick={() => setSelectedRoute('NON_ECN')}
+                                            style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                                padding: '0.5rem 0.85rem',
+                                                borderRadius: '0.5rem',
+                                                fontSize: '0.875rem',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                                userSelect: 'none',
+                                                transition: 'all 0.15s ease-in-out',
+                                                backgroundColor: selectedRoute === 'NON_ECN' ? '#eff6ff' : '#f8fafc',
+                                                color: selectedRoute === 'NON_ECN' ? '#1d4ed8' : '#475569',
+                                                border: selectedRoute === 'NON_ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                                boxShadow: selectedRoute === 'NON_ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
+                                            }}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedRoute === 'NON_ECN'}
+                                                onChange={() => setSelectedRoute('NON_ECN')}
+                                                style={{
+                                                    width: '16px',
+                                                    height: '16px',
+                                                    accentColor: '#2563eb',
+                                                    cursor: 'pointer'
+                                                }}
+                                            />
+                                            <span>Non-ECN</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Visual Inspection Checkpoints (HIDDEN WHEN SCRAP) */}
+                            {statusVal !== 'SCRAP' && (
+                                <div id="ivi-checkpoints-section" className={styles.checkpointSection}>
+                                    <h3 className={styles.checkpointHeading}>Visual Inspection Checkpoints</h3>
+                                    <p className={styles.attemptInfo}>
+                                        Mark <strong>Pass</strong> or <strong>Fail</strong> for each checkpoint. Confirm each selection to advance.
+                                    </p>
+
+                                    {/* Step Navigation Tracker */}
+                                    <div className={styles.stepNavRow}>
+                                        {checkpoints.map((cp, idx) => {
+                                            const isActive = idx === activeCpIndex;
+                                            let statusClass = '';
+                                            let statusIcon = null;
+                                            if (cp.confirmed) {
+                                                if (cp.status === 'PASS') {
+                                                    statusClass = styles.stepNavPillPass;
+                                                    statusIcon = '✓ ';
+                                                } else if (cp.status === 'FAIL') {
+                                                    statusClass = styles.stepNavPillFail;
+                                                    statusIcon = '✕ ';
+                                                }
+                                            }
+                                            return (
+                                                <button
+                                                    key={cp.id}
+                                                    type="button"
+                                                    className={`${styles.stepNavPill} ${isActive ? styles.stepNavPillActive : ''} ${statusClass}`}
+                                                    onClick={() => handleJumpToCp(idx)}
+                                                    title={cp.description}
+                                                >
+                                                    {statusIcon}Point {cp.id}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Active Checkpoint Content */}
+                                    {(() => {
+                                        const currentCp = IVI_CHECKPOINTS[activeCpIndex];
+                                        const isConfirmed = checkpoints[activeCpIndex]?.confirmed;
+                                        return (
+                                            <div>
+                                                {/* Status Badge */}
+                                                <div className={styles.checkpointStatusBox}>
+                                                    <strong>Status:</strong> Checkpoint {activeCpIndex + 1} of {IVI_CHECKPOINTS.length} — {currentCp.title}
+                                                    {isConfirmed && (
+                                                        <span style={{ marginLeft: '10px', fontSize: '0.85rem', fontWeight: 700, color: checkpoints[activeCpIndex].status === 'PASS' ? '#16a34a' : '#dc2626' }}>
+                                                            ({checkpoints[activeCpIndex].status === 'PASS' ? 'Confirmed: PASS' : 'Confirmed: FAIL'})
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Prompt */}
+                                                <div className={styles.checkpointPrompt}>
+                                                    {currentCp.id}. {currentCp.description}
+                                                </div>
+
+                                                {/* Pass / Fail Buttons */}
+                                                <div className={styles.statusButtons} style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                                                    <button
+                                                        type="button"
+                                                        className={`${styles.statusBtn} ${currentCpStatus === 'PASS' ? styles.passActive : ''}`}
+                                                        onClick={() => handleSelectCpStatus('PASS')}
+                                                    >
+                                                        Pass
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`${styles.statusBtn} ${currentCpStatus === 'FAIL' ? styles.failActive : ''}`}
+                                                        onClick={() => handleSelectCpStatus('FAIL')}
+                                                    >
+                                                        Fail
+                                                    </button>
+
+                                                    {/* When that defect is passed, show what will be the remark just aside the pass/fail checkpoint */}
+                                                    {(currentCpStatus === 'PASS' || checkpoints[activeCpIndex]?.status === 'PASS') && checkpoints[activeCpIndex]?.previousFailureRemark && (
+                                                        <div style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '8px',
+                                                            padding: '0.4rem 0.85rem',
+                                                            borderRadius: '6px',
+                                                            backgroundColor: '#fef2f2',
+                                                            border: '1px solid #fecaca',
+                                                            color: '#991b1b',
+                                                            fontSize: '0.85rem',
+                                                            fontWeight: 600,
+                                                            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                                                        }}>
+                                                            <span>Previous Defect Remark:</span>
+                                                            <span style={{
+                                                                fontStyle: 'italic',
+                                                                fontWeight: 700,
+                                                                color: '#b91c1c',
+                                                                textDecoration: currentCpStatus === 'PASS' ? 'line-through' : 'none',
+                                                                backgroundColor: '#ffffff',
+                                                                padding: '0.15rem 0.4rem',
+                                                                borderRadius: '4px',
+                                                                border: '1px solid #fee2e2'
+                                                            }}>
+                                                                "{checkpoints[activeCpIndex]?.previousFailureRemark}"
+                                                            </span>
+                                                            {currentCpStatus === 'PASS' && (
+                                                                <span style={{
+                                                                    color: '#15803d',
+                                                                    fontWeight: 700,
+                                                                    backgroundColor: '#dcfce7',
+                                                                    padding: '0.15rem 0.45rem',
+                                                                    borderRadius: '4px',
+                                                                    marginLeft: '4px'
+                                                                }}>
+                                                                    Defect Resolved / Passed
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Remark on Fail */}
+                                                {currentCpStatus === 'FAIL' && (
+                                                    <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+                                                        <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#374151', marginBottom: '0.4rem' }}>
+                                                            Defect Remark *
+                                                        </label>
+                                                        <textarea
+                                                            className={styles.checkpointTextarea}
+                                                            rows={3}
+                                                            placeholder="Explain why this checkpoint failed..."
+                                                            value={currentCpRemark}
+                                                            onChange={e => setCurrentCpRemark(e.target.value)}
+                                                            required
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {/* Confirm Button */}
+                                                <button
+                                                    type="button"
+                                                    className={styles.confirmBtn}
+                                                    onClick={handleConfirmCurrentCheckpoint}
+                                                    style={{ marginTop: '0.5rem' }}
+                                                >
+                                                    Confirm Checkpoint
+                                                </button>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* All Confirmed Summary Banner */}
+                                    {checkpoints.every(c => c.confirmed) && (
+                                        <div className={`${styles.allConfirmedBanner} ${checkpoints.some(c => c.status === 'FAIL') ? styles.allConfirmedBannerFail : ''}`}>
+                                            <div>
+                                                {checkpoints.some(c => c.status === 'FAIL') ? (
+                                                    <span>Checkpoints verified with failure(s). Inspection status set to <strong>FAIL</strong> and defect remarks saved in RRH Unit Defect.</span>
+                                                ) : (
+                                                    <span>All 6 checkpoints verified and passed! RRH Unit Defect set to <strong>"no defect"</strong> and status set to <strong>PASS</strong>.</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Row 4: Submit Inspection Button */}
                             <button
@@ -2390,10 +2504,11 @@ export const RrhIvi: React.FC = () => {
                                         <th>Duplexer Part No</th>
                                         <th style={{ minWidth: '180px' }}>Failed Stage Remarks</th>
                                         <th>Status</th>
+                                        <th>Process Type</th>
                                         <th>Images</th>
                                         <th>Scanned By</th>
                                         <th>Date & Time</th>
-                                        <th style={{ minWidth: '200px', textAlign: 'center' }}>Action</th>
+                                        <th style={{ minWidth: '340px', textAlign: 'center', whiteSpace: 'nowrap' }}>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -2414,6 +2529,21 @@ export const RrhIvi: React.FC = () => {
                                             </td>
                                             <td>
                                                 <span className={styles.badgeFail}>FAIL</span>
+                                            </td>
+                                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                                <span style={{
+                                                    display: 'inline-block',
+                                                    padding: '0.2rem 0.6rem',
+                                                    borderRadius: '9999px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 700,
+                                                    backgroundColor: row.route === 'NON_ECN' ? '#f3e8ff' : '#eff6ff',
+                                                    color: row.route === 'NON_ECN' ? '#7e22ce' : '#1d4ed8',
+                                                    border: row.route === 'NON_ECN' ? '1px solid #d8b4fe' : '1px solid #bfdbfe',
+                                                    whiteSpace: 'nowrap'
+                                                }}>
+                                                    {row.route === 'NON_ECN' ? 'Non-ECN' : 'ECN'}
+                                                </span>
                                             </td>
                                             <td>
                                                 {(() => {
@@ -2453,8 +2583,8 @@ export const RrhIvi: React.FC = () => {
                                             <td style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap' }}>
                                                 {formatTimestamp(row.scanned_at)}
                                             </td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                                <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'center', alignItems: 'center', flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
                                                     <button
                                                         type="button"
                                                         className={styles.secondaryButton}
@@ -2464,7 +2594,8 @@ export const RrhIvi: React.FC = () => {
                                                             display: 'inline-flex',
                                                             alignItems: 'center',
                                                             gap: '4px',
-                                                            whiteSpace: 'nowrap'
+                                                            whiteSpace: 'nowrap',
+                                                            flexShrink: 0
                                                         }}
                                                         onClick={() => setFailedModalRecord(row)}
                                                         title="View failed stage remarks and all S.No details"
@@ -2482,20 +2613,64 @@ export const RrhIvi: React.FC = () => {
                                                             display: 'inline-flex',
                                                             alignItems: 'center',
                                                             gap: '4px',
-                                                            whiteSpace: 'nowrap'
+                                                            whiteSpace: 'nowrap',
+                                                            flexShrink: 0
                                                         }}
                                                         onClick={() => handleReinspectFailedRecord(row)}
                                                         title="Take to failed checkpoint to re-inspect and correct"
                                                     >
                                                         Re-inspect / Fix
                                                     </button>
+                                                    {row.passed_to_next_stage ? (
+                                                        <span style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: '4px',
+                                                            padding: '0.35rem 0.75rem',
+                                                            borderRadius: '6px',
+                                                            fontSize: '0.8rem',
+                                                            fontWeight: 700,
+                                                            backgroundColor: '#eff6ff',
+                                                            color: '#1d4ed8',
+                                                            border: '1px solid #bfdbfe',
+                                                            whiteSpace: 'nowrap',
+                                                            flexShrink: 0
+                                                        }} title={`Passed to ${row.route === 'NON_ECN' ? 'Post Burn-in' : 'IPQC'} by ${row.passed_to_next_stage_by || 'Operator'}`}>
+                                                            ✓ Passed to {row.route === 'NON_ECN' ? 'Post Burn-in' : 'IPQC'}
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            className={styles.secondaryButton}
+                                                            style={{
+                                                                padding: '0.35rem 0.75rem',
+                                                                fontSize: '0.8rem',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                gap: '4px',
+                                                                backgroundColor: '#eff6ff',
+                                                                color: '#1d4ed8',
+                                                                borderColor: '#93c5fd',
+                                                                fontWeight: 600,
+                                                                whiteSpace: 'nowrap',
+                                                                flexShrink: 0
+                                                            }}
+                                                            onClick={() => handlePassToNextStage(row)}
+                                                            disabled={passingStageId === row.id}
+                                                            title={`Pass this failed unit to ${row.route === 'NON_ECN' ? 'Post Burn-in Test' : 'IPQC'}`}
+                                                        >
+                                                            {passingStageId === row.id ? 'Passing...' : `Pass to Next Stage`}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
                                     ))}
                                     {filteredFailedInspections.length === 0 && (
                                         <tr>
-                                            <td colSpan={14} style={{ textAlign: 'center', padding: '1.75rem', color: '#16a34a', fontWeight: 600 }}>
+                                            <td colSpan={15} style={{ textAlign: 'center', padding: '1.75rem', color: '#16a34a', fontWeight: 600 }}>
                                                 {failedSearch ? 'No matching failed inspections found for this search.' : 'No failed inspections recorded in this session.'}
                                             </td>
                                         </tr>
@@ -2529,6 +2704,139 @@ export const RrhIvi: React.FC = () => {
                                         onClick={() => setFailedPage(p => Math.min(failedTotalPages, p + 1))}
                                         disabled={failedPage >= failedTotalPages}
                                         style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', opacity: failedPage >= failedTotalPages ? 0.5 : 1, cursor: failedPage >= failedTotalPages ? 'not-allowed' : 'pointer' }}
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ─── SCRAP INSPECTIONS TABLE CARD (ONLY SCRAP STATUS) ─────────────── */}
+                    <div className={styles.card} style={{ borderColor: '#cbd5e1' }}>
+                        <div className={styles.recentHeader} style={{ marginBottom: '0.4rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <h3 className={styles.recentTitle} style={{ color: '#475569', margin: 0, paddingBottom: 0, borderBottom: 'none' }}>
+                                    Scrap Inspections
+                                </h3>
+                                <span style={{
+                                    backgroundColor: '#f1f5f9',
+                                    color: '#475569',
+                                    border: '1px solid #cbd5e1',
+                                    padding: '0.2rem 0.65rem',
+                                    borderRadius: '9999px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 700
+                                }}>
+                                    {scrapInspections.length} Scrapped {scrapInspections.length === 1 ? 'Unit' : 'Units'}
+                                </span>
+                            </div>
+
+                            {/* Export Excel button for Scrap Inspections */}
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    style={{
+                                        backgroundColor: '#f8fafc',
+                                        color: '#475569',
+                                        borderColor: '#cbd5e1',
+                                        fontWeight: 600,
+                                        fontSize: '0.85rem',
+                                        padding: '0.45rem 1rem'
+                                    }}
+                                    onClick={() => handleExportExcel(undefined, undefined, 'SCRAP')}
+                                    disabled={exportingType !== null || scrapInspections.length === 0}
+                                    title="Export scrapped inspections to Excel"
+                                >
+                                    {exportingType === 'SCRAP' ? 'Exporting...' : 'Export Excel'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#64748b' }}>
+                            Dedicated log for units marked as <strong>SCRAP</strong> during IVI. These serials are permanently recorded with their scrap reasons and barred from downstream production stages.
+                        </p>
+
+                        {/* Search Bar for Scrap Inspections */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.25rem', maxWidth: '460px' }}>
+                            <input
+                                type="text"
+                                className={styles.input}
+                                placeholder="Search scrap inspections (Serial, TPN, Remarks, etc.)..."
+                                value={scrapSearch}
+                                onChange={e => setScrapSearch(e.target.value)}
+                                style={{ padding: '0.55rem 0.85rem', fontSize: '0.9rem', width: '100%' }}
+                            />
+                            {scrapSearch && (
+                                <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    onClick={() => setScrapSearch('')}
+                                    style={{ padding: '0.55rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+
+                        <div className={styles.tableContainer}>
+                            <table className={styles.table}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ width: '80px', textAlign: 'center' }}>S.No</th>
+                                        <th style={{ minWidth: '180px' }}>Band S.No</th>
+                                        <th style={{ minWidth: '160px' }}>TPN</th>
+                                        <th style={{ minWidth: '240px' }}>Remark</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {paginatedScrapInspections.map((row) => (
+                                        <tr key={`scrap-${row.id}`}>
+                                            <td style={{ fontWeight: 600, color: '#64748b', textAlign: 'center' }}>{row.sl_no || '-'}</td>
+                                            <td style={{ fontWeight: 700, color: '#1e293b', fontFamily: 'monospace' }}>{row.band_serial_no || row.serial_number}</td>
+                                            <td style={{ fontFamily: 'monospace' }}>{row.physical_tpn || '—'}</td>
+                                            <td style={{ color: '#475569', fontWeight: 600 }}>
+                                                {row.remarks || 'Scrapped unit'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {filteredScrapInspections.length === 0 && (
+                                        <tr>
+                                            <td colSpan={4} style={{ textAlign: 'center', padding: '1.75rem', color: '#94a3b8' }}>
+                                                {scrapSearch ? 'No matching scrap inspections found for this search.' : 'No scrap inspections recorded in this session.'}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Scrap Table Pagination */}
+                        {filteredScrapInspections.length > scrapLimit && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                    Showing {(scrapPage - 1) * scrapLimit + 1} to {Math.min(scrapPage * scrapLimit, filteredScrapInspections.length)} of {filteredScrapInspections.length} scrap entries
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <button
+                                        type="button"
+                                        className={styles.secondaryButton}
+                                        onClick={() => setScrapPage(p => Math.max(1, p - 1))}
+                                        disabled={scrapPage <= 1}
+                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', opacity: scrapPage <= 1 ? 0.5 : 1, cursor: scrapPage <= 1 ? 'not-allowed' : 'pointer' }}
+                                    >
+                                        Previous
+                                    </button>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+                                        Page {scrapPage} of {scrapTotalPages}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className={styles.secondaryButton}
+                                        onClick={() => setScrapPage(p => Math.min(scrapTotalPages, p + 1))}
+                                        disabled={scrapPage >= scrapTotalPages}
+                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', opacity: scrapPage >= scrapTotalPages ? 0.5 : 1, cursor: scrapPage >= scrapTotalPages ? 'not-allowed' : 'pointer' }}
                                     >
                                         Next
                                     </button>
@@ -2594,6 +2902,7 @@ export const RrhIvi: React.FC = () => {
                                         <th>RRH Unit Defect</th>
                                         <th>Defect Fixed</th>
                                         <th>Status</th>
+                                        <th>Process Type</th>
                                         <th>Images</th>
                                         <th>Remarks</th>
                                         <th>Scanned By</th>
@@ -2649,6 +2958,21 @@ export const RrhIvi: React.FC = () => {
                                                 ) : (
                                                     <span className={styles.badgeFail}>FAIL</span>
                                                 )}
+                                            </td>
+                                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                                <span style={{
+                                                    display: 'inline-block',
+                                                    padding: '0.2rem 0.6rem',
+                                                    borderRadius: '9999px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 700,
+                                                    backgroundColor: row.route === 'NON_ECN' ? '#f3e8ff' : '#eff6ff',
+                                                    color: row.route === 'NON_ECN' ? '#7e22ce' : '#1d4ed8',
+                                                    border: row.route === 'NON_ECN' ? '1px solid #d8b4fe' : '1px solid #bfdbfe',
+                                                    whiteSpace: 'nowrap'
+                                                }}>
+                                                    {row.route === 'NON_ECN' ? 'Non-ECN' : 'ECN'}
+                                                </span>
                                             </td>
                                             <td>
                                                 {(() => {
@@ -2710,7 +3034,7 @@ export const RrhIvi: React.FC = () => {
                                     ))}
                                     {filteredRecentInspections.length === 0 && (
                                         <tr>
-                                            <td colSpan={15} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                            <td colSpan={16} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                                                 {inspectionSearch ? 'No matching inspections found for this search.' : 'No passed inspections recorded yet in this IVI session.'}
                                             </td>
                                         </tr>

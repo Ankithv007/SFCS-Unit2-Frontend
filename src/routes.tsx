@@ -64,6 +64,12 @@ import { RrhTesting } from './pages/rrh/testing/RrhTesting';
 import { RrhFqc } from './pages/rrh/fqc/RrhFqc';
 import { RrhOba } from './pages/rrh/oba/RrhOba';
 import { RrhPackagingOutgoingData } from './pages/rrh/packaging-outgoing-data/RrhPackagingOutgoingData';
+import { RrhProgramming } from './pages/rrh/programming/RrhProgramming';
+import { RrhPreBurnIn } from './pages/rrh/pre-burn-in/RrhPreBurnIn';
+import { RrhHipot } from './pages/rrh/hipot/RrhHipot';
+import { RrhPostBurnIn } from './pages/rrh/post-burn-in/RrhPostBurnIn';
+import { RrhPacking } from './pages/rrh/packing/RrhPacking';
+import { RrhShipment } from './pages/rrh/shipment/RrhShipment';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -357,6 +363,80 @@ export const router = createBrowserRouter([
                     {
                         path: 'packaging-outgoing-data',
                         element: <RrhPackagingOutgoingData />,
+                    },
+                    // ECN Station Routes
+                    {
+                        path: 'ecn/ipqc',
+                        element: <RrhIpqc />,
+                    },
+                    {
+                        path: 'ecn/programming',
+                        element: <RrhProgramming routeType="ECN" />,
+                    },
+                    {
+                        path: 'ecn/pre-burn-in',
+                        element: <RrhPreBurnIn routeType="ECN" />,
+                    },
+                    {
+                        path: 'ecn/hipot',
+                        element: <RrhHipot routeType="ECN" />,
+                    },
+                    {
+                        path: 'ecn/post-burn-in',
+                        element: <RrhPostBurnIn routeType="ECN" />,
+                    },
+                    {
+                        path: 'ecn/fqc',
+                        element: <RrhFqc routeType="ECN" />,
+                    },
+                    {
+                        path: 'ecn/oba',
+                        element: <RrhOba routeType="ECN" />,
+                    },
+                    {
+                        path: 'ecn/packing',
+                        element: <RrhPacking routeType="ECN" />,
+                    },
+                    {
+                        path: 'ecn/shipment',
+                        element: <RrhShipment routeType="ECN" />,
+                    },
+                    // Non-ECN Station Routes
+                    {
+                        path: 'non-ecn/post-burn-in-initial',
+                        element: <RrhPostBurnIn routeType="Non-ECN" customTitle="RRH Post-Burn-in Test (Initial)" />,
+                    },
+                    {
+                        path: 'non-ecn/programming',
+                        element: <RrhProgramming routeType="Non-ECN" />,
+                    },
+                    {
+                        path: 'non-ecn/pre-burn-in',
+                        element: <RrhPreBurnIn routeType="Non-ECN" />,
+                    },
+                    {
+                        path: 'non-ecn/hipot',
+                        element: <RrhHipot routeType="Non-ECN" />,
+                    },
+                    {
+                        path: 'non-ecn/post-burn-in',
+                        element: <RrhPostBurnIn routeType="Non-ECN" />,
+                    },
+                    {
+                        path: 'non-ecn/fqc',
+                        element: <RrhFqc routeType="Non-ECN" />,
+                    },
+                    {
+                        path: 'non-ecn/oba',
+                        element: <RrhOba routeType="Non-ECN" />,
+                    },
+                    {
+                        path: 'non-ecn/packing',
+                        element: <RrhPacking routeType="Non-ECN" />,
+                    },
+                    {
+                        path: 'non-ecn/shipment',
+                        element: <RrhShipment routeType="Non-ECN" />,
                     },
                 ]
             },

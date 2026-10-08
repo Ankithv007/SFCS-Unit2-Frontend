@@ -2,7 +2,11 @@ import React from 'react';
 import { Award, CheckSquare2 } from 'lucide-react';
 import { RrhStationPlaceholder } from '../components/RrhStationPlaceholder';
 
-export const RrhFqc: React.FC = () => (
+interface RrhFqcProps {
+    routeType?: 'ECN' | 'Non-ECN';
+}
+
+export const RrhFqc: React.FC<RrhFqcProps> = ({ routeType }) => (
     <RrhStationPlaceholder
         title="RRH FQC (Final Quality Control)"
         subtitle="Final quality assurance inspection, enclosure sealing verification, and finished goods release."
@@ -12,5 +16,6 @@ export const RrhFqc: React.FC = () => (
         headerIcon={Award}
         cardIcon={CheckSquare2}
         emptyIcon={Award}
+        routeType={routeType}
     />
 );

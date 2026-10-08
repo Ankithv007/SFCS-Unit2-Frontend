@@ -24,6 +24,20 @@ const getBandFromTpn = (tpn: string | null | undefined): string => {
     return SKU_TO_BAND_MAP[clean] || SKU_TO_BAND_MAP[tpn.trim()] || '—';
 };
 
+export const cleanDefectDescription = (text: string | null | undefined): string => {
+    if (!text || text === '—' || text === '-' || text === 'no defect') return text || '—';
+    const parts = String(text).split(/;\s*|\n+/);
+    const cleaned = parts
+        .map((p) => {
+            let s = p.trim();
+            s = s.replace(/^(?:point\s*\d+[\s:\-–.]*|point[\s:\-–.]*|:?\s*\d+\s*[:\-–.]\s*)/i, '').trim();
+            return s;
+        })
+        .filter((p) => p.length > 0 && p !== '—' && p !== '-');
+
+    return cleaned.length > 0 ? cleaned.join('; ') : (text ? String(text).trim() : '—');
+};
+
 // ─── Toaster Notification System ─────────────────────────────────────────────
 interface Toast {
     id: number;
@@ -1659,393 +1673,433 @@ export const RrhIpqc: React.FC = () => {
                             </button>
                         </div>
 
-                    {/* Unit Readout Info Box (Photo 2) */}
-                    <div className={styles.scannedInfoPanel}>
-                        <div className={styles.scannedInfoGridRow1}>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Band Serial No</span>
-                                <span className={styles.scannedInfoValue}>{loadedUnit.band_serial_no}</span>
-                            </div>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Physical TPN</span>
-                                <span className={styles.scannedInfoValue}>{loadedUnit.physical_tpn}</span>
-                            </div>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Band</span>
-                                <span className={`${styles.scannedInfoValue} ${styles.bandText}`}>{loadedUnit.band}</span>
-                            </div>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>BAT Lot No</span>
-                                <span className={styles.scannedInfoValue}>{loadedUnit.bat_lot_no}</span>
-                            </div>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Tejas DC No</span>
-                                <span className={styles.scannedInfoValue}>{loadedUnit.tejas_dc_no}</span>
-                            </div>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Tejas OBD No</span>
-                                <span className={styles.scannedInfoValue}>{loadedUnit.tejas_obd_no}</span>
-                            </div>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Duplexer Main (from IVI)</span>
-                                <span className={`${styles.scannedInfoValue} ${styles.duplexerText}`}>{loadedUnit.duplexer_main}</span>
-                            </div>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Duplexer Part No (from IVI)</span>
-                                <span className={`${styles.scannedInfoValue} ${styles.duplexerText}`}>{loadedUnit.duplexer_part_no}</span>
-                            </div>
-                        </div>
-
-                        <div className={styles.scannedInfoGridRow2}>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>RRH Unit (from IVI)</span>
-                                <span className={styles.scannedInfoValue}>{loadedUnit.rrh_unit}</span>
-                            </div>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>IVI Status</span>
-                                <div>
-                                    <span className={styles.statusBadgePass}>✓ {loadedUnit.ivi_status}</span>
+                        {/* Unit Readout Info Box (Photo 2) */}
+                        <div className={styles.scannedInfoPanel}>
+                            <div className={styles.scannedInfoGridRow1}>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>Band Serial No</span>
+                                    <span className={styles.scannedInfoValue}>{loadedUnit.band_serial_no}</span>
+                                </div>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>Physical TPN</span>
+                                    <span className={styles.scannedInfoValue}>{loadedUnit.physical_tpn}</span>
+                                </div>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>Band</span>
+                                    <span className={`${styles.scannedInfoValue} ${styles.bandText}`}>{loadedUnit.band}</span>
+                                </div>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>BAT Lot No</span>
+                                    <span className={styles.scannedInfoValue}>{loadedUnit.bat_lot_no}</span>
+                                </div>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>Tejas DC No</span>
+                                    <span className={styles.scannedInfoValue}>{loadedUnit.tejas_dc_no}</span>
+                                </div>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>Tejas OBD No</span>
+                                    <span className={styles.scannedInfoValue}>{loadedUnit.tejas_obd_no}</span>
+                                </div>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>Duplexer Main (from IVI)</span>
+                                    <span className={`${styles.scannedInfoValue} ${styles.duplexerText}`}>{loadedUnit.duplexer_main}</span>
+                                </div>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>Duplexer Part No (from IVI)</span>
+                                    <span className={`${styles.scannedInfoValue} ${styles.duplexerText}`}>{loadedUnit.duplexer_part_no}</span>
                                 </div>
                             </div>
-                            <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>IVI Inspected By</span>
-                                <span className={styles.scannedInfoValue}>{loadedUnit.ivi_inspected_by || 'System Admin'}</span>
-                            </div>
-                        </div>
-                    </div>
 
-                    {/* Re-inspection Notice */}
-                    {reinspectionInfo?.isReinspected && (
-                        <div className={styles.reinspectionBanner}>
-                            <AlertCircle size={20} />
-                            <div>
-                                <strong>RE-INSPECTION MODE:</strong> This unit previously failed IPQC inspection. Review the previously failed checkpoints and confirm resolution.
-                                {reinspectionInfo.previousFailureRemarks && (
-                                    <div style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>
-                                        <em>Previous Remark:</em> {reinspectionInfo.previousFailureRemarks}
+                            <div className={styles.scannedInfoGridRow2}>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>RRH Unit (from IVI)</span>
+                                    <span className={styles.scannedInfoValue} style={{ color: loadedUnit.ivi_status === 'FAIL' ? '#2563eb' : undefined, fontWeight: loadedUnit.ivi_status === 'FAIL' ? 700 : undefined }}>
+                                        {cleanDefectDescription(loadedUnit.rrh_unit) || (loadedUnit.ivi_status === 'FAIL' ? 'Defect noted' : 'no defect')}
+                                    </span>
+                                </div>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>IVI Status</span>
+                                    <div>
+                                        <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            padding: '0.2rem 0.6rem',
+                                            borderRadius: '4px',
+                                            fontSize: '0.8rem',
+                                            fontWeight: 700,
+                                            backgroundColor: loadedUnit.ivi_status === 'FAIL' ? '#eff6ff' : '#dcfce7',
+                                            color: loadedUnit.ivi_status === 'FAIL' ? '#1d4ed8' : '#15803d',
+                                            border: loadedUnit.ivi_status === 'FAIL' ? '1px solid #bfdbfe' : '1px solid #86efac'
+                                        }}>
+                                            {loadedUnit.ivi_status === 'FAIL' ? '✓ FAIL (Passed to IPQC)' : `✓ ${loadedUnit.ivi_status || 'PASS'}`}
+                                        </span>
                                     </div>
-                                )}
+                                </div>
+                                <div className={styles.scannedInfoItem}>
+                                    <span className={styles.scannedInfoLabel}>IVI Inspected By</span>
+                                    <span className={styles.scannedInfoValue}>{loadedUnit.ivi_inspected_by || 'System Admin'}</span>
+                                </div>
                             </div>
                         </div>
-                    )}
 
-                    {/* Unit & Component Tracking (Scan / Type) (Photo 1) */}
-                    <div className={styles.trackingSection}>
-                        <div className={styles.trackingHeaderRow}>
-                            <h4 className={styles.trackingTitle}>
-                                🔍 Unit & Component Tracking (Scan / Type)
+                        {/* IVI Defect Notice if unit failed in IVI */}
+                        {loadedUnit.ivi_status === 'FAIL' && (
+                            <div style={{
+                                margin: '0.75rem 0 1rem',
+                                padding: '0.85rem 1.25rem',
+                                borderRadius: '0.5rem',
+                                backgroundColor: '#eff6ff',
+                                border: '1.5px solid #bfdbfe',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                color: '#1d4ed8'
+                            }}>
+                                <span style={{ fontSize: '1.35rem' }}>ℹ️</span>
+                                <div>
+                                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e40af' }}>
+                                        Unit Passed from IVI with FAIL Status
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', marginTop: '2px', color: '#1d4ed8' }}>
+                                        IVI Stage Defect: <strong style={{ color: '#1e40af' }}>"{cleanDefectDescription(loadedUnit.rrh_unit) || (loadedUnit as any).ivi_remarks || 'Visual inspection defect recorded'}"</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Re-inspection Notice */}
+                        {reinspectionInfo?.isReinspected && (
+                            <div className={styles.reinspectionBanner}>
+                                <AlertCircle size={20} />
+                                <div>
+                                    <strong>RE-INSPECTION MODE:</strong> This unit previously failed IPQC inspection. Review the previously failed checkpoints and confirm resolution.
+                                    {reinspectionInfo.previousFailureRemarks && (
+                                        <div style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>
+                                            <em>Previous Remark:</em> {reinspectionInfo.previousFailureRemarks}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Unit & Component Tracking (Scan / Type) (Photo 1) */}
+                        <div className={styles.trackingSection}>
+                            <div className={styles.trackingHeaderRow}>
+                                <h4 className={styles.trackingTitle}>
+                                    🔍 Unit & Component Tracking (Scan / Type)
+                                </h4>
+                                <span className={styles.trackingBadge}>Barcode / Manual Entry</span>
+                            </div>
+                            <p className={styles.trackingSubtitle}>
+                                Scan barcode labels directly into each field or manually type and press Enter before proceeding to inspection.
+                            </p>
+
+                            {/* Row 1 (2 Columns: Inspection Date, E-Label) */}
+                            <div className={styles.formGrid2}>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>Inspection Date *</label>
+                                    <input
+                                        type="date"
+                                        value={inspectionDate}
+                                        onChange={e => setInspectionDate(e.target.value)}
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>E-Label (Scan / Type)</label>
+                                    <input
+                                        type="text"
+                                        value={eLabel}
+                                        onChange={e => setELabel(e.target.value)}
+                                        placeholder="Scan or type E-Label..."
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-lpignore="true"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Row 2 (6 Columns: PAM TPN, PAM 1-4, RFPC TPN) */}
+                            <div className={styles.formGrid6}>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>1. PAM TPN *</label>
+                                    <input
+                                        type="text"
+                                        value={pamTpn}
+                                        onChange={e => setPamTpn(e.target.value)}
+                                        placeholder="Scan or type PAM TPN..."
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-lpignore="true"
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>2. PAM 1 *</label>
+                                    <input
+                                        type="text"
+                                        value={pam1}
+                                        onChange={e => setPam1(e.target.value)}
+                                        placeholder="Scan or type PAM 1..."
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-lpignore="true"
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>3. PAM 2 *</label>
+                                    <input
+                                        type="text"
+                                        value={pam2}
+                                        onChange={e => setPam2(e.target.value)}
+                                        placeholder="Scan or type PAM 2..."
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-lpignore="true"
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>4. PAM 3 *</label>
+                                    <input
+                                        type="text"
+                                        value={pam3}
+                                        onChange={e => setPam3(e.target.value)}
+                                        placeholder="Scan or type PAM 3..."
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-lpignore="true"
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>5. PAM 4 *</label>
+                                    <input
+                                        type="text"
+                                        value={pam4}
+                                        onChange={e => setPam4(e.target.value)}
+                                        placeholder="Scan or type PAM 4..."
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-lpignore="true"
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>6. RFPC TPN *</label>
+                                    <input
+                                        type="text"
+                                        value={rfpcTpn}
+                                        onChange={e => setRfpcTpn(e.target.value)}
+                                        placeholder="Scan or type RFPC TPN..."
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-lpignore="true"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Row 3 (RFPC Sl No. + General Remarks) */}
+                            <div className={styles.formGrid2}>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>7. RFPC Sl No. *</label>
+                                    <input
+                                        type="text"
+                                        value={rfpcSlNo}
+                                        onChange={e => setRfpcSlNo(e.target.value)}
+                                        placeholder="Scan or type RFPC Sl No...."
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-lpignore="true"
+                                    />
+                                </div>
+                                <div className={styles.inputGroup}>
+                                    <label className={styles.fieldLabel}>Remarks</label>
+                                    <input
+                                        type="text"
+                                        value={generalRemarks}
+                                        onChange={e => setGeneralRemarks(e.target.value)}
+                                        placeholder="General remarks (optional)..."
+                                        className={styles.formInput}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-lpignore="true"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Inspection Checklist (7 Items) (Photo 1) */}
+                        <div className={styles.checklistSection}>
+                            <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827', margin: '0 0 1rem 0' }}>
+                                Inspection Checklist
                             </h4>
-                            <span className={styles.trackingBadge}>Barcode / Manual Entry</span>
-                        </div>
-                        <p className={styles.trackingSubtitle}>
-                            Scan barcode labels directly into each field or manually type and press Enter before proceeding to inspection.
-                        </p>
 
-                        {/* Row 1 (2 Columns: Inspection Date, E-Label) */}
-                        <div className={styles.formGrid2}>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>Inspection Date *</label>
-                                <input
-                                    type="date"
-                                    value={inspectionDate}
-                                    onChange={e => setInspectionDate(e.target.value)}
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>E-Label (Scan / Type)</label>
-                                <input
-                                    type="text"
-                                    value={eLabel}
-                                    onChange={e => setELabel(e.target.value)}
-                                    placeholder="Scan or type E-Label..."
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-lpignore="true"
-                                />
-                            </div>
-                        </div>
+                            {checkpoints.map(cp => {
+                                const isPassActive = cp.selectedStatus === 'PASS';
+                                const isFailActive = cp.selectedStatus === 'FAIL';
 
-                        {/* Row 2 (6 Columns: PAM TPN, PAM 1-4, RFPC TPN) */}
-                        <div className={styles.formGrid6}>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>1. PAM TPN *</label>
-                                <input
-                                    type="text"
-                                    value={pamTpn}
-                                    onChange={e => setPamTpn(e.target.value)}
-                                    placeholder="Scan or type PAM TPN..."
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-lpignore="true"
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>2. PAM 1 *</label>
-                                <input
-                                    type="text"
-                                    value={pam1}
-                                    onChange={e => setPam1(e.target.value)}
-                                    placeholder="Scan or type PAM 1..."
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-lpignore="true"
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>3. PAM 2 *</label>
-                                <input
-                                    type="text"
-                                    value={pam2}
-                                    onChange={e => setPam2(e.target.value)}
-                                    placeholder="Scan or type PAM 2..."
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-lpignore="true"
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>4. PAM 3 *</label>
-                                <input
-                                    type="text"
-                                    value={pam3}
-                                    onChange={e => setPam3(e.target.value)}
-                                    placeholder="Scan or type PAM 3..."
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-lpignore="true"
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>5. PAM 4 *</label>
-                                <input
-                                    type="text"
-                                    value={pam4}
-                                    onChange={e => setPam4(e.target.value)}
-                                    placeholder="Scan or type PAM 4..."
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-lpignore="true"
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>6. RFPC TPN *</label>
-                                <input
-                                    type="text"
-                                    value={rfpcTpn}
-                                    onChange={e => setRfpcTpn(e.target.value)}
-                                    placeholder="Scan or type RFPC TPN..."
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-lpignore="true"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Row 3 (RFPC Sl No. + General Remarks) */}
-                        <div className={styles.formGrid2}>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>7. RFPC Sl No. *</label>
-                                <input
-                                    type="text"
-                                    value={rfpcSlNo}
-                                    onChange={e => setRfpcSlNo(e.target.value)}
-                                    placeholder="Scan or type RFPC Sl No...."
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-lpignore="true"
-                                />
-                            </div>
-                            <div className={styles.inputGroup}>
-                                <label className={styles.fieldLabel}>Remarks</label>
-                                <input
-                                    type="text"
-                                    value={generalRemarks}
-                                    onChange={e => setGeneralRemarks(e.target.value)}
-                                    placeholder="General remarks (optional)..."
-                                    className={styles.formInput}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-lpignore="true"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Inspection Checklist (7 Items) (Photo 1) */}
-                    <div className={styles.checklistSection}>
-                        <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827', margin: '0 0 1rem 0' }}>
-                            Inspection Checklist
-                        </h4>
-
-                        {checkpoints.map(cp => {
-                            const isPassActive = cp.selectedStatus === 'PASS';
-                            const isFailActive = cp.selectedStatus === 'FAIL';
-
-                            return (
-                                <div key={cp.id} className={styles.checklistItem}>
-                                    <div className={styles.checklistItemHeader}>
-                                        <h5 className={styles.checkpointTitle}>{cp.title}</h5>
-                                        <div>
-                                            {cp.confirmed ? (
-                                                cp.confirmedStatus === 'PASS' ? (
-                                                    <span className={styles.badgeConfirmedPass}>✓ Confirmed PASS</span>
+                                return (
+                                    <div key={cp.id} className={styles.checklistItem}>
+                                        <div className={styles.checklistItemHeader}>
+                                            <h5 className={styles.checkpointTitle}>{cp.title}</h5>
+                                            <div>
+                                                {cp.confirmed ? (
+                                                    cp.confirmedStatus === 'PASS' ? (
+                                                        <span className={styles.badgeConfirmedPass}>✓ Confirmed PASS</span>
+                                                    ) : (
+                                                        <span className={styles.badgeConfirmedFail}>✕ Confirmed FAIL</span>
+                                                    )
+                                                ) : cp.previousFailureRemark ? (
+                                                    <span style={{
+                                                        backgroundColor: '#fee2e2',
+                                                        color: '#991b1b',
+                                                        border: '1px solid #fca5a5',
+                                                        padding: '0.2rem 0.55rem',
+                                                        borderRadius: '4px',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 700,
+                                                        textTransform: 'uppercase'
+                                                    }}>
+                                                        Previously Failed
+                                                    </span>
                                                 ) : (
-                                                    <span className={styles.badgeConfirmedFail}>✕ Confirmed FAIL</span>
-                                                )
-                                            ) : cp.previousFailureRemark ? (
-                                                <span style={{
-                                                    backgroundColor: '#fee2e2',
-                                                    color: '#991b1b',
-                                                    border: '1px solid #fca5a5',
-                                                    padding: '0.2rem 0.55rem',
-                                                    borderRadius: '4px',
-                                                    fontSize: '0.75rem',
-                                                    fontWeight: 700,
-                                                    textTransform: 'uppercase'
+                                                    <span className={styles.badgeInitial}>initial</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Checkpoint Selection Buttons & Defect Noted Directly Aside Fail Button */}
+                                        <div className={styles.checkpointButtonsRow} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                <button
+                                                    type="button"
+                                                    className={`${styles.passSelectButton} ${isPassActive ? styles.passSelectButtonActive : ''}`}
+                                                    onClick={() => handleSelectStatus(cp.id, 'PASS')}
+                                                >
+                                                    ✓ PASS
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`${styles.failSelectButton} ${isFailActive ? styles.failSelectButtonActive : ''}`}
+                                                    onClick={() => handleSelectStatus(cp.id, 'FAIL')}
+                                                >
+                                                    ✕ FAIL
+                                                </button>
+                                            </div>
+
+                                            {/* Defect entered by inspector shown directly aside the FAIL button */}
+                                            {(cp.previousFailureRemark || (cp.confirmed && cp.confirmedStatus === 'FAIL' && cp.remark)) && (
+                                                <div style={{
+                                                    backgroundColor: isPassActive ? '#f0fdf4' : '#fef2f2',
+                                                    border: isPassActive ? '1px solid #86efac' : '1px solid #fecaca',
+                                                    borderRadius: '6px',
+                                                    padding: '0.35rem 0.75rem',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '8px',
+                                                    fontSize: '0.85rem'
                                                 }}>
-                                                    Previously Failed
-                                                </span>
-                                            ) : (
-                                                <span className={styles.badgeInitial}>initial</span>
+                                                    <span style={{
+                                                        fontWeight: 700,
+                                                        color: isPassActive ? '#15803d' : '#b91c1c'
+                                                    }}>
+                                                        {isPassActive ? 'Rectified Defect:' : 'Defect Noted:'}
+                                                    </span>
+                                                    <span style={{
+                                                        color: '#1e293b',
+                                                        fontWeight: 600,
+                                                        textDecoration: isPassActive ? 'line-through' : 'none',
+                                                        fontFamily: 'monospace'
+                                                    }}>
+                                                        "{isPassActive ? (cp.previousFailureRemark || cp.remark) : (cp.confirmed && cp.confirmedStatus === 'FAIL' && cp.remark ? cp.remark : cp.previousFailureRemark)}"
+                                                    </span>
+                                                    {isPassActive && (
+                                                        <span style={{
+                                                            marginLeft: '4px',
+                                                            color: '#16a34a',
+                                                            fontWeight: 700,
+                                                            fontSize: '0.78rem'
+                                                        }}>
+                                                            (Resolved / Passing)
+                                                        </span>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
-                                    </div>
 
-                                    {/* Checkpoint Selection Buttons & Defect Noted Directly Aside Fail Button */}
-                                    <div className={styles.checkpointButtonsRow} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                            <button
-                                                type="button"
-                                                className={`${styles.passSelectButton} ${isPassActive ? styles.passSelectButtonActive : ''}`}
-                                                onClick={() => handleSelectStatus(cp.id, 'PASS')}
-                                            >
-                                                ✓ PASS
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={`${styles.failSelectButton} ${isFailActive ? styles.failSelectButtonActive : ''}`}
-                                                onClick={() => handleSelectStatus(cp.id, 'FAIL')}
-                                            >
-                                                ✕ FAIL
-                                            </button>
-                                        </div>
+                                        {/* Confirmation Box (Left aligned matching Confirm FAIL button) */}
+                                        {isPassActive && !cp.confirmed && (
+                                            <div className={styles.confirmBox} style={{ alignItems: 'flex-start', marginTop: '0.75rem' }}>
+                                                <button
+                                                    type="button"
+                                                    className={styles.confirmPassButton}
+                                                    onClick={() => handleConfirmPoint(cp.id, 'PASS')}
+                                                >
+                                                    ✓ Confirm PASS
+                                                </button>
+                                            </div>
+                                        )}
 
-                                        {/* Defect entered by inspector shown directly aside the FAIL button */}
-                                        {(cp.previousFailureRemark || (cp.confirmed && cp.confirmedStatus === 'FAIL' && cp.remark)) && (
-                                            <div style={{
-                                                backgroundColor: isPassActive ? '#f0fdf4' : '#fef2f2',
-                                                border: isPassActive ? '1px solid #86efac' : '1px solid #fecaca',
-                                                borderRadius: '6px',
-                                                padding: '0.35rem 0.75rem',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '8px',
-                                                fontSize: '0.85rem'
-                                            }}>
-                                                <span style={{
-                                                    fontWeight: 700,
-                                                    color: isPassActive ? '#15803d' : '#b91c1c'
-                                                }}>
-                                                    {isPassActive ? 'Rectified Defect:' : 'Defect Noted:'}
-                                                </span>
-                                                <span style={{
-                                                    color: '#1e293b',
-                                                    fontWeight: 600,
-                                                    textDecoration: isPassActive ? 'line-through' : 'none',
-                                                    fontFamily: 'monospace'
-                                                }}>
-                                                    "{isPassActive ? (cp.previousFailureRemark || cp.remark) : (cp.confirmed && cp.confirmedStatus === 'FAIL' && cp.remark ? cp.remark : cp.previousFailureRemark)}"
-                                                </span>
-                                                {isPassActive && (
-                                                    <span style={{
-                                                        marginLeft: '4px',
-                                                        color: '#16a34a',
-                                                        fontWeight: 700,
-                                                        fontSize: '0.78rem'
-                                                    }}>
-                                                        (Resolved / Passing)
-                                                    </span>
-                                                )}
+                                        {/* Failure Remark Box (Closes upon confirming FAIL, matching Confirm PASS) */}
+                                        {isFailActive && !cp.confirmed && (
+                                            <div className={styles.confirmBox} style={{ alignItems: 'flex-start', marginTop: '0.75rem' }}>
+                                                <textarea
+                                                    rows={2}
+                                                    placeholder="Enter remark for initial failure..."
+                                                    value={cp.remark}
+                                                    onChange={e => handleRemarkChange(cp.id, e.target.value)}
+                                                    className={styles.checkpointRemarkTextarea}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className={styles.confirmFailButton}
+                                                    onClick={() => handleConfirmPoint(cp.id, 'FAIL')}
+                                                >
+                                                    ✕ Confirm FAIL
+                                                </button>
                                             </div>
                                         )}
                                     </div>
+                                );
+                            })}
 
-                                    {/* Confirmation Box (Left aligned matching Confirm FAIL button) */}
-                                    {isPassActive && !cp.confirmed && (
-                                        <div className={styles.confirmBox} style={{ alignItems: 'flex-start', marginTop: '0.75rem' }}>
-                                            <button
-                                                type="button"
-                                                className={styles.confirmPassButton}
-                                                onClick={() => handleConfirmPoint(cp.id, 'PASS')}
-                                            >
-                                                ✓ Confirm PASS
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {/* Failure Remark Box (Closes upon confirming FAIL, matching Confirm PASS) */}
-                                    {isFailActive && !cp.confirmed && (
-                                        <div className={styles.confirmBox} style={{ alignItems: 'flex-start', marginTop: '0.75rem' }}>
-                                            <textarea
-                                                rows={2}
-                                                placeholder="Enter remark for initial failure..."
-                                                value={cp.remark}
-                                                onChange={e => handleRemarkChange(cp.id, e.target.value)}
-                                                className={styles.checkpointRemarkTextarea}
-                                            />
-                                            <button
-                                                type="button"
-                                                className={styles.confirmFailButton}
-                                                onClick={() => handleConfirmPoint(cp.id, 'FAIL')}
-                                            >
-                                                ✕ Confirm FAIL
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-
-                        {/* Submit Button (Final Status box strictly omitted as requested) */}
-                        <button
-                            className={styles.submitInspectionFullButton}
-                            onClick={handleSubmitInspection}
-                            disabled={isSubmittingInspection}
-                        >
-                            {isSubmittingInspection ? 'Submitting Inspection...' : 'Submit Inspection'}
-                        </button>
-                    </div>
-                </>
-            )}
-        </div>
+                            {/* Submit Button (Final Status box strictly omitted as requested) */}
+                            <button
+                                className={styles.submitInspectionFullButton}
+                                onClick={handleSubmitInspection}
+                                disabled={isSubmittingInspection}
+                            >
+                                {isSubmittingInspection ? 'Submitting Inspection...' : 'Submit Inspection'}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
 
             {/* ─── FAILED INSPECTIONS TABLE CARD (ONLY FAILED STATUS) ─────────────── */}
             <div className={styles.card} style={{ borderColor: '#fca5a5' }}>
@@ -2621,18 +2675,21 @@ export const RrhIpqc: React.FC = () => {
                                         </td>
                                         <td>{item.duplexer_main || '—'}</td>
                                         <td style={{ fontFamily: 'monospace' }}>{item.duplexer_part_no || '—'}</td>
-                                        <td>{item.rrh_unit || 'no defect'}</td>
+                                        <td style={{ color: item.ivi_status === 'FAIL' ? '#2563eb' : undefined, fontWeight: item.ivi_status === 'FAIL' ? 600 : undefined }}>
+                                            {cleanDefectDescription(item.rrh_unit) || (item.ivi_status === 'FAIL' ? 'Defect noted' : 'no defect')}
+                                        </td>
                                         <td>
                                             <span style={{
-                                                background: '#dcfce7',
-                                                color: '#15803d',
-                                                border: '1px solid #86efac',
+                                                backgroundColor: item.ivi_status === 'FAIL' ? '#eff6ff' : '#dcfce7',
+                                                color: item.ivi_status === 'FAIL' ? '#1d4ed8' : '#15803d',
+                                                border: item.ivi_status === 'FAIL' ? '1px solid #bfdbfe' : '1px solid #86efac',
                                                 borderRadius: '4px',
                                                 padding: '0.15rem 0.5rem',
                                                 fontWeight: 700,
-                                                fontSize: '0.75rem'
+                                                fontSize: '0.75rem',
+                                                whiteSpace: 'nowrap'
                                             }}>
-                                                PASS
+                                                {item.ivi_status === 'FAIL' ? 'FAIL' : 'PASS'}
                                             </span>
                                         </td>
                                         <td>{item.tejas_dc_no || '—'}</td>

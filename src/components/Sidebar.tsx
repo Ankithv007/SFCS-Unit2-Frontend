@@ -46,7 +46,8 @@ import {
     BarChart3,
     ArrowDownRight,
     Award,
-    PackageSearch
+    PackageSearch,
+    Truck
 } from 'lucide-react';
 import styles from './Sidebar.module.css';
 
@@ -646,7 +647,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                     </span> IVI
                                 </div>
                             )}
-                            {hasPermission('rrh_ipqc') && (
+                            {(isSuperAdmin || canViewRrhModule || hasPermission('rrh_ipqc')) && (
                                 <div
                                     className={`${styles.submenuItem} ${isRrhEcnExpanded ? styles.activeSubmenuParent : ''}`}
                                     onClick={() => setIsRrhEcnExpanded(!isRrhEcnExpanded)}
@@ -658,22 +659,108 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             )}
                             {isRrhEcnExpanded && isExpanded && (
                                 <div className={styles.subSubmenu}>
-                                    {hasPermission('rrh_ipqc') && (
-                                        <div
-                                            className={`${styles.subSubmenuItem} ${isActive('/rrh/ipqc') ? styles.activeSubSubmenu : ''}`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigate('/rrh/ipqc');
-                                            }}
-                                        >
-                                            <span className={styles.menuIcon}>
-                                                <ShieldCheck size={16} />
-                                            </span> IPQC
-                                        </div>
-                                    )}
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${(isActive('/rrh/ipqc') || isActive('/rrh/ecn/ipqc')) ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/ecn/ipqc');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <ShieldCheck size={16} />
+                                        </span> IPQC
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/programming') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/ecn/programming');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Cpu size={16} />
+                                        </span> Programming
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/pre-burn-in') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/ecn/pre-burn-in');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Flame size={16} />
+                                        </span> Pre-Burn-in Test
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/hipot') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/ecn/hipot');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Zap size={16} />
+                                        </span> Hipot Test
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/post-burn-in') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/ecn/post-burn-in');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Thermometer size={16} />
+                                        </span> Post-Burn-in Test
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/fqc') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/ecn/fqc');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Award size={16} />
+                                        </span> FQC
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/oba') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/ecn/oba');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <PackageSearch size={16} />
+                                        </span> OBA
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/packing') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/ecn/packing');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Package size={16} />
+                                        </span> Packing
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/shipment') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/ecn/shipment');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Truck size={16} />
+                                        </span> Shipment
+                                    </div>
                                 </div>
                             )}
-                            {(isSuperAdmin || hasPermission('rrh_inward') || hasPermission('rrh_ivi')) && (
+                            {(isSuperAdmin || canViewRrhModule || hasPermission('rrh_inward') || hasPermission('rrh_ivi')) && (
                                 <div
                                     className={`${styles.submenuItem} ${isRrhNonEcnExpanded ? styles.activeSubmenuParent : ''}`}
                                     onClick={() => setIsRrhNonEcnExpanded(!isRrhNonEcnExpanded)}
@@ -686,62 +773,104 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             {isRrhNonEcnExpanded && isExpanded && (
                                 <div className={styles.subSubmenu}>
                                     <div
-                                        className={styles.subSubmenuItem}
-                                        style={{ fontStyle: 'italic', opacity: 0.6, cursor: 'default' }}
-                                        onClick={(e) => e.stopPropagation()}
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/post-burn-in-initial') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/non-ecn/post-burn-in-initial');
+                                        }}
                                     >
-                                        (No items)
+                                        <span className={styles.menuIcon}>
+                                            <Thermometer size={16} />
+                                        </span> Post-Burn-in Test
                                     </div>
-                                </div>
-                            )}
-                            {hasPermission('rrh_debug') && (
-                                <div
-                                    className={`${styles.submenuItem} ${isActive('/rrh/debug') ? styles.activeSubmenu : ''}`}
-                                    onClick={() => navigate('/rrh/debug')}
-                                >
-                                    <span className={styles.menuIcon}>
-                                        <Bug size={18} />
-                                    </span> Debug
-                                </div>
-                            )}
-                            {hasPermission('rrh_testing') && (
-                                <div
-                                    className={`${styles.submenuItem} ${isActive('/rrh/testing') ? styles.activeSubmenu : ''}`}
-                                    onClick={() => navigate('/rrh/testing')}
-                                >
-                                    <span className={styles.menuIcon}>
-                                        <PlayCircle size={18} />
-                                    </span> Testing
-                                </div>
-                            )}
-                            {hasPermission('rrh_fqc') && (
-                                <div
-                                    className={`${styles.submenuItem} ${isActive('/rrh/fqc') ? styles.activeSubmenu : ''}`}
-                                    onClick={() => navigate('/rrh/fqc')}
-                                >
-                                    <span className={styles.menuIcon}>
-                                        <Award size={18} />
-                                    </span> FQC
-                                </div>
-                            )}
-                            {hasPermission('rrh_oba') && (
-                                <div
-                                    className={`${styles.submenuItem} ${isActive('/rrh/oba') ? styles.activeSubmenu : ''}`}
-                                    onClick={() => navigate('/rrh/oba')}
-                                >
-                                    <span className={styles.menuIcon}>
-                                        <PackageSearch size={18} />
-                                    </span> OBA
-                                </div>
-                            )}
-                            {hasPermission('rrh_packaging_outgoing_data') && (
-                                <div
-                                    className={`${styles.submenuItem} ${isActive('/rrh/packaging-outgoing-data') ? styles.activeSubmenu : ''}`}
-                                    onClick={() => navigate('/rrh/packaging-outgoing-data')}
-                                >
-                                    <span className={styles.menuIcon}>
-                                        <Package size={18} />
-                                    </span> Packaging Outgoing Data
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/programming') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/non-ecn/programming');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Cpu size={16} />
+                                        </span> Programming
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/pre-burn-in') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/non-ecn/pre-burn-in');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Flame size={16} />
+                                        </span> Pre-Burn-in Test
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/hipot') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/non-ecn/hipot');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Zap size={16} />
+                                        </span> Hipot Test
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/post-burn-in') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/non-ecn/post-burn-in');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Thermometer size={16} />
+                                        </span> Post-Burn-in Test
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/fqc') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/non-ecn/fqc');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Award size={16} />
+                                        </span> FQC
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/oba') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/non-ecn/oba');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <PackageSearch size={16} />
+                                        </span> OBA
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/packing') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/non-ecn/packing');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Package size={16} />
+                                        </span> Packing
+                                    </div>
+                                    <div
+                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/shipment') ? styles.activeSubSubmenu : ''}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate('/rrh/non-ecn/shipment');
+                                        }}
+                                    >
+                                        <span className={styles.menuIcon}>
+                                            <Truck size={16} />
+                                        </span> Shipment
+                                    </div>
                                 </div>
                             )}
                         </div>

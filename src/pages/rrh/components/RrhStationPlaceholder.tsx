@@ -10,6 +10,7 @@ interface RrhStationPlaceholderProps {
     headerIcon: React.ComponentType<{ size?: number; color?: string }>;
     cardIcon: React.ComponentType<{ size?: number; color?: string }>;
     emptyIcon?: React.ComponentType<{ size?: number; color?: string }>;
+    routeType?: 'ECN' | 'Non-ECN';
 }
 
 export const RrhStationPlaceholder: React.FC<RrhStationPlaceholderProps> = ({
@@ -21,6 +22,7 @@ export const RrhStationPlaceholder: React.FC<RrhStationPlaceholderProps> = ({
     headerIcon: HeaderIcon,
     cardIcon: CardIcon,
     emptyIcon: EmptyIcon = HeaderIcon,
+    routeType,
 }) => {
     return (
         <div className={styles.container}>
@@ -30,7 +32,14 @@ export const RrhStationPlaceholder: React.FC<RrhStationPlaceholderProps> = ({
                         <HeaderIcon size={24} />
                     </div>
                     <div>
-                        <h1 className={styles.headerTitle}>{title}</h1>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <h1 className={styles.headerTitle}>{title}</h1>
+                            {routeType && (
+                                <span className={styles.routeBadge}>
+                                    {routeType}
+                                </span>
+                            )}
+                        </div>
                         <p className={styles.headerSubtitle}>{subtitle}</p>
                     </div>
                 </div>

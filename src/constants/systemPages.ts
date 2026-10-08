@@ -87,5 +87,26 @@ export const systemPagesConfig: SystemPageRoute[] = [
     { permission_key: 'rrh_testing', module_name: 'RRH', page_name: 'Testing', route_path: '/rrh/testing', display_order: 99, page_type: 'PAGE', icon: 'Play', parent_module: 'RRH' },
     { permission_key: 'rrh_fqc', module_name: 'RRH', page_name: 'FQC', route_path: '/rrh/fqc', display_order: 100, page_type: 'PAGE', icon: 'Award', parent_module: 'RRH' },
     { permission_key: 'rrh_oba', module_name: 'RRH', page_name: 'OBA', route_path: '/rrh/oba', display_order: 101, page_type: 'PAGE', icon: 'PackageSearch', parent_module: 'RRH' },
-    { permission_key: 'rrh_packaging_outgoing_data', module_name: 'RRH', page_name: 'Packaging Outgoing Data', route_path: '/rrh/packaging-outgoing-data', display_order: 102, page_type: 'PAGE', icon: 'Package', parent_module: 'RRH' }
+    { permission_key: 'rrh_packaging_outgoing_data', module_name: 'RRH', page_name: 'Packaging Outgoing Data', route_path: '/rrh/packaging-outgoing-data', display_order: 102, page_type: 'PAGE', icon: 'Package', parent_module: 'RRH' },
+
+    // RRH ECN Stages
+    { permission_key: 'rrh_ecn_programming', module_name: 'RRH', page_name: 'ECN Programming', route_path: '/rrh/ecn/programming', display_order: 103, page_type: 'PAGE', icon: 'Cpu', parent_module: 'RRH' },
+    { permission_key: 'rrh_ecn_pre_burn_in', module_name: 'RRH', page_name: 'ECN Pre-Burn-in Test', route_path: '/rrh/ecn/pre-burn-in', display_order: 104, page_type: 'PAGE', icon: 'Flame', parent_module: 'RRH' },
+    { permission_key: 'rrh_ecn_hipot', module_name: 'RRH', page_name: 'ECN Hipot Test', route_path: '/rrh/ecn/hipot', display_order: 105, page_type: 'PAGE', icon: 'Zap', parent_module: 'RRH' },
+    { permission_key: 'rrh_ecn_post_burn_in', module_name: 'RRH', page_name: 'ECN Post-Burn-in Test', route_path: '/rrh/ecn/post-burn-in', display_order: 106, page_type: 'PAGE', icon: 'Thermometer', parent_module: 'RRH' },
+    { permission_key: 'rrh_ecn_fqc', module_name: 'RRH', page_name: 'ECN FQC', route_path: '/rrh/ecn/fqc', display_order: 107, page_type: 'PAGE', icon: 'Award', parent_module: 'RRH' },
+    { permission_key: 'rrh_ecn_oba', module_name: 'RRH', page_name: 'ECN OBA', route_path: '/rrh/ecn/oba', display_order: 108, page_type: 'PAGE', icon: 'PackageSearch', parent_module: 'RRH' },
+    { permission_key: 'rrh_ecn_packing', module_name: 'RRH', page_name: 'ECN Packing', route_path: '/rrh/ecn/packing', display_order: 109, page_type: 'PAGE', icon: 'Package', parent_module: 'RRH' },
+    { permission_key: 'rrh_ecn_shipment', module_name: 'RRH', page_name: 'ECN Shipment', route_path: '/rrh/ecn/shipment', display_order: 110, page_type: 'PAGE', icon: 'Truck', parent_module: 'RRH' },
+
+    // RRH Non-ECN Stages
+    { permission_key: 'rrh_non_ecn_post_burn_in_initial', module_name: 'RRH', page_name: 'Non-ECN Post-Burn-in (Initial)', route_path: '/rrh/non-ecn/post-burn-in-initial', display_order: 111, page_type: 'PAGE', icon: 'Thermometer', parent_module: 'RRH' },
+    { permission_key: 'rrh_non_ecn_programming', module_name: 'RRH', page_name: 'Non-ECN Programming', route_path: '/rrh/non-ecn/programming', display_order: 112, page_type: 'PAGE', icon: 'Cpu', parent_module: 'RRH' },
+    { permission_key: 'rrh_non_ecn_pre_burn_in', module_name: 'RRH', page_name: 'Non-ECN Pre-Burn-in Test', route_path: '/rrh/non-ecn/pre-burn-in', display_order: 113, page_type: 'PAGE', icon: 'Flame', parent_module: 'RRH' },
+    { permission_key: 'rrh_non_ecn_hipot', module_name: 'RRH', page_name: 'Non-ECN Hipot Test', route_path: '/rrh/non-ecn/hipot', display_order: 114, page_type: 'PAGE', icon: 'Zap', parent_module: 'RRH' },
+    { permission_key: 'rrh_non_ecn_post_burn_in', module_name: 'RRH', page_name: 'Non-ECN Post-Burn-in Test', route_path: '/rrh/non-ecn/post-burn-in', display_order: 115, page_type: 'PAGE', icon: 'Thermometer', parent_module: 'RRH' },
+    { permission_key: 'rrh_non_ecn_fqc', module_name: 'RRH', page_name: 'Non-ECN FQC', route_path: '/rrh/non-ecn/fqc', display_order: 116, page_type: 'PAGE', icon: 'Award', parent_module: 'RRH' },
+    { permission_key: 'rrh_non_ecn_oba', module_name: 'RRH', page_name: 'Non-ECN OBA', route_path: '/rrh/non-ecn/oba', display_order: 117, page_type: 'PAGE', icon: 'PackageSearch', parent_module: 'RRH' },
+    { permission_key: 'rrh_non_ecn_packing', module_name: 'RRH', page_name: 'Non-ECN Packing', route_path: '/rrh/non-ecn/packing', display_order: 118, page_type: 'PAGE', icon: 'Package', parent_module: 'RRH' },
+    { permission_key: 'rrh_non_ecn_shipment', module_name: 'RRH', page_name: 'Non-ECN Shipment', route_path: '/rrh/non-ecn/shipment', display_order: 119, page_type: 'PAGE', icon: 'Truck', parent_module: 'RRH' }
 ];

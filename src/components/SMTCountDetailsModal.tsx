@@ -17,6 +17,8 @@ interface SMTCountDetailsModalProps {
     type: string;
     label: string;
     onClose: () => void;
+    sessionId?: string;
+    side?: string;
 }
 
 const SMTCountDetailsModal: React.FC<SMTCountDetailsModalProps> = ({
@@ -24,7 +26,9 @@ const SMTCountDetailsModal: React.FC<SMTCountDetailsModalProps> = ({
     stage,
     type,
     label,
-    onClose
+    onClose,
+    sessionId,
+    side
 }) => {
     const [data, setData] = useState<SMTRecord[]>([]);
     const [search, setSearch] = useState('');
@@ -46,6 +50,12 @@ const SMTCountDetailsModal: React.FC<SMTCountDetailsModalProps> = ({
             url.searchParams.set('page', currentPage.toString());
             url.searchParams.set('limit', limit.toString());
             url.searchParams.set('search', searchVal);
+            if (sessionId) {
+                url.searchParams.set('sessionId', sessionId);
+            }
+            if (side) {
+                url.searchParams.set('side', side);
+            }
 
             const res = await fetch(url.toString());
             const contentType = res.headers.get('content-type') || '';
@@ -79,7 +89,7 @@ const SMTCountDetailsModal: React.FC<SMTCountDetailsModalProps> = ({
         }, 300);
 
         return () => clearTimeout(delayDebounce);
-    }, [search, workOrderId, stage, type]);
+    }, [search, workOrderId, stage, type, sessionId, side]);
 
     const handlePageChange = (newPage: number) => {
         if (newPage >= 1 && newPage <= totalPages) {

@@ -2249,6 +2249,8 @@ export const Printing: React.FC = () => {
             {showFailedModal && activeSession && (
                 <SMTCountDetailsModal
                     workOrderId={activeSession.work_order_id}
+                    sessionId={activeSession.id}
+                    side={activeSession.side}
                     stage="Printing"
                     type="FAILED"
                     label="Printing Failed Units"

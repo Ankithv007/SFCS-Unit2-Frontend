@@ -182,14 +182,14 @@ const Rework: React.FC = () => {
         units: prevStageUnits,
         count: prevStageCount,
         previousStage: resolvedPrevStage,
-        loading: prevStageLoading,
-        refetch: refetchPrevStage
+        loading: prevStageLoading
     } = usePreviousStagePassed({
         workOrderId: activeSession?.work_order_id,
         side: activeSession?.side,
         stage: 'Rework',
         sessionId: activeSession?.id,
-        enabled: !!activeSession
+        enabled: !!activeSession,
+        pollingIntervalMs: 30000  // 30s: matches SPI/Pre-AOI/Post-AOI; prevents 3500ms default causing abort races.
     });
 
     const [selectedScanToRepair, setSelectedScanToRepair] = useState<{ barcode: string } | null>(null);
@@ -460,9 +460,11 @@ const Rework: React.FC = () => {
             }
         } catch (err: any) {
             console.error('Error loading session stats:', err);
-        } finally {
-            refetchPrevStage();
         }
+        // NOTE: refetchPrevStage() intentionally NOT called here.
+        // The previous-stage panel is updated by the background poll (every 30s).
+        // The server cache is invalidated on every scan via notifySmtDashboardUpdate(),
+        // so the next poll will always return fresh data without the abort race condition.
     };
 
     // ─── Setup Session Submit ────────────────────────────────────────────────
@@ -2156,6 +2158,8 @@ const Rework: React.FC = () => {
             {showFailedModal && activeSession && (
                 <SMTCountDetailsModal
                     workOrderId={activeSession.work_order_id}
+                    sessionId={activeSession.id}
+                    side={activeSession.side}
                     stage="Rework"
                     type="FAILED"
                     label="Rework Failed Units"

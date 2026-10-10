@@ -2257,6 +2257,8 @@ const PostAoi: React.FC = () => {
                     stage="Post AOI"
                     type="FAILED"
                     label="Post AOI Failed Units"
+                    sessionId={activeSession.id}
+                    side={activeSession.side}
                     onClose={() => setShowFailedModal(false)}
                 />
             )}

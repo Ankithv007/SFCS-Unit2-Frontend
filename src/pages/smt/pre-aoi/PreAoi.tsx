@@ -2178,6 +2178,8 @@ const PreAoi: React.FC = () => {
                     stage="Pre AOI"
                     type="FAILED"
                     label="Pre AOI Failed Units"
+                    sessionId={activeSession.id}
+                    side={activeSession.side}
                     onClose={() => setShowFailedModal(false)}
                 />
             )}

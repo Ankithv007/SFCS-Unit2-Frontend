@@ -2145,6 +2145,8 @@ const Spi: React.FC = () => {
                     stage="SPI"
                     type="FAILED"
                     label="SPI Failed Units"
+                    sessionId={activeSession.id}
+                    side={activeSession.side}
                     onClose={() => setShowFailedModal(false)}
                 />
             )}

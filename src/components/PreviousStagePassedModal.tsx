@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { X, Search, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { X, Search, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import styles from './CountDetailsModal.module.css';
 import type { PreviousStageUnit } from '../hooks/usePreviousStagePassed';
 
@@ -28,6 +28,11 @@ export const PreviousStagePassedModal: React.FC<PreviousStagePassedModalProps> =
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const limit = 10;
+
+    // Reset to page 1 whenever the units array is refreshed (avoids stale empty pages)
+    useEffect(() => {
+        setPage(1);
+    }, [units]);
 
     const filteredUnits = useMemo(() => {
         if (!search.trim()) return units;
@@ -73,10 +78,22 @@ export const PreviousStagePassedModal: React.FC<PreviousStagePassedModalProps> =
                 {/* Modal Header */}
                 <div className={styles.modalHeader}>
                     <div>
-                        <h2>Pending at Current Stage Units ({count})</h2>
+                        <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            Pending at Current Stage Units
+                            {loading ? (
+                                <Loader2 size={18} style={{ animation: 'spin 1s linear infinite', color: '#6d28d9' }} />
+                            ) : (
+                                <span style={{ color: '#6d28d9' }}>({units.length})</span>
+                            )}
+                        </h2>
                         <p>
                             Work Order: <strong>{workOrderId}</strong> &nbsp;|&nbsp; 
                             Side: <strong>{side}</strong>
+                            {!loading && count !== units.length && count > 0 && (
+                                <span style={{ marginLeft: '8px', fontSize: '0.78rem', color: '#92400e', background: '#fef3c7', padding: '1px 6px', borderRadius: '4px' }}>
+                                    Syncing…
+                                </span>
+                            )}
                         </p>
                     </div>
                     <button className={styles.closeBtn} onClick={onClose} title="Close Modal">
@@ -211,7 +228,7 @@ export const PreviousStagePassedModal: React.FC<PreviousStagePassedModalProps> =
                 <div className={styles.modalFooter}>
                     <div className={styles.totalRecords}>
                         Showing {filteredUnits.length === 0 ? 0 : (page - 1) * limit + 1} to {Math.min(page * limit, filteredUnits.length)} of {filteredUnits.length} units
-                        {filteredUnits.length !== count && ` (filtered from ${count} total)`}
+                        {search.trim() && filteredUnits.length !== units.length && ` (filtered from ${units.length} total)`}
                     </div>
 
                     <div className={styles.paginationControls}>

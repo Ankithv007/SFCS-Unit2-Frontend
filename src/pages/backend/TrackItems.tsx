@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { apiFetch } from '../../utils/api';
 import styles from './TrackItems.module.css';
 import {
@@ -52,6 +52,15 @@ interface TrackResult {
     scan_history: ScanEntry[];
     smt_scan_history?: any[];
     selected_stages?: any;
+    sides?: string;
+    is_double_sided?: boolean;
+    is_bottom_only?: boolean;
+    smt_statuses?: Record<string, string>;
+    smt_top?: Record<string, string>;
+    smt_bottom?: Record<string, string>;
+    step_status_top?: Record<string, string>;
+    step_status_bottom?: Record<string, string>;
+    step_status?: Record<string, string>;
     active_route?: Array<{
         id: number;
         stage_code: string;
@@ -74,44 +83,116 @@ const PRODUCTION_PIPELINE = [
 ];
 
 const SMT_PIPELINE_STAGES = ['Serial Number', 'Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
+const SMT_STAGES = ['Printing', 'SPI', 'Pre AOI', 'Post AOI', 'Rework', 'SMT FG'];
+
+const getSmtStepStatus = (smtMap: Record<string, string> | undefined, stageName: string): string => {
+    if (!smtMap) return 'PENDING';
+    if (smtMap[stageName] && smtMap[stageName] !== '-') return smtMap[stageName];
+    const norm = stageName.toUpperCase().replace(/[\s\-_]/g, '');
+    for (const k of Object.keys(smtMap)) {
+        if (k.toUpperCase().replace(/[\s\-_]/g, '') === norm && smtMap[k] && smtMap[k] !== '-') {
+            return smtMap[k];
+        }
+    }
+    return 'PENDING';
+};
 
 const fmt = (ts: string | null | undefined) =>
     ts ? new Date(ts).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }) : '—';
 
 const statusColor = (s: string): string => {
-    switch (s.toUpperCase()) {
-        case 'ACCEPTED': case 'PASS': return '#10b981';
-        case 'REWORK': return '#f59e0b';
-        case 'DEBUG': return '#ef4444';
+    const upper = (s || '').toUpperCase();
+    if (upper === 'N/A' || upper === '-' || upper === 'NA' || upper === 'SKIPPED') return '#94a3b8';
+    if (upper.includes('FAIL') || upper.includes('FAILED') || upper.includes('DEBUG')) return '#ef4444';
+    if (upper.includes('REWORK')) return '#f59e0b';
+    if (upper.includes('PENDING')) return '#d97706';
+    if (upper.includes('PASS') || upper.includes('ACCEPTED') || upper.includes('COMPLETED')) return '#10b981';
+    switch (upper) {
         case 'READY_FOR_RESCAN': return '#6366f1';
         case 'IN_PROGRESS': return '#3b82f6';
-        case 'SKIPPED': return '#94a3b8';
         default: return '#94a3b8';
     }
 };
 
 const statusBg = (s: string): string => {
-    switch (s.toUpperCase()) {
+    switch ((s || '').toUpperCase()) {
         case 'ACCEPTED': case 'PASS': return 'rgba(16,185,129,0.12)';
+        case 'PENDING': return 'rgba(217,119,6,0.12)';
+        case 'N/A': case 'NA': case 'SKIPPED': return 'rgba(148,163,184,0.12)';
         case 'REWORK': return 'rgba(245,158,11,0.12)';
-        case 'DEBUG': return 'rgba(239,68,68,0.12)';
+        case 'DEBUG': case 'FAILED': case 'FAIL': return 'rgba(239,68,68,0.12)';
         case 'READY_FOR_RESCAN': return 'rgba(99,102,241,0.12)';
         case 'IN_PROGRESS': return 'rgba(59,130,246,0.12)';
-        case 'SKIPPED': return 'rgba(148,163,184,0.12)';
         default: return 'rgba(148,163,184,0.12)';
     }
 };
 
+export const computeOverallStageStatus = (
+    topStatus: string | null | undefined,
+    bottomStatus: string | null | undefined
+): string => {
+    const normalize = (val: string | null | undefined) => {
+        const s = (val || '').trim().toUpperCase();
+        if (!s || s === '-' || s === 'NA' || s === 'N/A') return 'N/A';
+        if (s === 'PASSED' || s === 'PASS') return 'PASS';
+        if (s === 'FAILED' || s === 'FAIL' || s === 'REWORK' || s === 'DEBUG') return 'FAIL';
+        if (s === 'PENDING') return 'PENDING';
+        return s;
+    };
+
+    const top = normalize(topStatus);
+    const bottom = normalize(bottomStatus);
+
+    const topIsNA = top === 'N/A';
+    const bottomIsNA = bottom === 'N/A';
+
+    // If both sides are N/A, show overall N/A.
+    if (topIsNA && bottomIsNA) {
+        return 'N/A';
+    }
+
+    // If only one side is applicable and its status is PASS, show overall PASS.
+    // If an applicable side is FAIL, show overall FAIL.
+    // If an applicable side is PENDING and no failure exists, show overall PENDING.
+    if (!topIsNA && bottomIsNA) {
+        if (top === 'FAIL') return 'FAIL';
+        if (top === 'PASS') return 'PASS';
+        return 'PENDING';
+    }
+
+    if (topIsNA && !bottomIsNA) {
+        if (bottom === 'FAIL') return 'FAIL';
+        if (bottom === 'PASS') return 'PASS';
+        return 'PENDING';
+    }
+
+    // Both sides are applicable:
+    // If an applicable side is FAIL, show overall FAIL.
+    if (top === 'FAIL' || bottom === 'FAIL') {
+        return 'FAIL';
+    }
+
+    // If TOP = PASS and BOTTOM = PASS, show overall PASS.
+    if (top === 'PASS' && bottom === 'PASS') {
+        return 'PASS';
+    }
+
+    // If an applicable side is PENDING and no failure exists, show overall PENDING.
+    return 'PENDING';
+};
+
 const normalizeStageId = (s: string) => (s || '').toUpperCase().replace(/[\s\-_]/g, '');
 
-const isStageInRoute = (stage: { code: string; name: string; label: string }, trackData: TrackResult): boolean => {
+const isStageInRoute = (stage: { code: string; name: string; label: string }, trackData: any): boolean => {
+    if (!trackData) return true;
+    if (trackData.has_backend === false) return false;
     // 1. Authoritative: check backend-resolved active_route
     if (Array.isArray(trackData.active_route)) {
         const stageCodeNorm = normalizeStageId(stage.code);
         const stageNameNorm = normalizeStageId(stage.name);
         const stageLabelNorm = normalizeStageId(stage.label);
 
-        return trackData.active_route.some(r => {
+        return trackData.active_route.some((r: any) => {
             const rCodeNorm = normalizeStageId(r.stage_code);
             const rNameNorm = normalizeStageId(r.stage_name);
             return (
@@ -120,7 +201,13 @@ const isStageInRoute = (stage: { code: string; name: string; label: string }, tr
                 rCodeNorm === stageLabelNorm ||
                 rNameNorm === stageLabelNorm ||
                 rCodeNorm === stageNameNorm ||
-                rNameNorm === stageCodeNorm
+                rNameNorm === stageCodeNorm ||
+                (stageCodeNorm === 'PTH' && (rCodeNorm === 'PRESOLDERING' || rNameNorm === 'PRESOLDERING')) ||
+                (stageCodeNorm === 'QA' && (rCodeNorm === 'QUALITYASSURANCE' || rNameNorm === 'QUALITYASSURANCE')) ||
+                (stageCodeNorm === 'VI' && (rCodeNorm === 'VISUALINSPECTION' || rNameNorm === 'VISUALINSPECTION')) ||
+                (stageCodeNorm === 'QI' && (rCodeNorm === 'QUALITYINSPECTION' || rNameNorm === 'QUALITYINSPECTION')) ||
+                (stageCodeNorm === 'PCBA_FCT' && (rCodeNorm === 'PCBAFCT' || rNameNorm === 'PCBAFCT')) ||
+                (stageCodeNorm === 'UNIT_TESTING' && (rCodeNorm === 'UNITTESTING' || rNameNorm === 'UNITTESTING'))
             );
         });
     }
@@ -150,16 +237,18 @@ const isStageInRoute = (stage: { code: string; name: string; label: string }, tr
         const stageNameNorm = normalizeStageId(stage.name);
         const stageLabelNorm = normalizeStageId(stage.label);
         return list.some(item => {
-            const itemStr = typeof item === 'string' ? item : (item?.stage_code || item?.stage_name || '');
+            const itemStr = typeof item === 'string' ? item : (item?.stage_code || item?.stage_name || item?.stage_label || item?.code || item?.name || '');
             const itemNorm = normalizeStageId(itemStr);
             return (
                 itemNorm === stageCodeNorm ||
                 itemNorm === stageNameNorm ||
                 itemNorm === stageLabelNorm ||
-                (stageCodeNorm === 'PTH' && itemNorm === 'PRESOLDERING') ||
+                (stageCodeNorm === 'PTH' && (itemNorm === 'PRESOLDERING' || itemNorm === 'PTH')) ||
                 (stageCodeNorm === 'QA' && itemNorm === 'QUALITYASSURANCE') ||
                 (stageCodeNorm === 'VI' && itemNorm === 'VISUALINSPECTION') ||
-                (stageCodeNorm === 'QI' && itemNorm === 'QUALITYINSPECTION')
+                (stageCodeNorm === 'QI' && itemNorm === 'QUALITYINSPECTION') ||
+                (stageCodeNorm === 'PCBA_FCT' && itemNorm === 'PCBAFCT') ||
+                (stageCodeNorm === 'UNIT_TESTING' && itemNorm === 'UNITTESTING')
             );
         });
     }
@@ -200,6 +289,7 @@ const TrackItems: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [appeared, setAppeared] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
     const [selectedPipelineView, setSelectedPipelineView] = useState<'backend' | 'smt'>('backend');
 
     // Filter State
@@ -212,6 +302,26 @@ const TrackItems: React.FC = () => {
 
     const inputRef = useRef<HTMLInputElement>(null);
     const printRef = useRef<HTMLDivElement>(null);
+
+    const backendSerialChunks = useMemo(() => {
+        if (!woData || !woData.serials) return [];
+        const list = woData.serials;
+        if (list.length === 0) return [[]];
+        const firstPageSize = 18;
+        const otherPageSize = 24;
+        const chunks: any[][] = [];
+        if (list.length <= firstPageSize) {
+            chunks.push(list);
+        } else {
+            chunks.push(list.slice(0, firstPageSize));
+            let idx = firstPageSize;
+            while (idx < list.length) {
+                chunks.push(list.slice(idx, idx + otherPageSize));
+                idx += otherPageSize;
+            }
+        }
+        return chunks;
+    }, [woData]);
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -227,6 +337,28 @@ const TrackItems: React.FC = () => {
         };
         fetchWOs();
     }, []);
+
+    // Silent Background Polling for Live Real-Time Updates
+    useEffect(() => {
+        if (!query || query.trim() === '') return;
+        const intervalId = setInterval(async () => {
+            try {
+                const q = query.trim();
+                if (!q) return;
+                if (searchType === 'wo') {
+                    const result = await apiFetch(`/api/backend/track/wo/${encodeURIComponent(q)}`);
+                    setWoData(result);
+                } else if (searchType === 'serial') {
+                    const result = await apiFetch(`/api/backend/track/${encodeURIComponent(q)}`);
+                    setData(result);
+                }
+            } catch (pollErr) {
+                // Ignore silent polling failures
+            }
+        }, 5000);
+
+        return () => clearInterval(intervalId);
+    }, [query, searchType]);
 
     const handleSearch = async (e?: React.FormEvent, directQuery?: string, directSearchType?: 'serial' | 'wo') => {
         if (e) e.preventDefault();
@@ -256,6 +388,54 @@ const TrackItems: React.FC = () => {
         handleSearch(undefined, sn, 'serial');
     };
 
+    const handleDownloadExcel = async () => {
+        if (!data && (!woData || !woData.work_order_id)) return;
+        try {
+            setIsDownloadingExcel(true);
+            const token = localStorage.getItem('token') || '';
+            let url = '';
+            let filename = '';
+            if (woData && woData.work_order_id) {
+                url = `/api/backend/track/wo/${encodeURIComponent(woData.work_order_id)}/export/excel`;
+                filename = `Backend_WorkOrder_Report_${woData.work_order_id}.xlsx`;
+            } else if (data && data.barcode) {
+                url = `/api/backend/track/${encodeURIComponent(data.barcode)}/export/excel`;
+                filename = `Backend_Serial_Traceability_${data.barcode}.xlsx`;
+            }
+            if (!url) return;
+
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': token ? `Bearer ${token}` : ''
+                }
+            });
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                throw new Error(errJson.error || 'Failed to generate Excel report');
+            }
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            const contentDisposition = response.headers.get('Content-Disposition');
+            if (contentDisposition) {
+                const match = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (match && match[1]) filename = match[1];
+            }
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (err: any) {
+            console.error("Excel download failed:", err);
+            alert("Failed to download Excel report: " + err.message);
+        } finally {
+            setIsDownloadingExcel(false);
+        }
+    };
+
+
 
     const handleDownloadPdf = async () => {
         try {
@@ -268,37 +448,62 @@ const TrackItems: React.FC = () => {
 
             setIsDownloading(true);
 
-            const canvas = await html2canvas(input, {
-                scale: 2, // High-quality resolution
-                useCORS: true,
-                logging: false,
-                backgroundColor: "#ffffff"
-            });
+            const pageBlocks = input.querySelectorAll<HTMLElement>('.pdf-page-block');
 
-            const imgData = canvas.toDataURL("image/png");
-            const pdf = new jsPDF("p", "mm", "a4");
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const imgWidth = pdfWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            if (pageBlocks.length > 0) {
+                const pdf = new jsPDF("l", "mm", "a4");
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
 
-            let heightLeft = imgHeight;
-            let position = 0;
+                for (let i = 0; i < pageBlocks.length; i++) {
+                    if (i > 0) pdf.addPage();
+                    const pageCanvas = await html2canvas(pageBlocks[i], {
+                        scale: 2,
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: "#ffffff"
+                    });
+                    const imgData = pageCanvas.toDataURL("image/png");
+                    const imgHeight = (pageCanvas.height * pdfWidth) / pageCanvas.width;
+                    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, Math.min(pdfHeight, imgHeight));
+                }
 
-            // Page 1
-            pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-            heightLeft -= pdfHeight;
+                const fileName = data ? `Backend_Traceability_${data.barcode}.pdf` : `Backend_WorkOrder_${woData?.work_order_id}.pdf`;
+                pdf.save(fileName);
+            } else {
+                const canvas = await html2canvas(input, {
+                    scale: 2, // High-quality resolution
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: "#ffffff"
+                });
 
-            // Multi-page splitting logic
-            while (heightLeft > 0) {
-                position = heightLeft - imgHeight;
-                pdf.addPage();
+                const imgData = canvas.toDataURL("image/png");
+                const isWoReport = !!woData;
+                const pdf = new jsPDF(isWoReport ? "l" : "p", "mm", "a4");
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const imgWidth = pdfWidth;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                let heightLeft = imgHeight;
+                let position = 0;
+
+                // Page 1
                 pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
                 heightLeft -= pdfHeight;
-            }
 
-            const fileName = data ? `Backend_Traceability_${data.barcode}.pdf` : `Backend_WorkOrder_${woData?.work_order_id}.pdf`;
-            pdf.save(fileName);
+                // Multi-page splitting logic
+                while (heightLeft > 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+                    heightLeft -= pdfHeight;
+                }
+
+                const fileName = data ? `Backend_Traceability_${data.barcode}.pdf` : `Backend_WorkOrder_${woData?.work_order_id}.pdf`;
+                pdf.save(fileName);
+            }
         } catch (error) {
             console.error("PDF Download Failed:", error);
         } finally {
@@ -428,22 +633,40 @@ const TrackItems: React.FC = () => {
                     </div>
                 </div>
                 {(data || woData) && (
-                    <button
-                        type="button"
-                        onClick={handleDownloadPdf}
-                        disabled={isDownloading}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            background: '#3b82f6', color: '#fff', border: 'none',
-                            padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
-                            cursor: isDownloading ? 'not-allowed' : 'pointer',
-                            opacity: isDownloading ? 0.7 : 1,
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <Download size={18} />
-                        {isDownloading ? 'Generating PDF...' : 'Download PDF'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <button
+                            type="button"
+                            onClick={handleDownloadPdf}
+                            disabled={isDownloading}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '8px',
+                                background: '#3b82f6', color: '#fff', border: 'none',
+                                padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
+                                cursor: isDownloading ? 'not-allowed' : 'pointer',
+                                opacity: isDownloading ? 0.7 : 1,
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <Download size={18} />
+                            {isDownloading ? 'Generating PDF...' : 'PDF Report'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleDownloadExcel}
+                            disabled={isDownloadingExcel}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '8px',
+                                background: '#10b981', color: '#fff', border: 'none',
+                                padding: '8px 16px', borderRadius: '6px', fontWeight: 600,
+                                cursor: isDownloadingExcel ? 'not-allowed' : 'pointer',
+                                opacity: isDownloadingExcel ? 0.7 : 1,
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <Download size={18} />
+                            {isDownloadingExcel ? 'Generating Excel...' : 'Excel Report'}
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -720,8 +943,9 @@ const TrackItems: React.FC = () => {
                                         {SMT_PIPELINE_STAGES.map((stage, idx) => {
                                             const smtHistory = data.smt_scan_history || [];
                                             const entries = smtHistory.filter((h: any) => h.process_step === stage);
-                                            const visited = entries.length > 0;
-                                            const stStatus = visited ? entries[entries.length - 1].status : 'pending';
+                                            const resolvedStatus = data.smt_statuses?.[stage];
+                                            const visited = entries.length > 0 || (resolvedStatus && resolvedStatus !== 'PENDING' && resolvedStatus !== 'N/A');
+                                            const stStatus = visited ? (entries.length > 0 ? entries[entries.length - 1].status : resolvedStatus || 'pending') : (resolvedStatus || 'pending');
                                             const color = visited ? statusColor(stStatus) : '#cbd5e1';
                                             const isLast = idx === SMT_PIPELINE_STAGES.length - 1;
 
@@ -1072,6 +1296,22 @@ const TrackItems: React.FC = () => {
                                 <span style={{ fontSize: '13px', color: '#92400e', background: '#fef3c7', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                                     Pending: {pendingCount}
                                 </span>
+                                <button
+                                    type="button"
+                                    onClick={handleDownloadExcel}
+                                    disabled={isDownloadingExcel}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: '6px',
+                                        background: '#16a34a', color: '#ffffff', border: 'none',
+                                        padding: '6px 14px', borderRadius: '6px', fontWeight: 600,
+                                        fontSize: '12px', cursor: isDownloadingExcel ? 'not-allowed' : 'pointer',
+                                        opacity: isDownloadingExcel ? 0.7 : 1, transition: 'all 0.2s',
+                                        marginLeft: 'auto'
+                                    }}
+                                >
+                                    <Download size={14} />
+                                    {isDownloadingExcel ? 'Exporting...' : 'Export Excel'}
+                                </button>
                             </h3>
                             <div className={styles.tableContainer}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
@@ -1133,15 +1373,20 @@ const TrackItems: React.FC = () => {
                                                         </button>
                                                     </div>
                                                 </td>
-                                                {PRODUCTION_PIPELINE.map((step: any) => (
-                                                    <td key={step.code} style={{ padding: '12px 16px' }}>
-                                                        {s.step_status && s.step_status[step.name] && s.step_status[step.name] !== '-' ? (
-                                                            <StatusBadge status={s.step_status[step.name]} small />
-                                                        ) : (
-                                                            <span style={{ color: '#94a3b8' }}>-</span>
-                                                        )}
-                                                    </td>
-                                                ))}
+                                                {PRODUCTION_PIPELINE.map((step: any) => {
+                                                    const inRoute = isStageInRoute(step, (s.active_route || s.selected_stages) ? s : woData);
+                                                    let stStatus = 'Pending';
+                                                    if (!inRoute) {
+                                                        stStatus = 'N/A';
+                                                    } else {
+                                                        stStatus = s.step_status ? (s.step_status[step.code] || s.step_status[step.name] || s.step_status[step.label] || 'Pending') : 'Pending';
+                                                    }
+                                                    return (
+                                                        <td key={step.code} style={{ padding: '12px 16px' }}>
+                                                            <StatusBadge status={stStatus} small />
+                                                        </td>
+                                                    );
+                                                })}
                                                 <td style={{ padding: '12px 16px' }}>
                                                     <span style={{
                                                         fontSize: '10px',
@@ -1207,9 +1452,9 @@ const TrackItems: React.FC = () => {
                         position: 'absolute',
                         left: '-9999px',
                         top: '-9999px',
-                        width: '800px',
+                        width: woData ? '1400px' : '1150px',
                         background: '#ffffff',
-                        padding: '40px',
+                        padding: woData ? '0px' : '40px',
                         color: '#1e293b',
                         fontFamily: 'system-ui, -apple-system, sans-serif',
                         boxSizing: 'border-box'
@@ -1261,12 +1506,142 @@ const TrackItems: React.FC = () => {
                                     <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Current Stage</span>
                                     <span style={{ color: '#0f172a', fontWeight: 700 }}>: {data.current_stage}</span>
                                 </div>
+                                <div>
+                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Current Status</span>
+                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {(data.current_status || 'PENDING').toUpperCase()}</span>
+                                </div>
                                 {data.unit_serial_number && (
                                     <div style={{ gridColumn: 'span 2' }}>
                                         <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '120px' }}>Unit Serial Number</span>
                                         <span style={{ color: '#16a34a', fontWeight: 700 }}>: {data.unit_serial_number}</span>
                                     </div>
                                 )}
+                            </div>
+
+                            {/* SMT Stage Traceability Summary */}
+                            {data.has_smt !== false && (
+                                <div style={{ marginBottom: '24px' }}>
+                                    <h3 style={{ fontSize: '14px', color: '#0f172a', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                        SMT Stage Traceability Summary
+                                    </h3>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                                        <thead>
+                                            <tr style={{ background: '#0f766e', color: '#ffffff' }}>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>SMT Stage</th>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center' }}>TOP Side Status</th>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center' }}>BOTTOM Side Status</th>
+                                                <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center' }}>Overall Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {SMT_STAGES.map((stage: string, sIdx: number) => {
+                                                const isSmtFg = stage === 'SMT FG';
+                                                const isRework = stage === 'Rework';
+                                                let topStatus = data.smt_top?.[stage] || data.step_status_top?.[stage];
+                                                let btmStatus = isSmtFg ? 'N/A' : (data.smt_bottom?.[stage] || data.step_status_bottom?.[stage]);
+
+                                                if (data.has_smt === false) {
+                                                    topStatus = 'N/A';
+                                                    btmStatus = 'N/A';
+                                                } else if (data.is_double_sided) {
+                                                    if (!topStatus || topStatus === '-') topStatus = isRework ? 'N/A' : 'PENDING';
+                                                    if (!btmStatus || btmStatus === '-') btmStatus = (isSmtFg || isRework) ? 'N/A' : 'PENDING';
+                                                } else {
+                                                    const isBottomOnly = data.is_bottom_only || String(data.sides || '').trim().toLowerCase().includes('bottom');
+                                                    const rawVal = data.smt_statuses?.[stage] || data.step_status?.[stage];
+                                                    if (isSmtFg) {
+                                                        topStatus = rawVal && rawVal !== '-' ? rawVal : 'PENDING';
+                                                        btmStatus = 'N/A';
+                                                    } else if (isRework) {
+                                                        if (isBottomOnly) {
+                                                            topStatus = 'N/A';
+                                                            btmStatus = rawVal && rawVal !== '-' && rawVal !== 'PENDING' ? rawVal : 'N/A';
+                                                        } else {
+                                                            topStatus = rawVal && rawVal !== '-' && rawVal !== 'PENDING' ? rawVal : 'N/A';
+                                                            btmStatus = 'N/A';
+                                                        }
+                                                    } else if (isBottomOnly) {
+                                                        topStatus = 'N/A';
+                                                        btmStatus = rawVal && rawVal !== '-' ? rawVal : 'PENDING';
+                                                    } else {
+                                                        topStatus = rawVal && rawVal !== '-' ? rawVal : 'PENDING';
+                                                        btmStatus = 'N/A';
+                                                    }
+                                                }
+                                                const overallStatus = computeOverallStageStatus(topStatus, btmStatus);
+                                                return (
+                                                    <tr key={stage} style={{ background: sIdx % 2 === 0 ? '#ffffff' : '#f8fafc', color: '#1e293b' }}>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{stage}</td>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
+                                                            <span style={{ fontWeight: 700, color: statusColor(topStatus) }}>{topStatus}</span>
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
+                                                            <span style={{ fontWeight: 700, color: statusColor(btmStatus) }}>{btmStatus}</span>
+                                                        </td>
+                                                        <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
+                                                            <span style={{ fontWeight: 700, color: statusColor(overallStatus) }}>{overallStatus}</span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* Backend Stage Traceability Summary */}
+                            <div style={{ marginBottom: '24px' }}>
+                                <h3 style={{ fontSize: '14px', color: '#0f172a', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                    Backend Stage Traceability Summary
+                                </h3>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                                    <thead>
+                                        <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                            <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>Backend Stage</th>
+                                            <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center' }}>Applicability</th>
+                                            <th style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center' }}>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {PRODUCTION_PIPELINE.map((stage, pIdx) => {
+                                            const inRoute = isStageInRoute(stage, data);
+                                            let bStatus = 'PENDING';
+                                            if (!inRoute) {
+                                                bStatus = 'N/A';
+                                            } else {
+                                                const cNorm = normalizeStageId(stage.code);
+                                                const nNorm = normalizeStageId(stage.name);
+                                                const lNorm = normalizeStageId(stage.label);
+                                                const hist = (data.scan_history || []).filter((h: any) => {
+                                                    const sNorm = normalizeStageId(h.station || '');
+                                                    return sNorm === cNorm || sNorm === nNorm || sNorm === lNorm ||
+                                                        (cNorm === 'PTH' && sNorm === 'PRESOLDERING') ||
+                                                        (cNorm === 'QA' && sNorm === 'QUALITYASSURANCE') ||
+                                                        (cNorm === 'VI' && sNorm === 'VISUALINSPECTION') ||
+                                                        (cNorm === 'QI' && sNorm === 'QUALITYINSPECTION') ||
+                                                        (cNorm === 'PCBA_FCT' && sNorm === 'PCBAFCT') ||
+                                                        (cNorm === 'UNIT_TESTING' && sNorm === 'UNITTESTING');
+                                                });
+                                                if (hist.length > 0) {
+                                                    const last = hist[hist.length - 1];
+                                                    const rawSt = (last.status || '').toUpperCase();
+                                                    bStatus = (rawSt === 'ACCEPTED' || rawSt === 'PASS') ? 'PASS' : (rawSt === 'FAIL' || rawSt === 'FAILED') ? 'FAIL' : (rawSt === 'REWORK' || rawSt === 'DEBUG') ? 'REWORK' : rawSt;
+                                                } else {
+                                                    bStatus = 'PENDING';
+                                                }
+                                            }
+                                            return (
+                                                <tr key={stage.code} style={{ background: pIdx % 2 === 0 ? '#ffffff' : '#f8fafc', color: '#1e293b' }}>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{stage.name} ({stage.label})</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 600, color: inRoute ? '#0f766e' : '#94a3b8' }}>{inRoute ? 'APPLICABLE' : 'N/A'}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', textAlign: 'center' }}>
+                                                        <span style={{ fontWeight: 700, color: statusColor(bStatus) }}>{bStatus}</span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
                             </div>
 
                             {/* Table Title */}
@@ -1289,141 +1664,265 @@ const TrackItems: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                {(() => {
-                                    const backendRows = (data.scan_history || []).map((row: ScanEntry) => ({
-                                        station: row.station,
-                                        status: row.status,
-                                        scanned_by: row.scanned_by,
-                                        scanned_at: row.scanned_at,
-                                        remarks: row.remarks || row.failed_remarks || null,
-                                        repair_remark: row.repair_remark || null,
-                                        source: 'Backend',
-                                    }));
-                                    const smtRows = (data.smt_scan_history || []).map((h: any) => ({
-                                        station: h.process_step || '-',
-                                        status: h.status || '-',
-                                        scanned_by: h.scanned_by || '-',
-                                        scanned_at: h.scanned_at,
-                                        remarks: h.rework_reason || null,
-                                        repair_remark: null,
-                                        source: 'SMT',
-                                    }));
-                                    const combined = [...smtRows, ...backendRows].sort(
-                                        (a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
-                                    );
-                                    return combined.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={8} style={{ padding: '12px', textAlign: 'center', color: '#64748b', border: '1px solid #cbd5e1' }}>No scan events recorded yet.</td>
-                                        </tr>
-                                    ) : combined.map((row, idx) => {
-                                        const isRepair = row.station === 'Rework' || row.station === 'Debug';
-                                        return (
-                                            <tr key={idx} style={{ background: isRepair ? '#fffbeb' : idx % 2 === 0 ? '#ffffff' : '#f8fafc', color: '#1e293b' }}>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600, textAlign: 'center' }}>{idx + 1}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700, color: row.source === 'SMT' ? '#3b82f6' : '#10b981' }}>{row.source}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.station}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
-                                                    <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, fontSize: '9px', background: statusBg(row.status), color: statusColor(row.status), border: `1px solid ${statusColor(row.status)}33` }}>{row.status.toUpperCase()}</span>
-                                                </td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>{row.remarks || '—'}</td>
-                                                <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>{row.repair_remark || '—'}</td>
-                                            </tr>
+                                    {(() => {
+                                        const backendRows = (data.scan_history || []).map((row: ScanEntry) => ({
+                                            station: row.station,
+                                            status: row.status,
+                                            scanned_by: row.scanned_by,
+                                            scanned_at: row.scanned_at,
+                                            remarks: row.remarks || row.failed_remarks || null,
+                                            repair_remark: row.repair_remark || null,
+                                            source: 'Backend',
+                                        }));
+                                        const smtRows = (data.smt_scan_history || []).map((h: any) => ({
+                                            station: h.process_step || '-',
+                                            status: h.status || '-',
+                                            scanned_by: h.scanned_by || '-',
+                                            scanned_at: h.scanned_at,
+                                            remarks: h.rework_reason || null,
+                                            repair_remark: null,
+                                            source: 'SMT',
+                                        }));
+                                        const combined = [...smtRows, ...backendRows].sort(
+                                            (a, b) => new Date(a.scanned_at).getTime() - new Date(b.scanned_at).getTime()
                                         );
-                                    });
-                                })()}
+                                        return combined.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={8} style={{ padding: '12px', textAlign: 'center', color: '#64748b', border: '1px solid #cbd5e1' }}>No scan events recorded yet.</td>
+                                            </tr>
+                                        ) : combined.map((row, idx) => {
+                                            const isRepair = row.station === 'Rework' || row.station === 'Debug';
+                                            return (
+                                                <tr key={idx} style={{ background: isRepair ? '#fffbeb' : idx % 2 === 0 ? '#ffffff' : '#f8fafc', color: '#1e293b' }}>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 600, textAlign: 'center' }}>{idx + 1}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700, color: row.source === 'SMT' ? '#3b82f6' : '#10b981' }}>{row.source}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{row.station}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>
+                                                        <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, fontSize: '9px', background: statusBg(row.status), color: statusColor(row.status), border: `1px solid ${statusColor(row.status)}33` }}>{row.status.toUpperCase()}</span>
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1' }}>{row.scanned_by}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', whiteSpace: 'nowrap' }}>{fmt(row.scanned_at)}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>{row.remarks || '—'}</td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #cbd5e1', wordBreak: 'break-word' }}>{row.repair_remark || '—'}</td>
+                                                </tr>
+                                            );
+                                        });
+                                    })()}
                                 </tbody>
                             </table>
                         </>
                     )}
 
                     {woData && (
-                        <>
-                            {/* PDF Metadata Grid for WO */}
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: '1fr 1fr 1fr',
-                                gap: '12px 24px',
-                                marginBottom: '30px',
-                                background: '#f8fafc',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: '1px solid #e2e8f0',
-                                fontSize: '12px'
-                            }}>
-                                <div>
-                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '100px' }}>Work Order</span>
-                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.work_order_id}</span>
-                                </div>
-                                <div>
-                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '100px' }}>Product</span>
-                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.product_name}</span>
-                                </div>
-                                <div>
-                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '100px' }}>Process</span>
-                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.has_smt && woData.has_backend ? 'SMT + Backend' : woData.has_smt ? 'SMT' : 'Backend'}</span>
-                                </div>
-                                <div>
-                                    <span style={{ color: '#64748b', fontWeight: 600, display: 'inline-block', width: '100px' }}>Total Serials</span>
-                                    <span style={{ color: '#0f172a', fontWeight: 700 }}>: {woData.total_serials} / {woData.quantity}</span>
-                                </div>
-                            </div>
+                        <div>
+                            {backendSerialChunks.map((chunk: any[], pageIdx: number) => {
+                                const isFirstPage = pageIdx === 0;
+                                const totalSerialsCount = woData.total_serials || (woData.serials && woData.serials.length) || 0;
+                                return (
+                                    <div
+                                        key={pageIdx}
+                                        className="pdf-page-block"
+                                        style={{
+                                            width: '1400px',
+                                            height: '990px',
+                                            maxHeight: '990px',
+                                            boxSizing: 'border-box',
+                                            padding: '24px 30px',
+                                            background: '#ffffff',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            fontFamily: 'system-ui, -apple-system, sans-serif',
+                                            color: '#1e293b',
+                                            overflow: 'hidden'
+                                        }}
+                                    >
+                                        <div>
+                                            {/* Header */}
+                                            {isFirstPage ? (
+                                                <>
+                                                    <div style={{ borderBottom: '2px solid #3b82f6', paddingBottom: '12px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div>
+                                                            <h2 style={{ margin: 0, fontSize: '18px', color: '#1e3a8a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                                Velankani Software MES
+                                                            </h2>
+                                                            <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                                                                BACKEND WORK ORDER TRACEABILITY AUDIT REPORT
+                                                            </p>
+                                                        </div>
+                                                        <div style={{ textAlign: 'right', fontSize: '10px', color: '#64748b' }}>
+                                                            <div>Report Date: {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}</div>
+                                                            <div>Generated By: {user?.name || 'Operator'}</div>
+                                                        </div>
+                                                    </div>
 
-                            {/* Table Title */}
-                            <h3 style={{ fontSize: '14px', color: '#0f172a', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                Work Order Matrix
-                            </h3>
-
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', textAlign: 'left' }}>
-                                <thead>
-                                    <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
-                                        <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Serial Number</th>
-                                        {woData.has_smt && SMT_PIPELINE_STAGES.map((step: string) => (
-                                            <th key={step} style={{ padding: '6px 8px', border: '1px solid #cbd5e1', background: '#1e4db7' }}>{step}</th>
-                                        ))}
-                                        {PRODUCTION_PIPELINE.map((step: any) => (
-                                            <th key={step.code} style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>{step.label}</th>
-                                        ))}
-                                        <th style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {woData.serials.map((s: any, idx: number) => (
-                                        <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f8fafc', color: '#1e293b' }}>
-                                            <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{s.serial_number}</td>
-                                            {woData.has_smt && SMT_PIPELINE_STAGES.map((step: string) => (
-                                                <td key={step} style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>
-                                                    {s.smt_step_status && s.smt_step_status[step] ? (
-                                                        <span style={{ color: s.smt_step_status[step] === 'PASS' ? '#16a34a' : '#d97706', fontWeight: 700 }}>{s.smt_step_status[step]}</span>
-                                                    ) : (<span style={{ color: '#94a3b8' }}>-</span>)}
-                                                </td>
-                                            ))}
-                                            {PRODUCTION_PIPELINE.map((step: any) => (
-                                                <td key={step.code} style={{ padding: '6px 8px', border: '1px solid #cbd5e1' }}>
-                                                    {s.step_status && s.step_status[step.name] && s.step_status[step.name] !== '-' ? (
-                                                        <span style={{ color: statusColor(s.step_status[step.name]), fontWeight: 700 }}>
-                                                            {s.step_status[step.name]}
+                                                    {/* Metadata Grid */}
+                                                    <div style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: 'repeat(4, 1fr)',
+                                                        gap: '8px 16px',
+                                                        marginBottom: '16px',
+                                                        background: '#f8fafc',
+                                                        padding: '12px 16px',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid #e2e8f0',
+                                                        fontSize: '11px'
+                                                    }}>
+                                                        <div>
+                                                            <span style={{ color: '#64748b', fontWeight: 600 }}>Work Order: </span>
+                                                            <span style={{ color: '#0f172a', fontWeight: 700 }}>{woData.work_order_id}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span style={{ color: '#64748b', fontWeight: 600 }}>Customer: </span>
+                                                            <span style={{ color: '#0f172a', fontWeight: 700 }}>{woData.customer_name || '-'}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span style={{ color: '#64748b', fontWeight: 600 }}>Model: </span>
+                                                            <span style={{ color: '#0f172a', fontWeight: 700 }}>{woData.model || '-'}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span style={{ color: '#64748b', fontWeight: 600 }}>Product: </span>
+                                                            <span style={{ color: '#0f172a', fontWeight: 700 }}>{woData.product_name || '-'}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span style={{ color: '#64748b', fontWeight: 600 }}>Line ID: </span>
+                                                            <span style={{ color: '#0f172a', fontWeight: 700 }}>{woData.line_id || '-'}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span style={{ color: '#64748b', fontWeight: 600 }}>Sides: </span>
+                                                            <span style={{ color: '#0f172a', fontWeight: 700 }}>{woData.sides || '-'}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span style={{ color: '#64748b', fontWeight: 600 }}>Process: </span>
+                                                            <span style={{ color: '#0f172a', fontWeight: 700 }}>{woData.has_smt && woData.has_backend ? 'SMT + Backend' : woData.has_smt ? 'SMT' : 'Backend'}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span style={{ color: '#64748b', fontWeight: 600 }}>Total Serials: </span>
+                                                            <span style={{ color: '#0f172a', fontWeight: 700 }}>{totalSerialsCount} / {woData.quantity}</span>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div style={{ borderBottom: '2px solid #3b82f6', paddingBottom: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div>
+                                                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e3a8a' }}>
+                                                            BACKEND WORK ORDER TRACEABILITY REPORT — {woData.work_order_id}
                                                         </span>
-                                                    ) : (
-                                                        <span style={{ color: '#94a3b8' }}>-</span>
-                                                    )}
-                                                </td>
-                                            ))}
-                                            <td style={{ padding: '6px 8px', border: '1px solid #cbd5e1', fontWeight: 700, color: s.final_status_label === 'Completed' ? '#16a34a' : '#d97706' }}>
-                                                {s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING'}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </>
-                    )}
+                                                    </div>
+                                                    <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>
+                                                        Page {pageIdx + 1} of {backendSerialChunks.length}
+                                                    </div>
+                                                </div>
+                                            )}
 
-                    {/* PDF Footer Page Note */}
-                    <div style={{ marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '10px', textAlign: 'center', fontSize: '9px', color: '#94a3b8' }}>
-                        This report is an official computer-generated audit log from the Velankani Software Manufacturing Execution System (MES).
-                    </div>
+                                            {/* Table */}
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '8.5px', textAlign: 'left', tableLayout: 'auto' }}>
+                                                <thead>
+                                                    <tr style={{ background: '#1e3a8a', color: '#ffffff' }}>
+                                                        <th style={{ padding: '5px 4px', border: '1px solid #cbd5e1', width: '30px', textAlign: 'center' }}>#</th>
+                                                        <th style={{ padding: '5px 6px', border: '1px solid #cbd5e1', width: '130px' }}>Serial Number</th>
+                                                        <th style={{ padding: '5px 6px', border: '1px solid #cbd5e1', width: '110px' }}>Unit Serial</th>
+                                                        <th style={{ padding: '5px 6px', border: '1px solid #cbd5e1', width: '85px' }}>Current Stage</th>
+                                                        {woData.has_smt !== false && (
+                                                            SMT_STAGES.map((step: string) => (
+                                                                <th key={step} style={{ padding: '5px 4px', border: '1px solid #cbd5e1', background: '#1e4db7', textAlign: 'center' }}>{`SMT: ${step}`}</th>
+                                                            ))
+                                                        )}
+                                                        {PRODUCTION_PIPELINE.map((step: any) => (
+                                                            <th key={step.code} style={{ padding: '5px 4px', border: '1px solid #cbd5e1', textAlign: 'center' }}>{step.label}</th>
+                                                        ))}
+                                                        <th style={{ padding: '5px 6px', border: '1px solid #cbd5e1', width: '70px', textAlign: 'center' }}>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {chunk.map((s: any, idxInChunk: number) => {
+                                                        const globalIdx = isFirstPage ? idxInChunk : 18 + (pageIdx - 1) * 24 + idxInChunk;
+                                                        return (
+                                                            <tr key={globalIdx} style={{ background: globalIdx % 2 === 0 ? '#ffffff' : '#f8fafc', color: '#1e293b' }}>
+                                                                <td style={{ padding: '4px 3px', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 600 }}>{globalIdx + 1}</td>
+                                                                <td style={{ padding: '4px 6px', border: '1px solid #cbd5e1', fontWeight: 700 }}>{s.serial_number}</td>
+                                                                <td style={{ padding: '4px 6px', border: '1px solid #cbd5e1', color: s.unit_serial_number ? '#166534' : '#64748b', fontWeight: s.unit_serial_number ? 700 : 400 }}>{s.unit_serial_number || '—'}</td>
+                                                                <td style={{ padding: '4px 6px', border: '1px solid #cbd5e1', fontWeight: 600 }}>{s.current_stage || 'Pending'}</td>
+                                                                {woData.has_smt !== false && (
+                                                                    SMT_STAGES.map((step: string) => {
+                                                                        const isSmtFg = step === 'SMT FG';
+                                                                        const isRework = step === 'Rework';
+                                                                        let topVal = getSmtStepStatus(s.smt_step_status_top || s.smt_top || s.step_status_top, step);
+                                                                        let btmVal = isSmtFg ? 'N/A' : getSmtStepStatus(s.smt_step_status_bottom || s.smt_bottom || s.step_status_bottom, step);
+
+                                                                        let cellText = '';
+                                                                        if (woData.is_double_sided) {
+                                                                            if (!topVal || topVal === '-' || topVal === 'PENDING') topVal = isRework ? 'N/A' : 'PENDING';
+                                                                            if (!btmVal || btmVal === '-' || btmVal === 'PENDING') btmVal = (isSmtFg || isRework) ? 'N/A' : 'PENDING';
+
+                                                                            if (isRework && (topVal === 'N/A' || topVal === '-') && (btmVal === 'N/A' || btmVal === '-')) {
+                                                                                cellText = 'N/A';
+                                                                            } else if (isSmtFg) {
+                                                                                cellText = `TOP: ${topVal}, BOTTOM: N/A`;
+                                                                            } else {
+                                                                                cellText = `TOP: ${topVal}, BOTTOM: ${btmVal}`;
+                                                                            }
+                                                                        } else {
+                                                                            const isBottomOnly = woData.is_bottom_only || String(woData.sides || '').trim().toLowerCase().includes('bottom');
+                                                                            let stVal = s.smt_statuses?.[step] || s.step_status?.[step] || (isBottomOnly ? btmVal : topVal);
+                                                                            if (isRework && (!stVal || stVal === '-' || stVal === 'PENDING')) stVal = 'N/A';
+                                                                            if (!stVal || stVal === '-') stVal = 'PENDING';
+
+                                                                            if (isBottomOnly) {
+                                                                                if (isRework && (stVal === 'N/A' || stVal === '-')) cellText = 'N/A';
+                                                                                else cellText = `BOTTOM: ${stVal}`;
+                                                                            } else {
+                                                                                if (isRework && (stVal === 'N/A' || stVal === '-')) cellText = 'N/A';
+                                                                                else cellText = `TOP: ${stVal}`;
+                                                                            }
+                                                                        }
+
+                                                                        return (
+                                                                            <td key={step} style={{ padding: '4px 3px', border: '1px solid #cbd5e1', fontSize: '8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                                                                <span style={{ color: statusColor(cellText), fontWeight: 700 }}>
+                                                                                    {cellText}
+                                                                                </span>
+                                                                            </td>
+                                                                        );
+                                                                    })
+                                                                )}
+                                                                {PRODUCTION_PIPELINE.map((step: any) => {
+                                                                    const inRoute = isStageInRoute(step, woData);
+                                                                    let val = 'PENDING';
+                                                                    if (!inRoute) {
+                                                                        val = 'N/A';
+                                                                    } else {
+                                                                        val = s.step_status ? (s.step_status[step.code] || s.step_status[step.name] || s.step_status[step.label] || 'PENDING') : 'PENDING';
+                                                                        val = String(val).toUpperCase();
+                                                                    }
+                                                                    return (
+                                                                        <td key={step.code} style={{ padding: '4px 3px', border: '1px solid #cbd5e1', fontSize: '8px', textAlign: 'center' }}>
+                                                                            <span style={{ color: statusColor(val), fontWeight: 700 }}>
+                                                                                {val}
+                                                                            </span>
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                                <td style={{ padding: '4px 4px', border: '1px solid #cbd5e1', textAlign: 'center', fontWeight: 700, color: s.final_status_label === 'Completed' ? '#16a34a' : '#d97706' }}>
+                                                                    {s.final_status_label === 'Completed' ? 'COMPLETED' : 'PENDING'}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* Page Footer */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #cbd5e1', paddingTop: '6px', fontSize: '8.5px', color: '#64748b' }}>
+                                            <span>This report is an official computer-generated audit log from the Velankani Software MES.</span>
+                                            <span style={{ fontWeight: 700 }}>Page {pageIdx + 1} of {backendSerialChunks.length}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

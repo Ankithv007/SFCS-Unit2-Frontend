@@ -364,13 +364,14 @@ const SmtTrackItems: React.FC = () => {
         if (list.length === 0) return [[]];
         const firstPageSize = 18;
         const otherPageSize = 24;
+        const maxPages = 4; // Capped to 4 pages (~90 items) to prevent browser DOM and canvas memory exhaustion
         const chunks: any[][] = [];
         if (list.length <= firstPageSize) {
             chunks.push(list);
         } else {
             chunks.push(list.slice(0, firstPageSize));
             let idx = firstPageSize;
-            while (idx < list.length) {
+            while (idx < list.length && chunks.length < maxPages) {
                 chunks.push(list.slice(idx, idx + otherPageSize));
                 idx += otherPageSize;
             }

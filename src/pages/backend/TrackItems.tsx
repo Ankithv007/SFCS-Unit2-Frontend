@@ -309,13 +309,14 @@ const TrackItems: React.FC = () => {
         if (list.length === 0) return [[]];
         const firstPageSize = 18;
         const otherPageSize = 24;
+        const maxPages = 4; // Capped to 4 pages (~90 items) to prevent browser DOM and canvas memory exhaustion
         const chunks: any[][] = [];
         if (list.length <= firstPageSize) {
             chunks.push(list);
         } else {
             chunks.push(list.slice(0, firstPageSize));
             let idx = firstPageSize;
-            while (idx < list.length) {
+            while (idx < list.length && chunks.length < maxPages) {
                 chunks.push(list.slice(idx, idx + otherPageSize));
                 idx += otherPageSize;
             }
@@ -337,28 +338,6 @@ const TrackItems: React.FC = () => {
         };
         fetchWOs();
     }, []);
-
-    // Silent Background Polling for Live Real-Time Updates
-    useEffect(() => {
-        if (!query || query.trim() === '') return;
-        const intervalId = setInterval(async () => {
-            try {
-                const q = query.trim();
-                if (!q) return;
-                if (searchType === 'wo') {
-                    const result = await apiFetch(`/api/backend/track/wo/${encodeURIComponent(q)}`);
-                    setWoData(result);
-                } else if (searchType === 'serial') {
-                    const result = await apiFetch(`/api/backend/track/${encodeURIComponent(q)}`);
-                    setData(result);
-                }
-            } catch (pollErr) {
-                // Ignore silent polling failures
-            }
-        }, 5000);
-
-        return () => clearInterval(intervalId);
-    }, [query, searchType]);
 
     const handleSearch = async (e?: React.FormEvent, directQuery?: string, directSearchType?: 'serial' | 'wo') => {
         if (e) e.preventDefault();
@@ -392,7 +371,7 @@ const TrackItems: React.FC = () => {
         if (!data && (!woData || !woData.work_order_id)) return;
         try {
             setIsDownloadingExcel(true);
-            const token = localStorage.getItem('token') || '';
+            const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
             let url = '';
             let filename = '';
             if (woData && woData.work_order_id) {

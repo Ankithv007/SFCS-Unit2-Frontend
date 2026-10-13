@@ -87,7 +87,9 @@ export const systemPagesConfig: SystemPageRoute[] = [
     { permission_key: 'rrh_testing', module_name: 'RRH', page_name: 'Testing', route_path: '/rrh/testing', display_order: 99, page_type: 'PAGE', icon: 'Play', parent_module: 'RRH' },
     { permission_key: 'rrh_fqc', module_name: 'RRH', page_name: 'FQC', route_path: '/rrh/fqc', display_order: 100, page_type: 'PAGE', icon: 'Award', parent_module: 'RRH' },
     { permission_key: 'rrh_oba', module_name: 'RRH', page_name: 'OBA', route_path: '/rrh/oba', display_order: 101, page_type: 'PAGE', icon: 'PackageSearch', parent_module: 'RRH' },
-    { permission_key: 'rrh_packaging_outgoing_data', module_name: 'RRH', page_name: 'Packaging Outgoing Data', route_path: '/rrh/packaging-outgoing-data', display_order: 102, page_type: 'PAGE', icon: 'Package', parent_module: 'RRH' },
+    { permission_key: 'rrh_packing', module_name: 'RRH', page_name: 'Packing', route_path: '/rrh/packing', display_order: 102, page_type: 'PAGE', icon: 'Package', parent_module: 'RRH' },
+    { permission_key: 'rrh_shipment', module_name: 'RRH', page_name: 'Shipment', route_path: '/rrh/shipment', display_order: 103, page_type: 'PAGE', icon: 'Truck', parent_module: 'RRH' },
+    { permission_key: 'rrh_packaging_outgoing_data', module_name: 'RRH', page_name: 'Packaging Outgoing Data', route_path: '/rrh/packaging-outgoing-data', display_order: 104, page_type: 'PAGE', icon: 'Package', parent_module: 'RRH' },
 
     // RRH ECN Stages
     { permission_key: 'rrh_ecn_programming', module_name: 'RRH', page_name: 'ECN Programming', route_path: '/rrh/ecn/programming', display_order: 103, page_type: 'PAGE', icon: 'Cpu', parent_module: 'RRH' },

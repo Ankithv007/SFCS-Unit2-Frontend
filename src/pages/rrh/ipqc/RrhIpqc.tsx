@@ -281,6 +281,18 @@ export const RrhIpqc: React.FC = () => {
     const [completedLimit, setCompletedLimit] = useState(5);
     const [completedTotal, setCompletedTotal] = useState(0);
 
+    // Filter out active or completed work orders from the dropdown
+    const availableWorkOrders = useMemo(() => {
+        const activeWoIds = new Set(activeSessions.map((s: any) => String(s.work_order_id || '').trim().toUpperCase()));
+        const completedWoIds = new Set(completedSessions.map((s: any) => String(s.work_order_id || '').trim().toUpperCase()));
+        return eligibleWos.filter((w: any) => {
+            const woId = String(w.work_order_id || '').trim().toUpperCase();
+            if (activeWoIds.has(woId)) return false;
+            if (completedWoIds.has(woId)) return false;
+            return true;
+        });
+    }, [eligibleWos, activeSessions, completedSessions]);
+
     // ─── Active Inspection State (View 2) ────────────────────────────────────
     const [activeSession, setActiveSession] = useState<IpqcSession | null>(null);
     const [stats, setStats] = useState<SessionStats>({
@@ -1103,7 +1115,7 @@ export const RrhIpqc: React.FC = () => {
                         <h3>Select Work Order</h3>
                         <div className={styles.inputGroup} style={{ maxWidth: '480px' }}>
                             <WorkOrderSelector
-                                options={eligibleWos}
+                                options={availableWorkOrders}
                                 value={selectedWoId}
                                 onChange={handleWorkOrderSelect}
                                 placeholder="-- Select Eligible RRH Work Order --"

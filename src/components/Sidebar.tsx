@@ -714,50 +714,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                             <Thermometer size={16} />
                                         </span> Post-Burn-in Test
                                     </div>
-                                    <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/fqc') ? styles.activeSubSubmenu : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigate('/rrh/ecn/fqc');
-                                        }}
-                                    >
-                                        <span className={styles.menuIcon}>
-                                            <Award size={16} />
-                                        </span> FQC
-                                    </div>
-                                    <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/oba') ? styles.activeSubSubmenu : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigate('/rrh/ecn/oba');
-                                        }}
-                                    >
-                                        <span className={styles.menuIcon}>
-                                            <PackageSearch size={16} />
-                                        </span> OBA
-                                    </div>
-                                    <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/packing') ? styles.activeSubSubmenu : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigate('/rrh/ecn/packing');
-                                        }}
-                                    >
-                                        <span className={styles.menuIcon}>
-                                            <Package size={16} />
-                                        </span> Packing
-                                    </div>
-                                    <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/ecn/shipment') ? styles.activeSubSubmenu : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigate('/rrh/ecn/shipment');
-                                        }}
-                                    >
-                                        <span className={styles.menuIcon}>
-                                            <Truck size={16} />
-                                        </span> Shipment
-                                    </div>
                                 </div>
                             )}
                             {(isSuperAdmin || canViewRrhModule || hasPermission('rrh_inward') || hasPermission('rrh_ivi')) && (
@@ -827,50 +783,46 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                             <Thermometer size={16} />
                                         </span> Post-Burn-in Test
                                     </div>
-                                    <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/fqc') ? styles.activeSubSubmenu : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigate('/rrh/non-ecn/fqc');
-                                        }}
-                                    >
-                                        <span className={styles.menuIcon}>
-                                            <Award size={16} />
-                                        </span> FQC
-                                    </div>
-                                    <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/oba') ? styles.activeSubSubmenu : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigate('/rrh/non-ecn/oba');
-                                        }}
-                                    >
-                                        <span className={styles.menuIcon}>
-                                            <PackageSearch size={16} />
-                                        </span> OBA
-                                    </div>
-                                    <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/packing') ? styles.activeSubSubmenu : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigate('/rrh/non-ecn/packing');
-                                        }}
-                                    >
-                                        <span className={styles.menuIcon}>
-                                            <Package size={16} />
-                                        </span> Packing
-                                    </div>
-                                    <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/shipment') ? styles.activeSubSubmenu : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            navigate('/rrh/non-ecn/shipment');
-                                        }}
-                                    >
-                                        <span className={styles.menuIcon}>
-                                            <Truck size={16} />
-                                        </span> Shipment
-                                    </div>
+                                </div>
+                            )}
+                            {(isSuperAdmin || canViewRrhModule || hasPermission('rrh_fqc')) && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/fqc') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/fqc')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <Award size={18} />
+                                    </span> FQC
+                                </div>
+                            )}
+                            {(isSuperAdmin || canViewRrhModule || hasPermission('rrh_oba')) && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/oba') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/oba')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <PackageSearch size={18} />
+                                    </span> OBA
+                                </div>
+                            )}
+                            {(isSuperAdmin || canViewRrhModule || hasPermission('rrh_packing') || hasPermission('rrh_packaging_outgoing_data')) && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/packing') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/packing')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <Package size={18} />
+                                    </span> Packing
+                                </div>
+                            )}
+                            {(isSuperAdmin || canViewRrhModule || hasPermission('rrh_shipment')) && (
+                                <div
+                                    className={`${styles.submenuItem} ${isActive('/rrh/shipment') ? styles.activeSubmenu : ''}`}
+                                    onClick={() => navigate('/rrh/shipment')}
+                                >
+                                    <span className={styles.menuIcon}>
+                                        <Truck size={18} />
+                                    </span> Shipment
                                 </div>
                             )}
                         </div>

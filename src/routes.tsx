@@ -345,6 +345,10 @@ export const router = createBrowserRouter([
                         element: <RrhIpqc />,
                     },
                     {
+                        path: 'programming',
+                        element: <RrhProgramming />,
+                    },
+                    {
                         path: 'debug',
                         element: <RrhDebug />,
                     },
@@ -359,6 +363,14 @@ export const router = createBrowserRouter([
                     {
                         path: 'oba',
                         element: <RrhOba />,
+                    },
+                    {
+                        path: 'packing',
+                        element: <RrhPacking />,
+                    },
+                    {
+                        path: 'shipment',
+                        element: <RrhShipment />,
                     },
                     {
                         path: 'packaging-outgoing-data',

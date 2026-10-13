@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSmtAuth } from '../../../context/SmtAuthContext';
 import { useAuth } from '../../../hooks/useAuth';
 import styles from './Inward.module.css';
@@ -193,6 +193,18 @@ const Inward: React.FC = () => {
     const [completedLimit, setCompletedLimit] = useState(5);
     const [completedSearch, setCompletedSearch] = useState('');
     const [completedTotal, setCompletedTotal] = useState(0);
+
+    // Filter out active or completed work orders from the dropdown
+    const availableWorkOrders = useMemo(() => {
+        const activeWoIds = new Set(activeSessionsList.map((s: any) => String(s.work_order_id || '').trim().toUpperCase()));
+        const completedWoIds = new Set(completedSessionsList.map((s: any) => String(s.work_order_id || '').trim().toUpperCase()));
+        return eligibleWos.filter((w: any) => {
+            const woId = String(w.work_order_id || '').trim().toUpperCase();
+            if (activeWoIds.has(woId)) return false;
+            if (completedWoIds.has(woId)) return false;
+            return true;
+        });
+    }, [eligibleWos, activeSessionsList, completedSessionsList]);
 
     // Session Statistics
     const [stats, setStats] = useState<SessionStats>({
@@ -1109,7 +1121,7 @@ const Inward: React.FC = () => {
                         <h3>Select Work Order</h3>
                         <div className={styles.inputGroup} style={{ maxWidth: '480px' }}>
                             <WorkOrderSelector
-                                options={eligibleWos}
+                                options={availableWorkOrders}
                                 value={selectedWoId}
                                 onChange={handleWorkOrderSelect}
                                 placeholder="-- Select Eligible RRH Work Order --"

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Search, FileText, User, Calendar, AlertCircle } from 'lucide-react';
+import { apiFetch } from '../utils/api';
 import styles from './CountDetailsModal.module.css';
 
 interface SMTRecord {
@@ -39,46 +40,50 @@ const SMTCountDetailsModal: React.FC<SMTCountDetailsModalProps> = ({
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const isMountedRef = useRef(true);
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
     const fetchDetails = async (currentPage: number, searchVal: string) => {
         setLoading(true);
         setError(null);
         try {
-            const url = new URL('/api/smt/track/count-details', window.location.origin);
-            url.searchParams.set('workOrderId', workOrderId);
-            url.searchParams.set('stage', stage);
-            url.searchParams.set('type', type);
-            url.searchParams.set('page', currentPage.toString());
-            url.searchParams.set('limit', limit.toString());
-            url.searchParams.set('search', searchVal);
+            const queryParams = new URLSearchParams({
+                workOrderId: workOrderId.trim(),
+                stage: stage.trim(),
+                type: type.trim(),
+                page: currentPage.toString(),
+                limit: limit.toString(),
+                search: searchVal.trim(),
+            });
             if (sessionId) {
-                url.searchParams.set('sessionId', sessionId);
+                queryParams.set('sessionId', sessionId.trim());
             }
             if (side) {
-                url.searchParams.set('side', side);
+                queryParams.set('side', side.trim());
             }
 
-            const res = await fetch(url.toString());
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('application/json')) {
-                throw new Error('Server returned an unexpected non-JSON response (possibly Route/Gateway mismatch).');
-            }
+            const endpoint = `/api/smt/track/count-details?${queryParams.toString()}`;
+            const response = await apiFetch(endpoint);
 
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.error || 'Failed to fetch details');
-            }
-            const response = await res.json();
-            
-            if (response) {
+            if (isMountedRef.current && response) {
                 setData(response.data || []);
                 setTotalPages(Math.ceil((response.total || 0) / limit) || 1);
                 setTotalRecords(response.total || 0);
             }
         } catch (err: any) {
-            console.error('Error fetching SMT unit details:', err);
-            setError(err.message || 'Failed to retrieve unit details.');
+            if (isMountedRef.current) {
+                console.error('Error fetching SMT unit details:', err);
+                setError(err.message || 'Failed to retrieve unit details.');
+            }
         } finally {
-            setLoading(false);
+            if (isMountedRef.current) {
+                setLoading(false);
+            }
         }
     };
 

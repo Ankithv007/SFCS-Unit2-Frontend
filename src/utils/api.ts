@@ -23,7 +23,13 @@ export async function apiFetch(
     // The components are responsible for sending /api/auth, /api/qc, etc.
     // Prepending automatically causes "/api/api" bugs if not careful.
 
-    const token = localStorage.getItem('auth_token');
+    const token = 
+        localStorage.getItem('auth_token') || 
+        localStorage.getItem('token') || 
+        localStorage.getItem('smt_token') || 
+        sessionStorage.getItem('auth_token') || 
+        sessionStorage.getItem('smt_token') || 
+        sessionStorage.getItem('token');
     const backendUserId = localStorage.getItem('backend_userId');
     let smtUserName = localStorage.getItem('X-User-Name');
     if (!smtUserName) {

@@ -23,12 +23,12 @@ export async function apiFetch(
     // The components are responsible for sending /api/auth, /api/qc, etc.
     // Prepending automatically causes "/api/api" bugs if not careful.
 
-    const token = 
-        localStorage.getItem('auth_token') || 
-        localStorage.getItem('token') || 
-        localStorage.getItem('smt_token') || 
-        sessionStorage.getItem('auth_token') || 
-        sessionStorage.getItem('smt_token') || 
+    const token =
+        localStorage.getItem('auth_token') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('smt_token') ||
+        sessionStorage.getItem('auth_token') ||
+        sessionStorage.getItem('smt_token') ||
         sessionStorage.getItem('token');
     const backendUserId = localStorage.getItem('backend_userId');
     let smtUserName = localStorage.getItem('X-User-Name');
@@ -39,7 +39,7 @@ export async function apiFetch(
                 const parsed = JSON.parse(userDataStr);
                 smtUserName = parsed.name || parsed.employee_code || parsed.email || null;
             }
-        } catch {}
+        } catch { }
     }
 
     // Handle body type correctly (don't set Content-Type for FormData)
@@ -90,7 +90,7 @@ export async function apiFetch(
         // Attach backend error code so callers can branch on it (e.g. MOVE_REQUIRED)
         const err = new Error(errorMsg) as any;
         err.code = errorCode;
-        
+
         // Ensure all structured custom fields are attached directly to the Error object
         if (typeof data !== 'undefined') {
             Object.assign(err, data);

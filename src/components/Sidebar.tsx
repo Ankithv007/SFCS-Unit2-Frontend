@@ -729,10 +729,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                             {isRrhNonEcnExpanded && isExpanded && (
                                 <div className={styles.subSubmenu}>
                                     <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/post-burn-in-initial') ? styles.activeSubSubmenu : ''}`}
+                                        className={`${styles.subSubmenuItem} ${(isActive('/rrh/non-ecn/post-burn-in') || isActive('/rrh/non-ecn/post-burn-in-initial')) ? styles.activeSubSubmenu : ''}`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            navigate('/rrh/non-ecn/post-burn-in-initial');
+                                            navigate('/rrh/non-ecn/post-burn-in');
                                         }}
                                     >
                                         <span className={styles.menuIcon}>
@@ -773,15 +773,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isExpanded, onMouseEnter, onMo
                                         </span> Hipot Test
                                     </div>
                                     <div
-                                        className={`${styles.subSubmenuItem} ${isActive('/rrh/non-ecn/post-burn-in') ? styles.activeSubSubmenu : ''}`}
+                                        className={`${styles.subSubmenuItem} ${(isActive('/rrh/non-ecn/post-burn-in-final') || isActive('/rrh/non-ecn/final-post-burn-in')) ? styles.activeSubSubmenu : ''}`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            navigate('/rrh/non-ecn/post-burn-in');
+                                            navigate('/rrh/non-ecn/post-burn-in-final');
                                         }}
                                     >
                                         <span className={styles.menuIcon}>
                                             <Thermometer size={16} />
-                                        </span> Post-Burn-in Test
+                                        </span> Final Post-Burn-in Test
                                     </div>
                                 </div>
                             )}

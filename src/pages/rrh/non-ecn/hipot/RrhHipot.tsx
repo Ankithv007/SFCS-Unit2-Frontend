@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import styles from './PreBurnIn.module.css';
-import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
-import { apiFetch } from '../../../utils/api';
+import styles from './Hipot.module.css';
+import { WorkOrderSelector } from '../../../../components/WorkOrderSelector';
+import { apiFetch } from '../../../../utils/api';
 import {
     Download,
     AlertCircle,
@@ -145,7 +145,7 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
 );
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
-interface PreBurnInSession {
+interface HipotSession {
     id: number;
     work_order_id: string;
     status: string;
@@ -163,7 +163,7 @@ interface WorkOrderDetails {
     work_order_id: string;
     work_order_date?: string;
     lot_quantity: number;
-    programming_passed_count: number;
+    pre_burn_in_passed_count: number;
 }
 
 interface ScannedUnitDetails {
@@ -177,9 +177,9 @@ interface ScannedUnitDetails {
     duplexer_main?: string;
     duplexer_part_no?: string;
     rrh_unit?: string;
-    programming_status: string;
-    programming_inspected_by?: string;
-    programming_remarks?: string;
+    pre_burn_in_status: string;
+    pre_burn_in_inspected_by?: string;
+    pre_burn_in_remarks?: string;
     work_order_id: string;
     sl_no?: number | string;
     programming_id?: number;
@@ -255,16 +255,16 @@ interface InspectionStats {
     failed: number;
     debug: number;
     remaining: number;
-    programmingPassed: number;
+    preBurnInPassed: number;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
-interface RrhPreBurnInProps {
+interface RrhHipotProps {
     routeType?: string;
     customTitle?: string;
 }
 
-export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
+export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
     // ─── Toasts ───────────────────────────────────────────────────────────────
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
@@ -281,7 +281,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
     const [detailsLoading, setDetailsLoading] = useState<boolean>(false);
 
     // Active Sessions
-    const [activeSessions, setActiveSessions] = useState<PreBurnInSession[]>([]);
+    const [activeSessions, setActiveSessions] = useState<HipotSession[]>([]);
     const [activeSearch, setActiveSearch] = useState<string>('');
     const [activePage, setActivePage] = useState<number>(1);
     const [activeLimit, setActiveLimit] = useState<number>(5);
@@ -289,26 +289,24 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
     const [sessionsLoading, setSessionsLoading] = useState<boolean>(false);
 
     // Completed Sessions
-    const [completedSessions, setCompletedSessions] = useState<PreBurnInSession[]>([]);
+    const [completedSessions, setCompletedSessions] = useState<HipotSession[]>([]);
     const [completedSearch, setCompletedSearch] = useState<string>('');
     const [completedPage, setCompletedPage] = useState<number>(1);
     const [completedLimit, setCompletedLimit] = useState<number>(5);
     const [completedTotal, setCompletedTotal] = useState<number>(0);
 
-    // Filter out active or completed work orders from the dropdown
+    // Filter out active work orders from the dropdown
     const availableWorkOrders = useMemo(() => {
         const activeWoIds = new Set(activeSessions.map((s: any) => String(s.work_order_id || '').trim().toUpperCase()));
-        const completedWoIds = new Set(completedSessions.map((s: any) => String(s.work_order_id || '').trim().toUpperCase()));
         return eligibleWorkOrders.filter((w: any) => {
             const woId = String(w.work_order_id || '').trim().toUpperCase();
             if (activeWoIds.has(woId)) return false;
-            if (completedWoIds.has(woId)) return false;
             return true;
         });
-    }, [eligibleWorkOrders, activeSessions, completedSessions]);
+    }, [eligibleWorkOrders, activeSessions]);
 
     // ─── View 2 State: Inside Active Programming Session ──────────────────────
-    const [activeSession, setActiveSession] = useState<PreBurnInSession | null>(null);
+    const [activeSession, setActiveSession] = useState<HipotSession | null>(null);
     const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
 
     // Stats
@@ -318,7 +316,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
         failed: 0,
         debug: 0,
         remaining: 0,
-        programmingPassed: 0,
+        preBurnInPassed: 0,
     });
 
     // Scanner & Form State
@@ -376,12 +374,12 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
     // ─── 1. Load Eligible Work Orders ────────────────────────────────────────
     const fetchEligibleWorkOrders = useCallback(async () => {
         try {
-            const res = await apiFetch('/api/rrh/pre-burn-in/eligible-work-orders');
+            const res = await apiFetch('/api/rrh/non-ecn/hipot/eligible-work-orders');
             const list = Array.isArray(res) ? res : res?.data || [];
             setEligibleWorkOrders(list);
         } catch (err: any) {
             console.error('Failed to load eligible work orders for Programming:', err);
-            addToast('Failed to load eligible work orders for Pre-Burn-in.', 'error');
+            addToast('Failed to load eligible work orders for Hipot.', 'error');
         }
     }, [addToast]);
 
@@ -395,11 +393,12 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/pre-burn-in/sessions?${params}`);
-            setActiveSessions(res?.sessions || []);
-            setActiveTotal(res?.total || 0);
+            const res = await apiFetch(`/api/rrh/non-ecn/hipot/sessions?${params}`);
+            const list = res?.sessions || res?.data || (Array.isArray(res) ? res : []);
+            setActiveSessions(list);
+            setActiveTotal(res?.total ?? list.length ?? 0);
         } catch (err: any) {
-            console.error('Failed to fetch active Pre-Burn-in sessions:', err);
+            console.error('Failed to fetch active Hipot sessions:', err);
         } finally {
             setSessionsLoading(false);
         }
@@ -413,11 +412,12 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/pre-burn-in/sessions?${params}`);
-            setCompletedSessions(res?.sessions || []);
-            setCompletedTotal(res?.total || 0);
+            const res = await apiFetch(`/api/rrh/non-ecn/hipot/sessions?${params}`);
+            const list = res?.sessions || res?.data || (Array.isArray(res) ? res : []);
+            setCompletedSessions(list);
+            setCompletedTotal(res?.total ?? list.length ?? 0);
         } catch (err: any) {
-            console.error('Failed to fetch completed Pre-Burn-in sessions:', err);
+            console.error('Failed to fetch completed Hipot sessions:', err);
         }
     }, [completedPage, completedLimit, completedSearch]);
 
@@ -441,7 +441,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
         let woNum = woId;
         let woDate: string | null = null;
         let lotQty = 0;
-        let programmingPassedCount = 0;
+        let preBurnInPassedCount = 0;
 
         const localWo = eligibleWorkOrders.find((w: any) =>
             String(w.work_order_id || '').toUpperCase() === woId.toUpperCase()
@@ -450,35 +450,35 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
         if (localWo) {
             woDate = localWo.work_order_date || localWo.date || null;
             lotQty = Number(localWo.lot_quantity) || 0;
-            programmingPassedCount = Number(localWo.programming_passed_count) || 0;
+            preBurnInPassedCount = Number(localWo.pre_burn_in_passed_count) || 0;
         }
 
-        if (localWo && lotQty > 0 && programmingPassedCount > 0) {
+        if (localWo && lotQty > 0) {
             setSelectedWoDetails({
                 work_order_id: woNum,
                 work_order_date: woDate || undefined,
                 lot_quantity: lotQty,
-                programming_passed_count: programmingPassedCount
+                pre_burn_in_passed_count: preBurnInPassedCount
             });
             setDetailsLoading(false);
             return;
         }
 
         try {
-            const ipqcRes = await apiFetch(`/api/rrh/pre-burn-in/work-orders/${encodeURIComponent(woNum)}/programming-details`);
+            const ipqcRes = await apiFetch(`/api/rrh/non-ecn/hipot/work-orders/${encodeURIComponent(woNum)}/pre-burn-in-details`);
             const ipqcData = ipqcRes?.data || ipqcRes;
             if (ipqcData) {
                 woNum = ipqcData.work_order_id || woNum;
                 woDate = ipqcData.work_order_date || woDate;
                 lotQty = Number(ipqcData.lot_quantity) || lotQty;
-                programmingPassedCount = Number(ipqcData.programming_passed_count) || programmingPassedCount;
+                preBurnInPassedCount = Number(ipqcData.pre_burn_in_passed_count) || preBurnInPassedCount;
             }
 
             setSelectedWoDetails({
                 work_order_id: woNum,
                 work_order_date: woDate || undefined,
                 lot_quantity: lotQty,
-                programming_passed_count: programmingPassedCount
+                pre_burn_in_passed_count: preBurnInPassedCount
             });
         } catch (err: any) {
             console.error('Failed to load IPQC details:', err);
@@ -496,17 +496,17 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
 
         setIsCreatingSession(true);
         try {
-            const res = await apiFetch('/api/rrh/pre-burn-in/sessions', {
+            const res = await apiFetch('/api/rrh/non-ecn/hipot/sessions', {
                 method: 'POST',
                 body: JSON.stringify({ work_order_id: woId })
             });
 
-            const session: PreBurnInSession = res?.data || res;
+            const session: HipotSession = res?.data || res;
             setActiveSession(session);
             handleWorkOrderSelect(session.work_order_id);
-            addToast(`Pre-Burn-in session started for Work Order ${session.work_order_id}.`, 'success');
+            addToast(`Hipot session started for Work Order ${session.work_order_id}.`, 'success');
         } catch (err: any) {
-            addToast(err.message || 'Failed to start Pre-Burn-in session.', 'error');
+            addToast(err.message || 'Failed to start Hipot session.', 'error');
         } finally {
             setIsCreatingSession(false);
         }
@@ -520,12 +520,12 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
         }
 
         try {
-            await apiFetch(`/api/rrh/pre-burn-in/sessions/${activeSession.id}/status`, {
+            await apiFetch(`/api/rrh/non-ecn/hipot/sessions/${activeSession.id}/status`, {
                 method: 'PATCH',
                 body: JSON.stringify({ status: 'Completed' })
             });
 
-            addToast(`Pre-Burn-in session for Work Order ${activeSession.work_order_id} marked as Completed.`, 'success');
+            addToast(`Hipot session for Work Order ${activeSession.work_order_id} marked as Completed.`, 'success');
             setActiveSession(null);
             fetchActiveSessions();
             fetchCompletedSessions();
@@ -537,12 +537,12 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
 
     // ─── 6. Delete Session ───────────────────────────────────────────────────
     const handleDeleteSession = async (sessionId: number, woId: string) => {
-        if (!window.confirm(`Are you sure you want to delete the Pre-Burn-in session for Work Order "${woId}"?`)) {
+        if (!window.confirm(`Are you sure you want to delete the Hipot session for Work Order "${woId}"?`)) {
             return;
         }
 
         try {
-            await apiFetch(`/api/rrh/pre-burn-in/sessions/${sessionId}`, {
+            await apiFetch(`/api/rrh/non-ecn/hipot/sessions/${sessionId}`, {
                 method: 'DELETE'
             });
             addToast(`Session for Work Order ${woId} deleted successfully.`, 'success');
@@ -567,7 +567,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 search: scannedSearch,
                 status: 'PASS'
             });
-            const res = await apiFetch(`/api/rrh/pre-burn-in/sessions/${sessionId}/inspections?${query.toString()}`);
+            const res = await apiFetch(`/api/rrh/non-ecn/hipot/sessions/${sessionId}/inspections?${query.toString()}`);
             setScannedLogs(res?.data || []);
             setScannedTotal(res?.total || 0);
         } catch (err: any) {
@@ -578,7 +578,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
 
         // B. Failed Inspections
         try {
-            const failRes = await apiFetch(`/api/rrh/pre-burn-in/sessions/${sessionId}/failed-inspections`);
+            const failRes = await apiFetch(`/api/rrh/non-ecn/hipot/sessions/${sessionId}/failed-inspections`);
             setFailedInspections(failRes?.data || []);
         } catch (err: any) {
             // Ignore
@@ -591,7 +591,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 search: debugSearch,
                 status: debugStatusFilter
             });
-            const debugRes = await apiFetch(`/api/rrh/pre-burn-in/sessions/${sessionId}/debug-inspections?${debugQuery.toString()}`);
+            const debugRes = await apiFetch(`/api/rrh/non-ecn/hipot/sessions/${sessionId}/debug-inspections?${debugQuery.toString()}`);
             setDebugInspections(debugRes?.data || []);
         } catch (err: any) {
             // Ignore
@@ -607,7 +607,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 limit: String(remainingLimit),
                 search: remainingSearch
             });
-            const remRes = await apiFetch(`/api/rrh/pre-burn-in/sessions/${sessionId}/remaining-master-data?${remQuery.toString()}`);
+            const remRes = await apiFetch(`/api/rrh/non-ecn/hipot/sessions/${sessionId}/remaining-master-data?${remQuery.toString()}`);
             setRemainingItems(remRes?.data || []);
             setRemainingTotal(remRes?.total || 0);
         } catch (err: any) {
@@ -618,7 +618,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
 
         // E. Live Session Stats from Server
         try {
-            const sRes = await apiFetch(`/api/rrh/pre-burn-in/sessions/${sessionId}`);
+            const sRes = await apiFetch(`/api/rrh/non-ecn/hipot/sessions/${sessionId}`);
             if (sRes?.stats) {
                 setStats(sRes.stats);
             }
@@ -636,7 +636,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
     // ─── 9. Serial Lookup / Scan ─────────────────────────────────────────────
     const handleSerialLookup = async (serialToSearch?: string, isAutoLookup = false) => {
         if (!activeSession) {
-            addToast('Please select or start a Pre-Burn-in session first.', 'warning');
+            addToast('Please select or start a Hipot session first.', 'warning');
             return;
         }
 
@@ -649,12 +649,12 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
         setIsSearchingSerial(true);
         try {
             const res = await apiFetch(
-                `/api/rrh/pre-burn-in/lookup?serial=${encodeURIComponent(serial)}&work_order_id=${encodeURIComponent(activeSession.work_order_id)}&session_id=${activeSession.id}`
+                `/api/rrh/non-ecn/hipot/lookup?serial=${encodeURIComponent(serial)}&work_order_id=${encodeURIComponent(activeSession.work_order_id)}&session_id=${activeSession.id}`
             );
 
-            const data = res?.data || res;
-            if (!data || !data.found) {
-                addToast(data.message || `Serial "${serial}" not found in passed Programming units.`, 'error');
+            const data = (res?.data && (res.data.serial_number || res.data.found)) ? res.data : res;
+            if (!data || (!data.found && !res?.found && !data.serial_number)) {
+                addToast(data.message || res?.message || `Serial "${serial}" not found in passed Pre-Burn-in units.`, 'error');
                 return;
             }
 
@@ -671,12 +671,13 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 duplexer_main: data.duplexer_main || '—',
                 duplexer_part_no: data.duplexer_part_no || '—',
                 rrh_unit: data.rrh_unit || 'no defect',
-                programming_status: data.programming_status || data.ipqc_status || 'COMPLETED',
-                programming_inspected_by: data.programming_inspected_by || data.ipqc_inspected_by || 'System Admin',
-                programming_remarks: data.programming_remarks || data.ipqc_remarks,
+                pre_burn_in_status: data.pre_burn_in_status || data.ipqc_status || 'COMPLETED',
+                pre_burn_in_inspected_by: data.pre_burn_in_inspected_by || data.ipqc_inspected_by || 'System Admin',
+                pre_burn_in_remarks: data.pre_burn_in_remarks || data.ipqc_remarks,
                 work_order_id: data.work_order_id,
                 sl_no: data.sl_no,
-                programming_id: data.programming_id || (data as any).id,
+                pre_burn_in_id: data.pre_burn_in_id || (data as any).id,
+                programming_id: data.programming_id,
                 ipqc_id: data.ipqc_id,
                 ivi_id: data.ivi_id,
                 inspection_date: getTodayLocalDate()
@@ -697,7 +698,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 addToast(`Unit "${resolvedSerial}" was previously inspected. Loaded in Re-Inspection mode.`, 'info');
             } else {
                 setReinspectionInfo(null);
-                addToast(`Unit "${resolvedSerial}" loaded successfully from Programming.`, 'success');
+                addToast(`Unit "${resolvedSerial}" loaded successfully from Pre-Burn-in.`, 'success');
             }
         } catch (err: any) {
             if (!isAutoLookup) {
@@ -776,22 +777,23 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 physical_tpn: loadedUnit.physical_tpn,
                 band: loadedUnit.band,
                 status: resultStatus,
-                remarks: resultStatus === 'FAIL' ? failureRemarks.trim() : (reinspectionInfo?.isReinspected ? 'Passed re-inspection in Pre-Burn-in' : null),
+                remarks: resultStatus === 'FAIL' ? failureRemarks.trim() : (reinspectionInfo?.isReinspected ? 'Passed re-inspection in Hipot' : null),
                 inspection_date: getTodayLocalDate(),
-                programming_inspection_id: loadedUnit.programming_id || (loadedUnit as any).id || null,
+                pre_burn_in_inspection_id: loadedUnit.pre_burn_in_id || (loadedUnit as any).id || null,
+                programming_inspection_id: loadedUnit.programming_id || null,
                 ipqc_inspection_id: loadedUnit.ipqc_id || null,
                 ivi_inspection_id: loadedUnit.ivi_id || null,
                 sl_no: loadedUnit.sl_no || null,
                 is_reinspected: !!reinspectionInfo?.isReinspected,
-                defect_fixed: reinspectionInfo?.isReinspected && selectedDecision === 'PASS' ? 'Defect resolved and verified in Pre-Burn-in.' : null
+                defect_fixed: reinspectionInfo?.isReinspected && selectedDecision === 'PASS' ? 'Defect resolved and verified in Hipot.' : null
             };
 
-            const data = await apiFetch(`/api/rrh/pre-burn-in/sessions/${activeSession.id}/inspections`, {
+            const data = await apiFetch(`/api/rrh/non-ecn/hipot/sessions/${activeSession.id}/inspections`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
 
-            addToast(`Pre-Burn-in inspection submitted successfully (${resultStatus}) for ${loadedUnit.band_serial_no}!`, 'success');
+            addToast(`Hipot inspection submitted successfully (${resultStatus}) for ${loadedUnit.band_serial_no}!`, 'success');
 
             // Reset form
             setLoadedUnit(null);
@@ -819,7 +821,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
 
         setIsSavingDebugAction(true);
         try {
-            await apiFetch(`/api/rrh/pre-burn-in/inspections/${debugModalItem.id}/debug-action`, {
+            await apiFetch(`/api/rrh/non-ecn/hipot/inspections/${debugModalItem.id}/debug-action`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     debug_status: debugModalStatus,
@@ -838,15 +840,15 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
         }
     };
 
-    const handlePassInPreBurnIn = async (item: DebugInspectionItem) => {
+    const handlePassInHipot = async (item: DebugInspectionItem) => {
         if (!activeSession) return;
 
-        if (!window.confirm(`Are you sure you want to mark unit "${item.band_serial_no || item.serial_number}" as PASSED in Pre-Burn-In?`)) {
+        if (!window.confirm(`Are you sure you want to mark unit "${item.band_serial_no || item.serial_number}" as PASSED in Hipot?`)) {
             return;
         }
 
         try {
-            await apiFetch(`/api/rrh/pre-burn-in/inspections/${item.id}/debug-action`, {
+            await apiFetch(`/api/rrh/non-ecn/hipot/inspections/${item.id}/debug-action`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     debug_status: 'DEBUG_PASS',
@@ -854,7 +856,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 })
             });
 
-            addToast(`Unit "${item.band_serial_no || item.serial_number}" rectified & passed in Pre-Burn-In!`, 'success');
+            addToast(`Unit "${item.band_serial_no || item.serial_number}" rectified & passed in Hipot!`, 'success');
             loadActiveSessionDetails(activeSession.id);
         } catch (err: any) {
             addToast(err.message || 'Failed to pass unit from debug.', 'error');
@@ -896,8 +898,8 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
     const handleExportRecentExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/pre-burn-in/sessions/${activeSession.id}/export?status=PASS`,
-            `RRH_Pre_Burn_In_Recent_Report_${activeSession.work_order_id}.xlsx`,
+            `/api/rrh/non-ecn/hipot/sessions/${activeSession.id}/export?status=PASS`,
+            `RRH_Hipot_Recent_Report_${activeSession.work_order_id}.xlsx`,
             'Recent inspections exported successfully.',
             'Failed to export recent records.',
             setIsExportingScanned
@@ -907,9 +909,9 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
     const handleExportSessionExcel = (session: any) => {
         if (!session?.id) return addToast('No session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/pre-burn-in/sessions/${session.id}/export`,
-            `RRH_Pre_Burn_In_Session_Report_${session.work_order_id}.xlsx`,
-            'Pre-Burn-in session report downloaded successfully.',
+            `/api/rrh/non-ecn/hipot/sessions/${session.id}/export`,
+            `RRH_Hipot_Session_Report_${session.work_order_id}.xlsx`,
+            'Hipot session report downloaded successfully.',
             'Failed to export session report.'
         );
     };
@@ -917,8 +919,8 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
     const handleExportFailedExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/pre-burn-in/sessions/${activeSession.id}/export?status=FAIL`,
-            `RRH_Pre_Burn_In_Failed_Report_${activeSession.work_order_id}.xlsx`,
+            `/api/rrh/non-ecn/hipot/sessions/${activeSession.id}/export?status=FAIL`,
+            `RRH_Hipot_Failed_Report_${activeSession.work_order_id}.xlsx`,
             'Failed inspections exported successfully.',
             'Failed to export failed records.',
             setIsExportingFailed
@@ -928,8 +930,8 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
     const handleExportDebugExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/pre-burn-in/sessions/${activeSession.id}/export-debug`,
-            `RRH_Pre_Burn_In_Debug_Report_${activeSession.work_order_id}.xlsx`,
+            `/api/rrh/non-ecn/hipot/sessions/${activeSession.id}/export-debug`,
+            `RRH_Hipot_Debug_Report_${activeSession.work_order_id}.xlsx`,
             'Debug report exported successfully.',
             'Failed to export debug records.',
             setIsExportingDebug
@@ -941,8 +943,8 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
         const targetWoId = (typeof woId === 'string' && woId) ? woId : activeSession?.work_order_id;
         if (!targetSessionId) return addToast('No session selected to export unscanned data.', 'warning');
         return downloadExcel(
-            `/api/rrh/pre-burn-in/sessions/${targetSessionId}/export-unscanned`,
-            `RRH_Pre_Burn_In_Unscanned_${targetWoId || 'Report'}.xlsx`,
+            `/api/rrh/non-ecn/hipot/sessions/${targetSessionId}/export-unscanned`,
+            `RRH_Hipot_Unscanned_${targetWoId || 'Report'}.xlsx`,
             'Remaining master data exported successfully.',
             'Failed to export remaining records.',
             setIsExportingRemaining
@@ -966,8 +968,8 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 <Toaster toasts={toasts} onRemove={id => setToasts(prev => prev.filter(t => t.id !== id))} />
 
                 <div className={styles.header}>
-                    <h2>{customTitle || 'RRH Pre-Burn-in Test'}</h2>
-                    <p>Pre-thermal stress electrical screening and initial functional parameters verification.</p>
+                    <h2>{customTitle || 'RRH Hipot Test (Non-ECN)'}</h2>
+                    <p>High potential dielectric withstand test, insulation resistance, and grounding continuity.</p>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
@@ -1026,9 +1028,9 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                             </span>
                                         </div>
                                         <div className={styles.infoItem}>
-                                            <span className={styles.infoLabel}>Programming Passed Units</span>
+                                            <span className={styles.infoLabel}>Pre-Burn-in Passed Units</span>
                                             <span className={styles.infoValue} style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10b981' }}>
-                                                {selectedWoDetails.programming_passed_count ?? 0}
+                                                {selectedWoDetails.pre_burn_in_passed_count ?? 0}
                                             </span>
                                         </div>
                                     </div>
@@ -1042,19 +1044,19 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                     style={{ padding: '0.85rem 3rem', fontSize: '1.05rem', letterSpacing: '0.5px' }}
                                     disabled={isCreatingSession}
                                 >
-                                    {isCreatingSession ? 'Starting Session...' : 'Start Pre-Burn-in Session'}
+                                    {isCreatingSession ? 'Starting Session...' : 'Start Hipot Session'}
                                 </button>
                             </div>
                         </div>
                     ) : (
                         <div className={styles.card} style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b', border: '1px dashed #cbd5e1' }}>
-                            Please select an eligible RRH Work Order to view Programming Passed Units and start a Pre-Burn-in session.
+                            Please select an eligible RRH Work Order to view Pre-Burn-in Passed Units and start a Hipot session.
                         </div>
                     )}
 
                     {/* Card 2: Active Programming Sessions */}
                     <div className={styles.card}>
-                        <h3>Active Pre-Burn-in Sessions</h3>
+                        <h3>Active Hipot Sessions</h3>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, maxWidth: '400px' }}>
                                 <input
@@ -1170,7 +1172,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                             {activeSessions.length === 0 && (
                                                 <tr>
                                                     <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
-                                                        No active Pre-Burn-in sessions found. Select a Work Order above to begin.
+                                                        No active Hipot sessions found. Select a Work Order above to begin.
                                                     </td>
                                                 </tr>
                                             )}
@@ -1317,7 +1319,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                     {completedSessions.length === 0 && (
                                         <tr>
                                             <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
-                                                No completed Pre-Burn-in sessions yet.
+                                                No completed Hipot sessions yet.
                                             </td>
                                         </tr>
                                     )}
@@ -1377,7 +1379,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                     <div>
                         <h3 style={{ margin: 0, color: '#111827', fontSize: '1.35rem', fontWeight: 700 }}>
-                            RRH Pre-Burn-in — Active Session
+                            RRH Hipot — Active Session
                         </h3>
                         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginTop: '0.75rem', color: '#374151', fontSize: '0.95rem', flexWrap: 'wrap' }}>
                             <span>Work Order: <strong style={{ color: '#4f46e5' }}>{activeSession.work_order_id}</strong></span>
@@ -1455,8 +1457,8 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                     <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#6d28d9', fontWeight: 800 }}>{Math.max(0, (selectedWoDetails?.lot_quantity || activeSession.lot_quantity || 0) - stats.totalScanned)}</h2>
                 </div>
                 <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #0ea5e9', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Programming Passed</p>
-                    <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0284c7', fontWeight: 800 }}>{stats.programmingPassed ?? 0}</h2>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Pre-Burn-in Passed</p>
+                    <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0284c7', fontWeight: 800 }}>{stats.preBurnInPassed ?? 0}</h2>
                 </div>
                 <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #16a34a', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                     <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>
@@ -1476,7 +1478,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
             <div ref={scannerSectionRef} className={styles.card}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '8px' }}>
                     <h3 style={{ margin: 0, border: 'none', padding: 0 }}>
-                        Barcode Scanner & Pre-Burn-in Inspection
+                        Barcode Scanner & Hipot Inspection
                     </h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#16a34a', fontWeight: 600 }}>
                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', display: 'inline-block' }}></span>
@@ -1540,7 +1542,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                 Unit Information — <strong style={{ color: '#4f46e5' }}>{loadedUnit.band_serial_no || loadedUnit.serial_number}</strong>
                             </span>
                             <span className={styles.badgeSuccess}>
-                                Ready for Pre-Burn-in & Verification
+                                Ready for Hipot & Verification
                             </span>
                         </div>
 
@@ -1605,7 +1607,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                 </span>
                             </div>
                             <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Programming Status</span>
+                                <span className={styles.scannedInfoLabel}>Pre-Burn-in Status</span>
                                 <div>
                                     <span style={{
                                         display: 'inline-flex',
@@ -1619,13 +1621,13 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                         color: '#15803d',
                                         border: '1px solid #86efac'
                                     }}>
-                                        ✓ {loadedUnit.programming_status || 'COMPLETED'}
+                                        ✓ {loadedUnit.pre_burn_in_status || 'COMPLETED'}
                                     </span>
                                 </div>
                             </div>
                             <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Programming Inspected By</span>
-                                <span className={styles.scannedInfoValue}>{loadedUnit.programming_inspected_by || 'System Admin'}</span>
+                                <span className={styles.scannedInfoLabel}>Pre-Burn-in Inspected By</span>
+                                <span className={styles.scannedInfoValue}>{loadedUnit.pre_burn_in_inspected_by || 'System Admin'}</span>
                             </div>
                         </div>
 
@@ -1634,7 +1636,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                             <div className={styles.reinspectionBanner}>
                                 <AlertCircle size={20} />
                                 <div>
-                                    <strong>RE-INSPECTION MODE:</strong> This unit previously failed pre-burn-in verification.
+                                    <strong>RE-INSPECTION MODE:</strong> This unit previously failed hipot verification.
                                     {reinspectionInfo.previousFailureRemarks && (
                                         <div style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>
                                             <em>Previous Defect:</em> {reinspectionInfo.previousFailureRemarks}
@@ -1710,7 +1712,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                     }}>
                         <Sparkles size={32} style={{ color: '#94a3b8', marginBottom: '0.5rem' }} />
                         <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>
-                            Scan a unit's barcode or enter its Serial Number above to begin Pre-Burn-in Inspection.
+                            Scan a unit's barcode or enter its Serial Number above to begin Hipot Inspection.
                         </p>
                     </div>
                 )}
@@ -1721,7 +1723,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                 <div className={styles.recentHeader} style={{ marginBottom: '0.4rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <h3 className={styles.recentTitle} style={{ color: '#991b1b', margin: 0, paddingBottom: 0, borderBottom: 'none' }}>
-                            Failed Pre-Burn-in Inspections ({failedInspections.length})
+                            Failed Hipot Inspections ({failedInspections.length})
                         </h3>
                     </div>
 
@@ -1792,7 +1794,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                         </td>
                                         <td style={{ fontSize: '0.82rem', color: '#64748b' }}>{formatTimestamp(item.scanned_at)}</td>
                                         <td style={{ color: '#b91c1c', fontWeight: 600 }}>
-                                            {item.remarks || 'Pre-Burn-In Inspection Failed'}
+                                            {item.remarks || 'Hipot Inspection Failed'}
                                         </td>
                                         <td>{item.scanned_by || 'Operator'}</td>
                                         <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -1807,7 +1809,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                                     borderColor: '#86efac',
                                                     fontWeight: 700
                                                 }}
-                                                onClick={() => handlePassInPreBurnIn(item as any)}
+                                                onClick={() => handlePassInHipot(item as any)}
                                                 title="Pass unit in Debug and mark completed"
                                             >
                                                 ✓ Pass in Debug
@@ -1960,7 +1962,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                             <td style={{ fontWeight: 700, color: '#4f46e5' }}>{item.band_serial_no || '—'}</td>
                                             <td>{item.physical_tpn || '—'}</td>
                                             <td style={{ color: '#b91c1c', fontWeight: 500 }}>
-                                                {item.remarks || 'Pre-Burn-in Defect'}
+                                                {item.remarks || 'Hipot Defect'}
                                             </td>
                                             <td>
                                                 <span style={{
@@ -1989,10 +1991,10 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                                         borderColor: '#86efac',
                                                         fontWeight: 700
                                                     }}
-                                                    onClick={() => handlePassInPreBurnIn(item)}
-                                                    title="Pass unit and mark completed in Pre-Burn-In"
+                                                    onClick={() => handlePassInHipot(item)}
+                                                    title="Pass unit and mark completed in Hipot"
                                                 >
-                                                    ✓ Pass in Pre-Burn-In
+                                                    ✓ Pass in Hipot
                                                 </button>
                                                 <button
                                                     type="button"
@@ -2190,7 +2192,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                             Remaining Master Data ({remainingTotal} items remaining)
                         </h3>
                         <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
-                            Live session view: Passed units from RRH Programming recent inspections ready for Pre-Burn-in. Successfully inspected units are deducted immediately.
+                            Live session view: Passed units from RRH Pre-Burn-in recent inspections ready for Hipot. Successfully inspected units are deducted immediately.
                         </p>
                     </div>
 
@@ -2210,7 +2212,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                             limit: String(newLimit),
                                             search: remainingSearch
                                         });
-                                        apiFetch(`/api/rrh/pre-burn-in/sessions/${activeSession.id}/remaining-master-data?${remQuery.toString()}`)
+                                        apiFetch(`/api/rrh/non-ecn/hipot/sessions/${activeSession.id}/remaining-master-data?${remQuery.toString()}`)
                                             .then(res => {
                                                 setRemainingItems(res?.data || []);
                                                 setRemainingTotal(res?.total || 0);
@@ -2289,7 +2291,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                 <th>DUPLEXER MAIN (IVI)</th>
                                 <th>DUPLEXER PART NO (IVI)</th>
                                 <th>RRH UNIT (IVI)</th>
-                                <th>PROGRAMMING STATUS</th>
+                                <th>PRE-BURN-IN STATUS</th>
                                 <th>TEJAS DC NO</th>
                                 <th>LOT</th>
                                 <th>REMARKS</th>
@@ -2306,7 +2308,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                             ) : remainingItems.length === 0 ? (
                                 <tr>
                                     <td colSpan={11} style={{ textAlign: 'center', padding: '2.5rem', background: '#f0fdf4', color: '#166534', fontWeight: 600 }}>
-                                        ✓ All passed Programming units for this Work Order have been inspected in Pre-Burn-in!
+                                        ✓ All passed Pre-Burn-in units for this Work Order have been inspected in Hipot!
                                     </td>
                                 </tr>
                             ) : (
@@ -2359,7 +2361,7 @@ export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
                                                     cursor: 'pointer'
                                                 }}
                                                 onClick={() => handleInspectRemainingUnit(item)}
-                                                title="Inspect this unit in Pre-Burn-in"
+                                                title="Inspect this unit in Hipot"
                                                 disabled={activeSession.status === 'Completed'}
                                             >
                                                 Inspect Unit

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import styles from './Programming.module.css';
-import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
-import { apiFetch } from '../../../utils/api';
+import styles from './PreBurnIn.module.css';
+import { WorkOrderSelector } from '../../../../components/WorkOrderSelector';
+import { apiFetch } from '../../../../utils/api';
 import {
     Download,
     AlertCircle,
@@ -145,7 +145,7 @@ const Toaster: React.FC<{ toasts: Toast[]; onRemove: (id: number) => void }> = (
 );
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
-interface ProgrammingSession {
+interface PreBurnInSession {
     id: number;
     work_order_id: string;
     status: string;
@@ -163,7 +163,7 @@ interface WorkOrderDetails {
     work_order_id: string;
     work_order_date?: string;
     lot_quantity: number;
-    ipqc_passed_count: number;
+    programming_passed_count: number;
 }
 
 interface ScannedUnitDetails {
@@ -177,11 +177,14 @@ interface ScannedUnitDetails {
     duplexer_main?: string;
     duplexer_part_no?: string;
     rrh_unit?: string;
-    ipqc_status: string;
-    ipqc_inspected_by?: string;
-    ipqc_remarks?: string;
+    programming_status: string;
+    programming_inspected_by?: string;
+    programming_remarks?: string;
     work_order_id: string;
     sl_no?: number | string;
+    programming_id?: number;
+    pre_burn_in_id?: number;
+    hipot_id?: number;
     ipqc_id?: number;
     ivi_id?: number;
     inspection_date?: string;
@@ -252,11 +255,16 @@ interface InspectionStats {
     failed: number;
     debug: number;
     remaining: number;
-    ipqcPassed: number;
+    programmingPassed: number;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
-export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
+interface RrhPreBurnInProps {
+    routeType?: string;
+    customTitle?: string;
+}
+
+export const RrhPreBurnIn: React.FC<RrhPreBurnInProps> = ({ customTitle }) => {
     // ─── Toasts ───────────────────────────────────────────────────────────────
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
@@ -273,7 +281,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
     const [detailsLoading, setDetailsLoading] = useState<boolean>(false);
 
     // Active Sessions
-    const [activeSessions, setActiveSessions] = useState<ProgrammingSession[]>([]);
+    const [activeSessions, setActiveSessions] = useState<PreBurnInSession[]>([]);
     const [activeSearch, setActiveSearch] = useState<string>('');
     const [activePage, setActivePage] = useState<number>(1);
     const [activeLimit, setActiveLimit] = useState<number>(5);
@@ -281,7 +289,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
     const [sessionsLoading, setSessionsLoading] = useState<boolean>(false);
 
     // Completed Sessions
-    const [completedSessions, setCompletedSessions] = useState<ProgrammingSession[]>([]);
+    const [completedSessions, setCompletedSessions] = useState<PreBurnInSession[]>([]);
     const [completedSearch, setCompletedSearch] = useState<string>('');
     const [completedPage, setCompletedPage] = useState<number>(1);
     const [completedLimit, setCompletedLimit] = useState<number>(5);
@@ -300,7 +308,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
     }, [eligibleWorkOrders, activeSessions, completedSessions]);
 
     // ─── View 2 State: Inside Active Programming Session ──────────────────────
-    const [activeSession, setActiveSession] = useState<ProgrammingSession | null>(null);
+    const [activeSession, setActiveSession] = useState<PreBurnInSession | null>(null);
     const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
 
     // Stats
@@ -310,7 +318,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
         failed: 0,
         debug: 0,
         remaining: 0,
-        ipqcPassed: 0,
+        programmingPassed: 0,
     });
 
     // Scanner & Form State
@@ -368,12 +376,12 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
     // ─── 1. Load Eligible Work Orders ────────────────────────────────────────
     const fetchEligibleWorkOrders = useCallback(async () => {
         try {
-            const res = await apiFetch('/api/rrh/programming/eligible-work-orders');
+            const res = await apiFetch('/api/rrh/ecn/pre-burn-in/eligible-work-orders');
             const list = Array.isArray(res) ? res : res?.data || [];
             setEligibleWorkOrders(list);
         } catch (err: any) {
             console.error('Failed to load eligible work orders for Programming:', err);
-            addToast('Failed to load eligible work orders for Programming.', 'error');
+            addToast('Failed to load eligible work orders for Pre-Burn-in.', 'error');
         }
     }, [addToast]);
 
@@ -387,11 +395,11 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/programming/sessions?${params}`);
+            const res = await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions?${params}`);
             setActiveSessions(res?.sessions || []);
             setActiveTotal(res?.total || 0);
         } catch (err: any) {
-            console.error('Failed to fetch active Programming sessions:', err);
+            console.error('Failed to fetch active Pre-Burn-in sessions:', err);
         } finally {
             setSessionsLoading(false);
         }
@@ -405,11 +413,11 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/programming/sessions?${params}`);
+            const res = await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions?${params}`);
             setCompletedSessions(res?.sessions || []);
             setCompletedTotal(res?.total || 0);
         } catch (err: any) {
-            console.error('Failed to fetch completed Programming sessions:', err);
+            console.error('Failed to fetch completed Pre-Burn-in sessions:', err);
         }
     }, [completedPage, completedLimit, completedSearch]);
 
@@ -433,7 +441,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
         let woNum = woId;
         let woDate: string | null = null;
         let lotQty = 0;
-        let ipqcPassedCount = 0;
+        let programmingPassedCount = 0;
 
         const localWo = eligibleWorkOrders.find((w: any) =>
             String(w.work_order_id || '').toUpperCase() === woId.toUpperCase()
@@ -442,35 +450,35 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
         if (localWo) {
             woDate = localWo.work_order_date || localWo.date || null;
             lotQty = Number(localWo.lot_quantity) || 0;
-            ipqcPassedCount = Number(localWo.ipqc_passed_count) || 0;
+            programmingPassedCount = Number(localWo.programming_passed_count) || 0;
         }
 
-        if (localWo && lotQty > 0 && ipqcPassedCount > 0) {
+        if (localWo && lotQty > 0 && programmingPassedCount > 0) {
             setSelectedWoDetails({
                 work_order_id: woNum,
                 work_order_date: woDate || undefined,
                 lot_quantity: lotQty,
-                ipqc_passed_count: ipqcPassedCount
+                programming_passed_count: programmingPassedCount
             });
             setDetailsLoading(false);
             return;
         }
 
         try {
-            const ipqcRes = await apiFetch(`/api/rrh/programming/work-orders/${encodeURIComponent(woNum)}/ipqc-details`);
+            const ipqcRes = await apiFetch(`/api/rrh/ecn/pre-burn-in/work-orders/${encodeURIComponent(woNum)}/programming-details`);
             const ipqcData = ipqcRes?.data || ipqcRes;
             if (ipqcData) {
                 woNum = ipqcData.work_order_id || woNum;
                 woDate = ipqcData.work_order_date || woDate;
                 lotQty = Number(ipqcData.lot_quantity) || lotQty;
-                ipqcPassedCount = Number(ipqcData.ipqc_passed_count) || ipqcPassedCount;
+                programmingPassedCount = Number(ipqcData.programming_passed_count) || programmingPassedCount;
             }
 
             setSelectedWoDetails({
                 work_order_id: woNum,
                 work_order_date: woDate || undefined,
                 lot_quantity: lotQty,
-                ipqc_passed_count: ipqcPassedCount
+                programming_passed_count: programmingPassedCount
             });
         } catch (err: any) {
             console.error('Failed to load IPQC details:', err);
@@ -488,17 +496,17 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
 
         setIsCreatingSession(true);
         try {
-            const res = await apiFetch('/api/rrh/programming/sessions', {
+            const res = await apiFetch('/api/rrh/ecn/pre-burn-in/sessions', {
                 method: 'POST',
                 body: JSON.stringify({ work_order_id: woId })
             });
 
-            const session: ProgrammingSession = res?.data || res;
+            const session: PreBurnInSession = res?.data || res;
             setActiveSession(session);
             handleWorkOrderSelect(session.work_order_id);
-            addToast(`Programming session started for Work Order ${session.work_order_id}.`, 'success');
+            addToast(`Pre-Burn-in session started for Work Order ${session.work_order_id}.`, 'success');
         } catch (err: any) {
-            addToast(err.message || 'Failed to start Programming session.', 'error');
+            addToast(err.message || 'Failed to start Pre-Burn-in session.', 'error');
         } finally {
             setIsCreatingSession(false);
         }
@@ -512,12 +520,12 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
         }
 
         try {
-            await apiFetch(`/api/rrh/programming/sessions/${activeSession.id}/status`, {
+            await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions/${activeSession.id}/status`, {
                 method: 'PATCH',
                 body: JSON.stringify({ status: 'Completed' })
             });
 
-            addToast(`Programming session for Work Order ${activeSession.work_order_id} marked as Completed.`, 'success');
+            addToast(`Pre-Burn-in session for Work Order ${activeSession.work_order_id} marked as Completed.`, 'success');
             setActiveSession(null);
             fetchActiveSessions();
             fetchCompletedSessions();
@@ -529,12 +537,12 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
 
     // ─── 6. Delete Session ───────────────────────────────────────────────────
     const handleDeleteSession = async (sessionId: number, woId: string) => {
-        if (!window.confirm(`Are you sure you want to delete the Programming session for Work Order "${woId}"?`)) {
+        if (!window.confirm(`Are you sure you want to delete the Pre-Burn-in session for Work Order "${woId}"?`)) {
             return;
         }
 
         try {
-            await apiFetch(`/api/rrh/programming/sessions/${sessionId}`, {
+            await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions/${sessionId}`, {
                 method: 'DELETE'
             });
             addToast(`Session for Work Order ${woId} deleted successfully.`, 'success');
@@ -559,7 +567,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 search: scannedSearch,
                 status: 'PASS'
             });
-            const res = await apiFetch(`/api/rrh/programming/sessions/${sessionId}/inspections?${query.toString()}`);
+            const res = await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions/${sessionId}/inspections?${query.toString()}`);
             setScannedLogs(res?.data || []);
             setScannedTotal(res?.total || 0);
         } catch (err: any) {
@@ -570,7 +578,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
 
         // B. Failed Inspections
         try {
-            const failRes = await apiFetch(`/api/rrh/programming/sessions/${sessionId}/failed-inspections`);
+            const failRes = await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions/${sessionId}/failed-inspections`);
             setFailedInspections(failRes?.data || []);
         } catch (err: any) {
             // Ignore
@@ -583,7 +591,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 search: debugSearch,
                 status: debugStatusFilter
             });
-            const debugRes = await apiFetch(`/api/rrh/programming/sessions/${sessionId}/debug-inspections?${debugQuery.toString()}`);
+            const debugRes = await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions/${sessionId}/debug-inspections?${debugQuery.toString()}`);
             setDebugInspections(debugRes?.data || []);
         } catch (err: any) {
             // Ignore
@@ -599,7 +607,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 limit: String(remainingLimit),
                 search: remainingSearch
             });
-            const remRes = await apiFetch(`/api/rrh/programming/sessions/${sessionId}/remaining-master-data?${remQuery.toString()}`);
+            const remRes = await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions/${sessionId}/remaining-master-data?${remQuery.toString()}`);
             setRemainingItems(remRes?.data || []);
             setRemainingTotal(remRes?.total || 0);
         } catch (err: any) {
@@ -610,7 +618,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
 
         // E. Live Session Stats from Server
         try {
-            const sRes = await apiFetch(`/api/rrh/programming/sessions/${sessionId}`);
+            const sRes = await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions/${sessionId}`);
             if (sRes?.stats) {
                 setStats(sRes.stats);
             }
@@ -628,7 +636,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
     // ─── 9. Serial Lookup / Scan ─────────────────────────────────────────────
     const handleSerialLookup = async (serialToSearch?: string, isAutoLookup = false) => {
         if (!activeSession) {
-            addToast('Please select or start a Programming session first.', 'warning');
+            addToast('Please select or start a Pre-Burn-in session first.', 'warning');
             return;
         }
 
@@ -641,12 +649,12 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
         setIsSearchingSerial(true);
         try {
             const res = await apiFetch(
-                `/api/rrh/programming/lookup?serial=${encodeURIComponent(serial)}&work_order_id=${encodeURIComponent(activeSession.work_order_id)}&session_id=${activeSession.id}`
+                `/api/rrh/ecn/pre-burn-in/lookup?serial=${encodeURIComponent(serial)}&work_order_id=${encodeURIComponent(activeSession.work_order_id)}&session_id=${activeSession.id}`
             );
 
             const data = res?.data || res;
             if (!data || !data.found) {
-                addToast(data.message || `Serial "${serial}" not found in passed IPQC units.`, 'error');
+                addToast(data.message || `Serial "${serial}" not found in passed Programming units.`, 'error');
                 return;
             }
 
@@ -663,11 +671,12 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 duplexer_main: data.duplexer_main || '—',
                 duplexer_part_no: data.duplexer_part_no || '—',
                 rrh_unit: data.rrh_unit || 'no defect',
-                ipqc_status: data.ipqc_status || 'COMPLETED',
-                ipqc_inspected_by: data.ipqc_inspected_by || 'System Admin',
-                ipqc_remarks: data.ipqc_remarks,
+                programming_status: data.programming_status || data.ipqc_status || 'COMPLETED',
+                programming_inspected_by: data.programming_inspected_by || data.ipqc_inspected_by || 'System Admin',
+                programming_remarks: data.programming_remarks || data.ipqc_remarks,
                 work_order_id: data.work_order_id,
                 sl_no: data.sl_no,
+                programming_id: data.programming_id || (data as any).id,
                 ipqc_id: data.ipqc_id,
                 ivi_id: data.ivi_id,
                 inspection_date: getTodayLocalDate()
@@ -688,7 +697,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 addToast(`Unit "${resolvedSerial}" was previously inspected. Loaded in Re-Inspection mode.`, 'info');
             } else {
                 setReinspectionInfo(null);
-                addToast(`Unit "${resolvedSerial}" loaded successfully from IPQC.`, 'success');
+                addToast(`Unit "${resolvedSerial}" loaded successfully from Programming.`, 'success');
             }
         } catch (err: any) {
             if (!isAutoLookup) {
@@ -767,21 +776,22 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 physical_tpn: loadedUnit.physical_tpn,
                 band: loadedUnit.band,
                 status: resultStatus,
-                remarks: resultStatus === 'FAIL' ? failureRemarks.trim() : (reinspectionInfo?.isReinspected ? 'Passed re-inspection in Programming' : null),
+                remarks: resultStatus === 'FAIL' ? failureRemarks.trim() : (reinspectionInfo?.isReinspected ? 'Passed re-inspection in Pre-Burn-in' : null),
                 inspection_date: getTodayLocalDate(),
+                programming_inspection_id: loadedUnit.programming_id || (loadedUnit as any).id || null,
                 ipqc_inspection_id: loadedUnit.ipqc_id || null,
                 ivi_inspection_id: loadedUnit.ivi_id || null,
                 sl_no: loadedUnit.sl_no || null,
                 is_reinspected: !!reinspectionInfo?.isReinspected,
-                defect_fixed: reinspectionInfo?.isReinspected && selectedDecision === 'PASS' ? 'Defect resolved and verified in Programming.' : null
+                defect_fixed: reinspectionInfo?.isReinspected && selectedDecision === 'PASS' ? 'Defect resolved and verified in Pre-Burn-in.' : null
             };
 
-            const data = await apiFetch(`/api/rrh/programming/sessions/${activeSession.id}/inspections`, {
+            const data = await apiFetch(`/api/rrh/ecn/pre-burn-in/sessions/${activeSession.id}/inspections`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
 
-            addToast(`Programming inspection submitted successfully (${resultStatus}) for ${loadedUnit.band_serial_no}!`, 'success');
+            addToast(`Pre-Burn-in inspection submitted successfully (${resultStatus}) for ${loadedUnit.band_serial_no}!`, 'success');
 
             // Reset form
             setLoadedUnit(null);
@@ -809,7 +819,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
 
         setIsSavingDebugAction(true);
         try {
-            await apiFetch(`/api/rrh/programming/inspections/${debugModalItem.id}/debug-action`, {
+            await apiFetch(`/api/rrh/ecn/pre-burn-in/inspections/${debugModalItem.id}/debug-action`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     debug_status: debugModalStatus,
@@ -828,15 +838,15 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
         }
     };
 
-    const handlePassInProgramming = async (item: DebugInspectionItem) => {
+    const handlePassInPreBurnIn = async (item: DebugInspectionItem) => {
         if (!activeSession) return;
 
-        if (!window.confirm(`Are you sure you want to mark unit "${item.band_serial_no || item.serial_number}" as PASSED in Programming?`)) {
+        if (!window.confirm(`Are you sure you want to mark unit "${item.band_serial_no || item.serial_number}" as PASSED in Pre-Burn-In?`)) {
             return;
         }
 
         try {
-            await apiFetch(`/api/rrh/programming/inspections/${item.id}/debug-action`, {
+            await apiFetch(`/api/rrh/ecn/pre-burn-in/inspections/${item.id}/debug-action`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     debug_status: 'DEBUG_PASS',
@@ -844,7 +854,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 })
             });
 
-            addToast(`Unit "${item.band_serial_no || item.serial_number}" rectified & passed in Programming!`, 'success');
+            addToast(`Unit "${item.band_serial_no || item.serial_number}" rectified & passed in Pre-Burn-In!`, 'success');
             loadActiveSessionDetails(activeSession.id);
         } catch (err: any) {
             addToast(err.message || 'Failed to pass unit from debug.', 'error');
@@ -886,8 +896,8 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
     const handleExportRecentExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/programming/sessions/${activeSession.id}/export?status=PASS`,
-            `RRH_Programming_Recent_Report_${activeSession.work_order_id}.xlsx`,
+            `/api/rrh/ecn/pre-burn-in/sessions/${activeSession.id}/export?status=PASS`,
+            `RRH_Pre_Burn_In_Recent_Report_${activeSession.work_order_id}.xlsx`,
             'Recent inspections exported successfully.',
             'Failed to export recent records.',
             setIsExportingScanned
@@ -897,9 +907,9 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
     const handleExportSessionExcel = (session: any) => {
         if (!session?.id) return addToast('No session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/programming/sessions/${session.id}/export`,
-            `RRH_Programming_Session_Report_${session.work_order_id}.xlsx`,
-            'Programming session report downloaded successfully.',
+            `/api/rrh/ecn/pre-burn-in/sessions/${session.id}/export`,
+            `RRH_Pre_Burn_In_Session_Report_${session.work_order_id}.xlsx`,
+            'Pre-Burn-in session report downloaded successfully.',
             'Failed to export session report.'
         );
     };
@@ -907,8 +917,8 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
     const handleExportFailedExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/programming/sessions/${activeSession.id}/export?status=FAIL`,
-            `RRH_Programming_Failed_Report_${activeSession.work_order_id}.xlsx`,
+            `/api/rrh/ecn/pre-burn-in/sessions/${activeSession.id}/export?status=FAIL`,
+            `RRH_Pre_Burn_In_Failed_Report_${activeSession.work_order_id}.xlsx`,
             'Failed inspections exported successfully.',
             'Failed to export failed records.',
             setIsExportingFailed
@@ -918,8 +928,8 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
     const handleExportDebugExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/programming/sessions/${activeSession.id}/export-debug`,
-            `RRH_Programming_Debug_Report_${activeSession.work_order_id}.xlsx`,
+            `/api/rrh/ecn/pre-burn-in/sessions/${activeSession.id}/export-debug`,
+            `RRH_Pre_Burn_In_Debug_Report_${activeSession.work_order_id}.xlsx`,
             'Debug report exported successfully.',
             'Failed to export debug records.',
             setIsExportingDebug
@@ -931,8 +941,8 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
         const targetWoId = (typeof woId === 'string' && woId) ? woId : activeSession?.work_order_id;
         if (!targetSessionId) return addToast('No session selected to export unscanned data.', 'warning');
         return downloadExcel(
-            `/api/rrh/programming/sessions/${targetSessionId}/export-unscanned`,
-            `RRH_Programming_Unscanned_${targetWoId || 'Report'}.xlsx`,
+            `/api/rrh/ecn/pre-burn-in/sessions/${targetSessionId}/export-unscanned`,
+            `RRH_Pre_Burn_In_Unscanned_${targetWoId || 'Report'}.xlsx`,
             'Remaining master data exported successfully.',
             'Failed to export remaining records.',
             setIsExportingRemaining
@@ -956,8 +966,8 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 <Toaster toasts={toasts} onRemove={id => setToasts(prev => prev.filter(t => t.id !== id))} />
 
                 <div className={styles.header}>
-                    <h2>RRH Programming Station</h2>
-                    <p>Firmware flashing, FPGA bitstream configuration, and post-IPQC parameter verification.</p>
+                    <h2>{customTitle || 'RRH Pre-Burn-in Test (ECN)'}</h2>
+                    <p>Pre-thermal stress electrical screening and initial functional parameters verification.</p>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
@@ -1016,9 +1026,9 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                             </span>
                                         </div>
                                         <div className={styles.infoItem}>
-                                            <span className={styles.infoLabel}>IPQC Passed Units</span>
+                                            <span className={styles.infoLabel}>Programming Passed Units</span>
                                             <span className={styles.infoValue} style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10b981' }}>
-                                                {selectedWoDetails.ipqc_passed_count ?? 0}
+                                                {selectedWoDetails.programming_passed_count ?? 0}
                                             </span>
                                         </div>
                                     </div>
@@ -1032,19 +1042,19 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                     style={{ padding: '0.85rem 3rem', fontSize: '1.05rem', letterSpacing: '0.5px' }}
                                     disabled={isCreatingSession}
                                 >
-                                    {isCreatingSession ? 'Starting Session...' : 'Start Programming Session'}
+                                    {isCreatingSession ? 'Starting Session...' : 'Start Pre-Burn-in Session'}
                                 </button>
                             </div>
                         </div>
                     ) : (
                         <div className={styles.card} style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b', border: '1px dashed #cbd5e1' }}>
-                            Please select an eligible RRH Work Order to view IPQC Passed Units and start a Programming session.
+                            Please select an eligible RRH Work Order to view Programming Passed Units and start a Pre-Burn-in session.
                         </div>
                     )}
 
                     {/* Card 2: Active Programming Sessions */}
                     <div className={styles.card}>
-                        <h3>Active Programming Sessions</h3>
+                        <h3>Active Pre-Burn-in Sessions</h3>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, maxWidth: '400px' }}>
                                 <input
@@ -1160,7 +1170,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                             {activeSessions.length === 0 && (
                                                 <tr>
                                                     <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
-                                                        No active Programming sessions found. Select a Work Order above to begin.
+                                                        No active Pre-Burn-in sessions found. Select a Work Order above to begin.
                                                     </td>
                                                 </tr>
                                             )}
@@ -1307,7 +1317,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                     {completedSessions.length === 0 && (
                                         <tr>
                                             <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
-                                                No completed Programming sessions yet.
+                                                No completed Pre-Burn-in sessions yet.
                                             </td>
                                         </tr>
                                     )}
@@ -1367,7 +1377,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                     <div>
                         <h3 style={{ margin: 0, color: '#111827', fontSize: '1.35rem', fontWeight: 700 }}>
-                            RRH Programming — Active Session
+                            RRH Pre-Burn-in — Active Session
                         </h3>
                         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginTop: '0.75rem', color: '#374151', fontSize: '0.95rem', flexWrap: 'wrap' }}>
                             <span>Work Order: <strong style={{ color: '#4f46e5' }}>{activeSession.work_order_id}</strong></span>
@@ -1445,8 +1455,8 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                     <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#6d28d9', fontWeight: 800 }}>{Math.max(0, (selectedWoDetails?.lot_quantity || activeSession.lot_quantity || 0) - stats.totalScanned)}</h2>
                 </div>
                 <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #0ea5e9', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>IPQC Passed</p>
-                    <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0284c7', fontWeight: 800 }}>{stats.ipqcPassed ?? 0}</h2>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Programming Passed</p>
+                    <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0284c7', fontWeight: 800 }}>{stats.programmingPassed ?? 0}</h2>
                 </div>
                 <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #16a34a', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                     <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>
@@ -1466,7 +1476,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
             <div ref={scannerSectionRef} className={styles.card}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '8px' }}>
                     <h3 style={{ margin: 0, border: 'none', padding: 0 }}>
-                        Barcode Scanner & Programming Inspection
+                        Barcode Scanner & Pre-Burn-in Inspection
                     </h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#16a34a', fontWeight: 600 }}>
                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', display: 'inline-block' }}></span>
@@ -1530,7 +1540,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                 Unit Information — <strong style={{ color: '#4f46e5' }}>{loadedUnit.band_serial_no || loadedUnit.serial_number}</strong>
                             </span>
                             <span className={styles.badgeSuccess}>
-                                Ready for Programming & Verification
+                                Ready for Pre-Burn-in & Verification
                             </span>
                         </div>
 
@@ -1595,7 +1605,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                 </span>
                             </div>
                             <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>IPQC Status</span>
+                                <span className={styles.scannedInfoLabel}>Programming Status</span>
                                 <div>
                                     <span style={{
                                         display: 'inline-flex',
@@ -1609,13 +1619,13 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                         color: '#15803d',
                                         border: '1px solid #86efac'
                                     }}>
-                                        ✓ {loadedUnit.ipqc_status || 'COMPLETED'}
+                                        ✓ {loadedUnit.programming_status || 'COMPLETED'}
                                     </span>
                                 </div>
                             </div>
                             <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>IPQC Inspected By</span>
-                                <span className={styles.scannedInfoValue}>{loadedUnit.ipqc_inspected_by || 'System Admin'}</span>
+                                <span className={styles.scannedInfoLabel}>Programming Inspected By</span>
+                                <span className={styles.scannedInfoValue}>{loadedUnit.programming_inspected_by || 'System Admin'}</span>
                             </div>
                         </div>
 
@@ -1624,7 +1634,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                             <div className={styles.reinspectionBanner}>
                                 <AlertCircle size={20} />
                                 <div>
-                                    <strong>RE-INSPECTION MODE:</strong> This unit previously failed programming verification.
+                                    <strong>RE-INSPECTION MODE:</strong> This unit previously failed pre-burn-in verification.
                                     {reinspectionInfo.previousFailureRemarks && (
                                         <div style={{ fontSize: '0.85rem', marginTop: '0.2rem' }}>
                                             <em>Previous Defect:</em> {reinspectionInfo.previousFailureRemarks}
@@ -1700,7 +1710,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                     }}>
                         <Sparkles size={32} style={{ color: '#94a3b8', marginBottom: '0.5rem' }} />
                         <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>
-                            Scan a unit's barcode or enter its Serial Number above to begin Programming Inspection.
+                            Scan a unit's barcode or enter its Serial Number above to begin Pre-Burn-in Inspection.
                         </p>
                     </div>
                 )}
@@ -1711,7 +1721,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                 <div className={styles.recentHeader} style={{ marginBottom: '0.4rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <h3 className={styles.recentTitle} style={{ color: '#991b1b', margin: 0, paddingBottom: 0, borderBottom: 'none' }}>
-                            Failed Programming Inspections ({failedInspections.length})
+                            Failed Pre-Burn-in Inspections ({failedInspections.length})
                         </h3>
                     </div>
 
@@ -1782,7 +1792,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                         </td>
                                         <td style={{ fontSize: '0.82rem', color: '#64748b' }}>{formatTimestamp(item.scanned_at)}</td>
                                         <td style={{ color: '#b91c1c', fontWeight: 600 }}>
-                                            {item.remarks || 'Programming Verification Failed'}
+                                            {item.remarks || 'Pre-Burn-In Inspection Failed'}
                                         </td>
                                         <td>{item.scanned_by || 'Operator'}</td>
                                         <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -1797,7 +1807,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                                     borderColor: '#86efac',
                                                     fontWeight: 700
                                                 }}
-                                                onClick={() => handlePassInProgramming(item as any)}
+                                                onClick={() => handlePassInPreBurnIn(item as any)}
                                                 title="Pass unit in Debug and mark completed"
                                             >
                                                 ✓ Pass in Debug
@@ -1950,7 +1960,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                             <td style={{ fontWeight: 700, color: '#4f46e5' }}>{item.band_serial_no || '—'}</td>
                                             <td>{item.physical_tpn || '—'}</td>
                                             <td style={{ color: '#b91c1c', fontWeight: 500 }}>
-                                                {item.remarks || 'Programming Defect'}
+                                                {item.remarks || 'Pre-Burn-in Defect'}
                                             </td>
                                             <td>
                                                 <span style={{
@@ -1979,10 +1989,10 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                                         borderColor: '#86efac',
                                                         fontWeight: 700
                                                     }}
-                                                    onClick={() => handlePassInProgramming(item)}
-                                                    title="Pass unit and mark completed in Programming"
+                                                    onClick={() => handlePassInPreBurnIn(item)}
+                                                    title="Pass unit and mark completed in Pre-Burn-In"
                                                 >
-                                                    ✓ Pass in Programming
+                                                    ✓ Pass in Pre-Burn-In
                                                 </button>
                                                 <button
                                                     type="button"
@@ -2180,7 +2190,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                             Remaining Master Data ({remainingTotal} items remaining)
                         </h3>
                         <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
-                            Live session view: Passed units from RRH IPQC recent inspections ready for Programming. Successfully inspected units are deducted immediately.
+                            Live session view: Passed units from RRH Programming recent inspections ready for Pre-Burn-in. Successfully inspected units are deducted immediately.
                         </p>
                     </div>
 
@@ -2200,7 +2210,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                             limit: String(newLimit),
                                             search: remainingSearch
                                         });
-                                        apiFetch(`/api/rrh/programming/sessions/${activeSession.id}/remaining-master-data?${remQuery.toString()}`)
+                                        apiFetch(`/api/rrh/ecn/pre-burn-in/sessions/${activeSession.id}/remaining-master-data?${remQuery.toString()}`)
                                             .then(res => {
                                                 setRemainingItems(res?.data || []);
                                                 setRemainingTotal(res?.total || 0);
@@ -2279,7 +2289,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                 <th>DUPLEXER MAIN (IVI)</th>
                                 <th>DUPLEXER PART NO (IVI)</th>
                                 <th>RRH UNIT (IVI)</th>
-                                <th>IPQC STATUS</th>
+                                <th>PROGRAMMING STATUS</th>
                                 <th>TEJAS DC NO</th>
                                 <th>LOT</th>
                                 <th>REMARKS</th>
@@ -2296,7 +2306,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                             ) : remainingItems.length === 0 ? (
                                 <tr>
                                     <td colSpan={11} style={{ textAlign: 'center', padding: '2.5rem', background: '#f0fdf4', color: '#166534', fontWeight: 600 }}>
-                                        ✓ All passed IPQC units for this Work Order have been inspected in Programming!
+                                        ✓ All passed Programming units for this Work Order have been inspected in Pre-Burn-in!
                                     </td>
                                 </tr>
                             ) : (
@@ -2349,7 +2359,7 @@ export const RrhProgramming: React.FC<{ routeType?: string }> = () => {
                                                     cursor: 'pointer'
                                                 }}
                                                 onClick={() => handleInspectRemainingUnit(item)}
-                                                title="Inspect this unit in Programming"
+                                                title="Inspect this unit in Pre-Burn-in"
                                                 disabled={activeSession.status === 'Completed'}
                                             >
                                                 Inspect Unit

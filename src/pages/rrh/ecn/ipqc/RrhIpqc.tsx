@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import styles from './Ipqc.module.css';
-import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
-import { apiFetch } from '../../../utils/api';
+import { WorkOrderSelector } from '../../../../components/WorkOrderSelector';
+import { apiFetch } from '../../../../utils/api';
 import { Download, AlertCircle } from 'lucide-react';
 
 // ─── SKU to Band Mapping ──────────────────────────────────────────────────────
@@ -363,7 +363,7 @@ export const RrhIpqc: React.FC = () => {
     // ─── 1. Load Eligible Work Orders ────────────────────────────────────────
     const fetchEligibleWorkOrders = useCallback(async () => {
         try {
-            const response = await apiFetch('/api/rrh/ipqc/eligible-work-orders');
+            const response = await apiFetch('/api/rrh/ecn/ipqc/eligible-work-orders');
             if (response && Array.isArray(response.data)) {
                 setEligibleWos(response.data);
                 return;
@@ -390,7 +390,7 @@ export const RrhIpqc: React.FC = () => {
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/ipqc/sessions?${params}`);
+            const res = await apiFetch(`/api/rrh/ecn/ipqc/sessions?${params}`);
             setActiveSessions(res?.sessions || []);
             setActiveTotal(res?.total || 0);
         } catch (err: any) {
@@ -408,7 +408,7 @@ export const RrhIpqc: React.FC = () => {
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/ipqc/sessions?${params}`);
+            const res = await apiFetch(`/api/rrh/ecn/ipqc/sessions?${params}`);
             setCompletedSessions(res?.sessions || []);
             setCompletedTotal(res?.total || 0);
         } catch (err: any) {
@@ -451,7 +451,7 @@ export const RrhIpqc: React.FC = () => {
 
         try {
             // First fetch exact IVI details from dedicated IPQC endpoint
-            const iviRes = await apiFetch(`/api/rrh/ipqc/work-orders/${encodeURIComponent(woNum)}/ivi-details`);
+            const iviRes = await apiFetch(`/api/rrh/ecn/ipqc/work-orders/${encodeURIComponent(woNum)}/ivi-details`);
             const iviData = iviRes?.data || iviRes;
             if (iviData) {
                 woNum = iviData.work_order_id || woNum;
@@ -493,7 +493,7 @@ export const RrhIpqc: React.FC = () => {
         }
 
         try {
-            const sessionData = await apiFetch('/api/rrh/ipqc/sessions', {
+            const sessionData = await apiFetch('/api/rrh/ecn/ipqc/sessions', {
                 method: 'POST',
                 body: JSON.stringify({ work_order_id: targetWo })
             });
@@ -508,7 +508,7 @@ export const RrhIpqc: React.FC = () => {
     // ─── 5. Load Active Session Data ─────────────────────────────────────────
     const loadActiveSessionDetails = async (sessionId: string | number) => {
         try {
-            const data = await apiFetch(`/api/rrh/ipqc/sessions/${sessionId}`);
+            const data = await apiFetch(`/api/rrh/ecn/ipqc/sessions/${sessionId}`);
             setActiveSession(data.session);
             setStats(data.stats);
 
@@ -533,7 +533,7 @@ export const RrhIpqc: React.FC = () => {
                 page: pageNum.toString(),
                 limit: scannedLimit.toString()
             });
-            const data = await apiFetch(`/api/rrh/ipqc/sessions/${sessionId}/inspections?${query.toString()}`);
+            const data = await apiFetch(`/api/rrh/ecn/ipqc/sessions/${sessionId}/inspections?${query.toString()}`);
             setScannedLogs(data?.data || []);
             setScannedTotal(data?.total || 0);
         } catch (err: any) {
@@ -544,7 +544,7 @@ export const RrhIpqc: React.FC = () => {
     const fetchFailedInspections = async (sessionId: string | number) => {
         setFailedLoading(true);
         try {
-            const data = await apiFetch(`/api/rrh/ipqc/sessions/${sessionId}/failed-inspections`);
+            const data = await apiFetch(`/api/rrh/ecn/ipqc/sessions/${sessionId}/failed-inspections`);
             setFailedInspections(data?.data || []);
         } catch (err: any) {
             console.error('Error fetching failed inspections:', err);
@@ -618,7 +618,7 @@ export const RrhIpqc: React.FC = () => {
                 page: pageNum.toString(),
                 limit: limitNum.toString()
             });
-            const data = await apiFetch(`/api/rrh/ipqc/sessions/${sessionId}/remaining-master-data?${query.toString()}`);
+            const data = await apiFetch(`/api/rrh/ecn/ipqc/sessions/${sessionId}/remaining-master-data?${query.toString()}`);
             setRemainingList(data?.data || []);
             setRemainingTotal(data?.total || 0);
         } catch (err: any) {
@@ -648,7 +648,7 @@ export const RrhIpqc: React.FC = () => {
                 session_id: activeSession.id.toString()
             });
 
-            const data = await apiFetch(`/api/rrh/ipqc/lookup?${query.toString()}`);
+            const data = await apiFetch(`/api/rrh/ecn/ipqc/lookup?${query.toString()}`);
 
             if (!data.found) {
                 if (!isAutoLookup) {
@@ -919,7 +919,7 @@ export const RrhIpqc: React.FC = () => {
                 checkpoints: formattedCheckpoints
             };
 
-            const data = await apiFetch(`/api/rrh/ipqc/sessions/${activeSession.id}/inspections`, {
+            const data = await apiFetch(`/api/rrh/ecn/ipqc/sessions/${activeSession.id}/inspections`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
@@ -959,13 +959,49 @@ export const RrhIpqc: React.FC = () => {
     };
 
     // ─── 10. Excel Export Handlers ─────────────────────────────────────────────
+    const handleExportSessionExcel = async (session: any) => {
+        if (!session?.id) {
+            addToast('No session selected to export.', 'warning');
+            return;
+        }
+        try {
+            const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
+            const res = await fetch(`/api/rrh/ecn/ipqc/sessions/${session.id}/export`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+
+            if (!res.ok) {
+                let errText = 'Failed to export session report.';
+                try {
+                    const errJson = await res.json();
+                    if (errJson?.message) errText = errJson.message;
+                } catch { }
+                throw new Error(errText);
+            }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `RRH_IPQC_Session_Report_${session.work_order_id || session.id}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            addToast('IPQC session report downloaded successfully.', 'success');
+        } catch (err: any) {
+            addToast(err.message || 'Failed to export session report.', 'error');
+        }
+    };
+
     const handleExportExcel = async (type?: 'PASS' | 'FAIL') => {
         if (!activeSession) return;
         try {
-            const token = localStorage.getItem('auth_token');
+            const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
             const urlPath = type === 'FAIL'
-                ? `/api/rrh/ipqc/sessions/${activeSession.id}/export?type=FAIL`
-                : `/api/rrh/ipqc/sessions/${activeSession.id}/export`;
+                ? `/api/rrh/ecn/ipqc/sessions/${activeSession.id}/export?type=FAIL`
+                : `/api/rrh/ecn/ipqc/sessions/${activeSession.id}/export`;
             const res = await fetch(urlPath, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
@@ -996,12 +1032,19 @@ export const RrhIpqc: React.FC = () => {
         if (!sId) return;
 
         try {
-            const token = localStorage.getItem('auth_token');
-            const res = await fetch(`/api/rrh/ipqc/sessions/${sId}/export-unscanned`, {
+            const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
+            const res = await fetch(`/api/rrh/ecn/ipqc/sessions/${sId}/export-unscanned`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
 
-            if (!res.ok) throw new Error('Failed to export unscanned master data.');
+            if (!res.ok) {
+                let errText = 'Failed to export unscanned master data.';
+                try {
+                    const errJson = await res.json();
+                    if (errJson?.message) errText = errJson.message;
+                } catch { }
+                throw new Error(errText);
+            }
 
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
@@ -1026,7 +1069,7 @@ export const RrhIpqc: React.FC = () => {
         }
 
         try {
-            await apiFetch(`/api/rrh/ipqc/sessions/${sessionId}`, { method: 'DELETE' });
+            await apiFetch(`/api/rrh/ecn/ipqc/sessions/${sessionId}`, { method: 'DELETE' });
             addToast(`Session for ${woId} deleted successfully.`, 'success');
             fetchActiveSessions();
             fetchCompletedSessions();
@@ -1044,7 +1087,7 @@ export const RrhIpqc: React.FC = () => {
         }
 
         try {
-            await apiFetch(`/api/rrh/ipqc/sessions/${activeSession.id}/status`, {
+            await apiFetch(`/api/rrh/ecn/ipqc/sessions/${activeSession.id}/status`, {
                 method: 'PATCH',
                 body: JSON.stringify({ status: 'Completed' })
             });
@@ -1275,8 +1318,8 @@ export const RrhIpqc: React.FC = () => {
                                                         <button
                                                             className={styles.secondaryButton}
                                                             style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                            onClick={() => handleExportUnscannedExcel(session.id, session.work_order_id)}
-                                                            title="Download Master File Excel"
+                                                            onClick={() => handleExportSessionExcel(session)}
+                                                            title="Download Session Report Excel"
                                                         >
                                                             Download Excel
                                                         </button>
@@ -1430,8 +1473,8 @@ export const RrhIpqc: React.FC = () => {
                                                 <button
                                                     className={styles.secondaryButton}
                                                     style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                    onClick={() => handleExportUnscannedExcel(session.id, session.work_order_id)}
-                                                    title="Download Excel"
+                                                    onClick={() => handleExportSessionExcel(session)}
+                                                    title="Download Session Report Excel"
                                                 >
                                                     Download Excel
                                                 </button>

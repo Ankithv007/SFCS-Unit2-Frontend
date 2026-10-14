@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import styles from './PostBurnIn.module.css';
-import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
-import { apiFetch } from '../../../utils/api';
+import { WorkOrderSelector } from '../../../../components/WorkOrderSelector';
+import { apiFetch } from '../../../../utils/api';
 import {
     Download,
     AlertCircle,
@@ -255,16 +255,17 @@ interface InspectionStats {
     failed: number;
     debug: number;
     remaining: number;
-    hipotPassed: number;
+    hipotPassed?: number;
+    iviPassed?: number;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
-interface RrhPostBurnInProps {
+interface RrhPostBurnInInitialProps {
     routeType?: string;
     customTitle?: string;
 }
 
-export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => {
+export const RrhPostBurnInInitial: React.FC<RrhPostBurnInInitialProps> = ({ customTitle }) => {
     // ─── Toasts ───────────────────────────────────────────────────────────────
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastId = useRef(0);
@@ -295,17 +296,15 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
     const [completedLimit, setCompletedLimit] = useState<number>(5);
     const [completedTotal, setCompletedTotal] = useState<number>(0);
 
-    // Filter out active or completed work orders from the dropdown
+    // Filter out active work orders from the dropdown
     const availableWorkOrders = useMemo(() => {
         const activeWoIds = new Set(activeSessions.map((s: any) => String(s.work_order_id || '').trim().toUpperCase()));
-        const completedWoIds = new Set(completedSessions.map((s: any) => String(s.work_order_id || '').trim().toUpperCase()));
         return eligibleWorkOrders.filter((w: any) => {
             const woId = String(w.work_order_id || '').trim().toUpperCase();
             if (activeWoIds.has(woId)) return false;
-            if (completedWoIds.has(woId)) return false;
             return true;
         });
-    }, [eligibleWorkOrders, activeSessions, completedSessions]);
+    }, [eligibleWorkOrders, activeSessions]);
 
     // ─── View 2 State: Inside Active Programming Session ──────────────────────
     const [activeSession, setActiveSession] = useState<PostBurnInSession | null>(null);
@@ -319,6 +318,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
         debug: 0,
         remaining: 0,
         hipotPassed: 0,
+        iviPassed: 0,
     });
 
     // Scanner & Form State
@@ -376,7 +376,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
     // ─── 1. Load Eligible Work Orders ────────────────────────────────────────
     const fetchEligibleWorkOrders = useCallback(async () => {
         try {
-            const res = await apiFetch('/api/rrh/post-burn-in/eligible-work-orders');
+            const res = await apiFetch('/api/rrh/non-ecn/post-burn-in-initial/eligible-work-orders');
             const list = Array.isArray(res) ? res : res?.data || [];
             setEligibleWorkOrders(list);
         } catch (err: any) {
@@ -395,9 +395,10 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/post-burn-in/sessions?${params}`);
-            setActiveSessions(res?.sessions || []);
-            setActiveTotal(res?.total || 0);
+            const res = await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions?${params}`);
+            const list = res?.sessions || res?.data || (Array.isArray(res) ? res : []);
+            setActiveSessions(list);
+            setActiveTotal(res?.total ?? list.length ?? 0);
         } catch (err: any) {
             console.error('Failed to fetch active Post-Burn-in sessions:', err);
         } finally {
@@ -413,9 +414,10 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/post-burn-in/sessions?${params}`);
-            setCompletedSessions(res?.sessions || []);
-            setCompletedTotal(res?.total || 0);
+            const res = await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions?${params}`);
+            const list = res?.sessions || res?.data || (Array.isArray(res) ? res : []);
+            setCompletedSessions(list);
+            setCompletedTotal(res?.total ?? list.length ?? 0);
         } catch (err: any) {
             console.error('Failed to fetch completed Post-Burn-in sessions:', err);
         }
@@ -450,10 +452,10 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
         if (localWo) {
             woDate = localWo.work_order_date || localWo.date || null;
             lotQty = Number(localWo.lot_quantity) || 0;
-            hipotPassedCount = Number(localWo.hipot_passed_count) || 0;
+            hipotPassedCount = Number(localWo.ivi_passed_count ?? localWo.hipot_passed_count) || 0;
         }
 
-        if (localWo && lotQty > 0 && hipotPassedCount > 0) {
+        if (localWo && lotQty > 0) {
             setSelectedWoDetails({
                 work_order_id: woNum,
                 work_order_date: woDate || undefined,
@@ -465,7 +467,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
         }
 
         try {
-            const ipqcRes = await apiFetch(`/api/rrh/post-burn-in/work-orders/${encodeURIComponent(woNum)}/hipot-details`);
+            const ipqcRes = await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/work-orders/${encodeURIComponent(woNum)}/hipot-details`);
             const ipqcData = ipqcRes?.data || ipqcRes;
             if (ipqcData) {
                 woNum = ipqcData.work_order_id || woNum;
@@ -496,7 +498,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
 
         setIsCreatingSession(true);
         try {
-            const res = await apiFetch('/api/rrh/post-burn-in/sessions', {
+            const res = await apiFetch('/api/rrh/non-ecn/post-burn-in-initial/sessions', {
                 method: 'POST',
                 body: JSON.stringify({ work_order_id: woId })
             });
@@ -520,7 +522,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
         }
 
         try {
-            await apiFetch(`/api/rrh/post-burn-in/sessions/${activeSession.id}/status`, {
+            await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions/${activeSession.id}/status`, {
                 method: 'PATCH',
                 body: JSON.stringify({ status: 'Completed' })
             });
@@ -542,7 +544,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
         }
 
         try {
-            await apiFetch(`/api/rrh/post-burn-in/sessions/${sessionId}`, {
+            await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions/${sessionId}`, {
                 method: 'DELETE'
             });
             addToast(`Session for Work Order ${woId} deleted successfully.`, 'success');
@@ -567,7 +569,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                 search: scannedSearch,
                 status: 'PASS'
             });
-            const res = await apiFetch(`/api/rrh/post-burn-in/sessions/${sessionId}/inspections?${query.toString()}`);
+            const res = await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions/${sessionId}/inspections?${query.toString()}`);
             setScannedLogs(res?.data || []);
             setScannedTotal(res?.total || 0);
         } catch (err: any) {
@@ -578,7 +580,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
 
         // B. Failed Inspections
         try {
-            const failRes = await apiFetch(`/api/rrh/post-burn-in/sessions/${sessionId}/failed-inspections`);
+            const failRes = await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions/${sessionId}/failed-inspections`);
             setFailedInspections(failRes?.data || []);
         } catch (err: any) {
             // Ignore
@@ -591,7 +593,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                 search: debugSearch,
                 status: debugStatusFilter
             });
-            const debugRes = await apiFetch(`/api/rrh/post-burn-in/sessions/${sessionId}/debug-inspections?${debugQuery.toString()}`);
+            const debugRes = await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions/${sessionId}/debug-inspections?${debugQuery.toString()}`);
             setDebugInspections(debugRes?.data || []);
         } catch (err: any) {
             // Ignore
@@ -607,7 +609,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                 limit: String(remainingLimit),
                 search: remainingSearch
             });
-            const remRes = await apiFetch(`/api/rrh/post-burn-in/sessions/${sessionId}/remaining-master-data?${remQuery.toString()}`);
+            const remRes = await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions/${sessionId}/remaining-master-data?${remQuery.toString()}`);
             setRemainingItems(remRes?.data || []);
             setRemainingTotal(remRes?.total || 0);
         } catch (err: any) {
@@ -618,7 +620,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
 
         // E. Live Session Stats from Server
         try {
-            const sRes = await apiFetch(`/api/rrh/post-burn-in/sessions/${sessionId}`);
+            const sRes = await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions/${sessionId}`);
             if (sRes?.stats) {
                 setStats(sRes.stats);
             }
@@ -649,12 +651,12 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
         setIsSearchingSerial(true);
         try {
             const res = await apiFetch(
-                `/api/rrh/post-burn-in/lookup?serial=${encodeURIComponent(serial)}&work_order_id=${encodeURIComponent(activeSession.work_order_id)}&session_id=${activeSession.id}`
+                `/api/rrh/non-ecn/post-burn-in-initial/lookup?serial=${encodeURIComponent(serial)}&work_order_id=${encodeURIComponent(activeSession.work_order_id)}&session_id=${activeSession.id}`
             );
 
-            const data = res?.data || res;
-            if (!data || !data.found) {
-                addToast(data.message || `Serial "${serial}" not found in passed Hipot units.`, 'error');
+            const data = (res?.data && (res.data.serial_number || res.data.found)) ? res.data : res;
+            if (!data || (!data.found && !res?.found && !data.serial_number)) {
+                addToast(data.message || res?.message || `Serial "${serial}" not found in passed IVI units.`, 'error');
                 return;
             }
 
@@ -699,7 +701,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                 addToast(`Unit "${resolvedSerial}" was previously inspected. Loaded in Re-Inspection mode.`, 'info');
             } else {
                 setReinspectionInfo(null);
-                addToast(`Unit "${resolvedSerial}" loaded successfully from Hipot.`, 'success');
+                addToast(`Unit "${resolvedSerial}" loaded successfully from IVI.`, 'success');
             }
         } catch (err: any) {
             if (!isAutoLookup) {
@@ -790,7 +792,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                 defect_fixed: reinspectionInfo?.isReinspected && selectedDecision === 'PASS' ? 'Defect resolved and verified in Post-Burn-in.' : null
             };
 
-            const data = await apiFetch(`/api/rrh/post-burn-in/sessions/${activeSession.id}/inspections`, {
+            const data = await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions/${activeSession.id}/inspections`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
@@ -823,7 +825,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
 
         setIsSavingDebugAction(true);
         try {
-            await apiFetch(`/api/rrh/post-burn-in/inspections/${debugModalItem.id}/debug-action`, {
+            await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/inspections/${debugModalItem.id}/debug-action`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     debug_status: debugModalStatus,
@@ -850,7 +852,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
         }
 
         try {
-            await apiFetch(`/api/rrh/post-burn-in/inspections/${item.id}/debug-action`, {
+            await apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/inspections/${item.id}/debug-action`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     debug_status: 'DEBUG_PASS',
@@ -900,7 +902,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
     const handleExportRecentExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/post-burn-in/sessions/${activeSession.id}/export?status=PASS`,
+            `/api/rrh/non-ecn/post-burn-in-initial/sessions/${activeSession.id}/export?status=PASS`,
             `RRH_Post_Burn_In_Recent_Report_${activeSession.work_order_id}.xlsx`,
             'Recent inspections exported successfully.',
             'Failed to export recent records.',
@@ -911,7 +913,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
     const handleExportSessionExcel = (session: any) => {
         if (!session?.id) return addToast('No session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/post-burn-in/sessions/${session.id}/export`,
+            `/api/rrh/non-ecn/post-burn-in-initial/sessions/${session.id}/export`,
             `RRH_Post_Burn_In_Session_Report_${session.work_order_id}.xlsx`,
             'Post-Burn-in session report downloaded successfully.',
             'Failed to export session report.'
@@ -921,7 +923,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
     const handleExportFailedExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/post-burn-in/sessions/${activeSession.id}/export?status=FAIL`,
+            `/api/rrh/non-ecn/post-burn-in-initial/sessions/${activeSession.id}/export?status=FAIL`,
             `RRH_Post_Burn_In_Failed_Report_${activeSession.work_order_id}.xlsx`,
             'Failed inspections exported successfully.',
             'Failed to export failed records.',
@@ -932,7 +934,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
     const handleExportDebugExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/post-burn-in/sessions/${activeSession.id}/export-debug`,
+            `/api/rrh/non-ecn/post-burn-in-initial/sessions/${activeSession.id}/export-debug`,
             `RRH_Post_Burn_In_Debug_Report_${activeSession.work_order_id}.xlsx`,
             'Debug report exported successfully.',
             'Failed to export debug records.',
@@ -945,7 +947,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
         const targetWoId = (typeof woId === 'string' && woId) ? woId : activeSession?.work_order_id;
         if (!targetSessionId) return addToast('No session selected to export unscanned data.', 'warning');
         return downloadExcel(
-            `/api/rrh/post-burn-in/sessions/${targetSessionId}/export-unscanned`,
+            `/api/rrh/non-ecn/post-burn-in-initial/sessions/${targetSessionId}/export-unscanned`,
             `RRH_Post_Burn_In_Unscanned_${targetWoId || 'Report'}.xlsx`,
             'Remaining master data exported successfully.',
             'Failed to export remaining records.',
@@ -970,7 +972,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                 <Toaster toasts={toasts} onRemove={id => setToasts(prev => prev.filter(t => t.id !== id))} />
 
                 <div className={styles.header}>
-                    <h2>{customTitle || 'RRH Post-Burn-in Test'}</h2>
+                    <h2>{customTitle || 'RRH Post-Burn-in Test (Initial - Non-ECN)'}</h2>
                     <p>Post-thermal endurance testing, power cycling recovery, and functional verification.</p>
                 </div>
 
@@ -1030,7 +1032,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                                             </span>
                                         </div>
                                         <div className={styles.infoItem}>
-                                            <span className={styles.infoLabel}>Hipot Passed Units</span>
+                                            <span className={styles.infoLabel}>IVI Passed Units</span>
                                             <span className={styles.infoValue} style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10b981' }}>
                                                 {selectedWoDetails.hipot_passed_count ?? 0}
                                             </span>
@@ -1046,13 +1048,13 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                                     style={{ padding: '0.85rem 3rem', fontSize: '1.05rem', letterSpacing: '0.5px' }}
                                     disabled={isCreatingSession}
                                 >
-                                    {isCreatingSession ? 'Starting Session...' : 'Start Post-Burn-in Session'}
+                                    {isCreatingSession ? 'Starting Session...' : 'Start Initial Post-Burn-in Session'}
                                 </button>
                             </div>
                         </div>
                     ) : (
                         <div className={styles.card} style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b', border: '1px dashed #cbd5e1' }}>
-                            Please select an eligible RRH Work Order to view Hipot Passed Units and start a Post-Burn-in session.
+                            Please select an eligible RRH Work Order to view IVI Passed Units and start an Initial Post-Burn-in session.
                         </div>
                     )}
 
@@ -1459,8 +1461,8 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                     <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#6d28d9', fontWeight: 800 }}>{Math.max(0, (selectedWoDetails?.lot_quantity || activeSession.lot_quantity || 0) - stats.totalScanned)}</h2>
                 </div>
                 <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #0ea5e9', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Hipot Passed</p>
-                    <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0284c7', fontWeight: 800 }}>{stats.hipotPassed ?? 0}</h2>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>IVI Passed</p>
+                    <h2 style={{ margin: '0.25rem 0 0', fontSize: '1.8rem', color: '#0284c7', fontWeight: 800 }}>{stats.iviPassed ?? stats.hipotPassed ?? 0}</h2>
                 </div>
                 <div className={styles.card} style={{ margin: 0, padding: '1.25rem', borderLeft: '5px solid #16a34a', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                     <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: 700 }}>Passed</p>
@@ -1609,7 +1611,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                                 </span>
                             </div>
                             <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Hipot Status</span>
+                                <span className={styles.scannedInfoLabel}>IVI Status</span>
                                 <div>
                                     <span style={{
                                         display: 'inline-flex',
@@ -1628,7 +1630,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                                 </div>
                             </div>
                             <div className={styles.scannedInfoItem}>
-                                <span className={styles.scannedInfoLabel}>Hipot Inspected By</span>
+                                <span className={styles.scannedInfoLabel}>IVI Inspected By</span>
                                 <span className={styles.scannedInfoValue}>{loadedUnit.hipot_inspected_by || 'System Admin'}</span>
                             </div>
                         </div>
@@ -2194,7 +2196,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                             Remaining Master Data ({remainingTotal} items remaining)
                         </h3>
                         <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
-                            Live session view: Passed units from RRH Hipot recent inspections ready for Post-Burn-in. Successfully inspected units are deducted immediately.
+                            Live session view: Passed Non-ECN units from RRH IVI inspections ready for Initial Post-Burn-in. Successfully inspected units are deducted immediately.
                         </p>
                     </div>
 
@@ -2214,7 +2216,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                                             limit: String(newLimit),
                                             search: remainingSearch
                                         });
-                                        apiFetch(`/api/rrh/post-burn-in/sessions/${activeSession.id}/remaining-master-data?${remQuery.toString()}`)
+                                        apiFetch(`/api/rrh/non-ecn/post-burn-in-initial/sessions/${activeSession.id}/remaining-master-data?${remQuery.toString()}`)
                                             .then(res => {
                                                 setRemainingItems(res?.data || []);
                                                 setRemainingTotal(res?.total || 0);
@@ -2293,7 +2295,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                                 <th>DUPLEXER MAIN (IVI)</th>
                                 <th>DUPLEXER PART NO (IVI)</th>
                                 <th>RRH UNIT (IVI)</th>
-                                <th>HIPOT STATUS</th>
+                                <th>IVI STATUS</th>
                                 <th>TEJAS DC NO</th>
                                 <th>LOT</th>
                                 <th>REMARKS</th>
@@ -2310,7 +2312,7 @@ export const RrhPostBurnIn: React.FC<RrhPostBurnInProps> = ({ customTitle }) => 
                             ) : remainingItems.length === 0 ? (
                                 <tr>
                                     <td colSpan={11} style={{ textAlign: 'center', padding: '2.5rem', background: '#f0fdf4', color: '#166534', fontWeight: 600 }}>
-                                        ✓ All passed Hipot units for this Work Order have been inspected in Post-Burn-in!
+                                        ✓ All passed IVI Non-ECN units for this Work Order have been inspected in Initial Post-Burn-in!
                                     </td>
                                 </tr>
                             ) : (

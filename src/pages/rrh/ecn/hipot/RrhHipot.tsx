@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import styles from './Hipot.module.css';
-import { WorkOrderSelector } from '../../../components/WorkOrderSelector';
-import { apiFetch } from '../../../utils/api';
+import { WorkOrderSelector } from '../../../../components/WorkOrderSelector';
+import { apiFetch } from '../../../../utils/api';
 import {
     Download,
     AlertCircle,
@@ -376,7 +376,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
     // ─── 1. Load Eligible Work Orders ────────────────────────────────────────
     const fetchEligibleWorkOrders = useCallback(async () => {
         try {
-            const res = await apiFetch('/api/rrh/hipot/eligible-work-orders');
+            const res = await apiFetch('/api/rrh/ecn/hipot/eligible-work-orders');
             const list = Array.isArray(res) ? res : res?.data || [];
             setEligibleWorkOrders(list);
         } catch (err: any) {
@@ -395,7 +395,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/hipot/sessions?${params}`);
+            const res = await apiFetch(`/api/rrh/ecn/hipot/sessions?${params}`);
             setActiveSessions(res?.sessions || []);
             setActiveTotal(res?.total || 0);
         } catch (err: any) {
@@ -413,7 +413,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
                 limit: String(limit),
                 search
             });
-            const res = await apiFetch(`/api/rrh/hipot/sessions?${params}`);
+            const res = await apiFetch(`/api/rrh/ecn/hipot/sessions?${params}`);
             setCompletedSessions(res?.sessions || []);
             setCompletedTotal(res?.total || 0);
         } catch (err: any) {
@@ -465,7 +465,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
         }
 
         try {
-            const ipqcRes = await apiFetch(`/api/rrh/hipot/work-orders/${encodeURIComponent(woNum)}/pre-burn-in-details`);
+            const ipqcRes = await apiFetch(`/api/rrh/ecn/hipot/work-orders/${encodeURIComponent(woNum)}/pre-burn-in-details`);
             const ipqcData = ipqcRes?.data || ipqcRes;
             if (ipqcData) {
                 woNum = ipqcData.work_order_id || woNum;
@@ -496,7 +496,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
 
         setIsCreatingSession(true);
         try {
-            const res = await apiFetch('/api/rrh/hipot/sessions', {
+            const res = await apiFetch('/api/rrh/ecn/hipot/sessions', {
                 method: 'POST',
                 body: JSON.stringify({ work_order_id: woId })
             });
@@ -520,7 +520,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
         }
 
         try {
-            await apiFetch(`/api/rrh/hipot/sessions/${activeSession.id}/status`, {
+            await apiFetch(`/api/rrh/ecn/hipot/sessions/${activeSession.id}/status`, {
                 method: 'PATCH',
                 body: JSON.stringify({ status: 'Completed' })
             });
@@ -542,7 +542,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
         }
 
         try {
-            await apiFetch(`/api/rrh/hipot/sessions/${sessionId}`, {
+            await apiFetch(`/api/rrh/ecn/hipot/sessions/${sessionId}`, {
                 method: 'DELETE'
             });
             addToast(`Session for Work Order ${woId} deleted successfully.`, 'success');
@@ -567,7 +567,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
                 search: scannedSearch,
                 status: 'PASS'
             });
-            const res = await apiFetch(`/api/rrh/hipot/sessions/${sessionId}/inspections?${query.toString()}`);
+            const res = await apiFetch(`/api/rrh/ecn/hipot/sessions/${sessionId}/inspections?${query.toString()}`);
             setScannedLogs(res?.data || []);
             setScannedTotal(res?.total || 0);
         } catch (err: any) {
@@ -578,7 +578,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
 
         // B. Failed Inspections
         try {
-            const failRes = await apiFetch(`/api/rrh/hipot/sessions/${sessionId}/failed-inspections`);
+            const failRes = await apiFetch(`/api/rrh/ecn/hipot/sessions/${sessionId}/failed-inspections`);
             setFailedInspections(failRes?.data || []);
         } catch (err: any) {
             // Ignore
@@ -591,7 +591,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
                 search: debugSearch,
                 status: debugStatusFilter
             });
-            const debugRes = await apiFetch(`/api/rrh/hipot/sessions/${sessionId}/debug-inspections?${debugQuery.toString()}`);
+            const debugRes = await apiFetch(`/api/rrh/ecn/hipot/sessions/${sessionId}/debug-inspections?${debugQuery.toString()}`);
             setDebugInspections(debugRes?.data || []);
         } catch (err: any) {
             // Ignore
@@ -607,7 +607,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
                 limit: String(remainingLimit),
                 search: remainingSearch
             });
-            const remRes = await apiFetch(`/api/rrh/hipot/sessions/${sessionId}/remaining-master-data?${remQuery.toString()}`);
+            const remRes = await apiFetch(`/api/rrh/ecn/hipot/sessions/${sessionId}/remaining-master-data?${remQuery.toString()}`);
             setRemainingItems(remRes?.data || []);
             setRemainingTotal(remRes?.total || 0);
         } catch (err: any) {
@@ -618,7 +618,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
 
         // E. Live Session Stats from Server
         try {
-            const sRes = await apiFetch(`/api/rrh/hipot/sessions/${sessionId}`);
+            const sRes = await apiFetch(`/api/rrh/ecn/hipot/sessions/${sessionId}`);
             if (sRes?.stats) {
                 setStats(sRes.stats);
             }
@@ -649,7 +649,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
         setIsSearchingSerial(true);
         try {
             const res = await apiFetch(
-                `/api/rrh/hipot/lookup?serial=${encodeURIComponent(serial)}&work_order_id=${encodeURIComponent(activeSession.work_order_id)}&session_id=${activeSession.id}`
+                `/api/rrh/ecn/hipot/lookup?serial=${encodeURIComponent(serial)}&work_order_id=${encodeURIComponent(activeSession.work_order_id)}&session_id=${activeSession.id}`
             );
 
             const data = res?.data || res;
@@ -788,7 +788,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
                 defect_fixed: reinspectionInfo?.isReinspected && selectedDecision === 'PASS' ? 'Defect resolved and verified in Hipot.' : null
             };
 
-            const data = await apiFetch(`/api/rrh/hipot/sessions/${activeSession.id}/inspections`, {
+            const data = await apiFetch(`/api/rrh/ecn/hipot/sessions/${activeSession.id}/inspections`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
@@ -821,7 +821,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
 
         setIsSavingDebugAction(true);
         try {
-            await apiFetch(`/api/rrh/hipot/inspections/${debugModalItem.id}/debug-action`, {
+            await apiFetch(`/api/rrh/ecn/hipot/inspections/${debugModalItem.id}/debug-action`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     debug_status: debugModalStatus,
@@ -848,7 +848,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
         }
 
         try {
-            await apiFetch(`/api/rrh/hipot/inspections/${item.id}/debug-action`, {
+            await apiFetch(`/api/rrh/ecn/hipot/inspections/${item.id}/debug-action`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                     debug_status: 'DEBUG_PASS',
@@ -898,7 +898,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
     const handleExportRecentExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/hipot/sessions/${activeSession.id}/export?status=PASS`,
+            `/api/rrh/ecn/hipot/sessions/${activeSession.id}/export?status=PASS`,
             `RRH_Hipot_Recent_Report_${activeSession.work_order_id}.xlsx`,
             'Recent inspections exported successfully.',
             'Failed to export recent records.',
@@ -909,7 +909,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
     const handleExportSessionExcel = (session: any) => {
         if (!session?.id) return addToast('No session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/hipot/sessions/${session.id}/export`,
+            `/api/rrh/ecn/hipot/sessions/${session.id}/export`,
             `RRH_Hipot_Session_Report_${session.work_order_id}.xlsx`,
             'Hipot session report downloaded successfully.',
             'Failed to export session report.'
@@ -919,7 +919,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
     const handleExportFailedExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/hipot/sessions/${activeSession.id}/export?status=FAIL`,
+            `/api/rrh/ecn/hipot/sessions/${activeSession.id}/export?status=FAIL`,
             `RRH_Hipot_Failed_Report_${activeSession.work_order_id}.xlsx`,
             'Failed inspections exported successfully.',
             'Failed to export failed records.',
@@ -930,7 +930,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
     const handleExportDebugExcel = () => {
         if (!activeSession) return addToast('No active session selected to export.', 'warning');
         return downloadExcel(
-            `/api/rrh/hipot/sessions/${activeSession.id}/export-debug`,
+            `/api/rrh/ecn/hipot/sessions/${activeSession.id}/export-debug`,
             `RRH_Hipot_Debug_Report_${activeSession.work_order_id}.xlsx`,
             'Debug report exported successfully.',
             'Failed to export debug records.',
@@ -943,7 +943,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
         const targetWoId = (typeof woId === 'string' && woId) ? woId : activeSession?.work_order_id;
         if (!targetSessionId) return addToast('No session selected to export unscanned data.', 'warning');
         return downloadExcel(
-            `/api/rrh/hipot/sessions/${targetSessionId}/export-unscanned`,
+            `/api/rrh/ecn/hipot/sessions/${targetSessionId}/export-unscanned`,
             `RRH_Hipot_Unscanned_${targetWoId || 'Report'}.xlsx`,
             'Remaining master data exported successfully.',
             'Failed to export remaining records.',
@@ -968,7 +968,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
                 <Toaster toasts={toasts} onRemove={id => setToasts(prev => prev.filter(t => t.id !== id))} />
 
                 <div className={styles.header}>
-                    <h2>{customTitle || 'RRH Hipot Test'}</h2>
+                    <h2>{customTitle || 'RRH Hipot Test (ECN)'}</h2>
                     <p>High potential dielectric withstand test, insulation resistance, and grounding continuity.</p>
                 </div>
 
@@ -2212,7 +2212,7 @@ export const RrhHipot: React.FC<RrhHipotProps> = ({ customTitle }) => {
                                             limit: String(newLimit),
                                             search: remainingSearch
                                         });
-                                        apiFetch(`/api/rrh/hipot/sessions/${activeSession.id}/remaining-master-data?${remQuery.toString()}`)
+                                        apiFetch(`/api/rrh/ecn/hipot/sessions/${activeSession.id}/remaining-master-data?${remQuery.toString()}`)
                                             .then(res => {
                                                 setRemainingItems(res?.data || []);
                                                 setRemainingTotal(res?.total || 0);

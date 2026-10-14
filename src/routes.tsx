@@ -58,18 +58,28 @@ import { RrhWorkOrder } from './pages/rrh/work-order/RrhWorkOrder';
 import { RrhMasterView } from './pages/rrh/master-view/RrhMasterView';
 import { RrhInward } from './pages/rrh/inward/RrhInward';
 import { RrhIvi } from './pages/rrh/ivi/RrhIvi';
-import { RrhIpqc } from './pages/rrh/ipqc/RrhIpqc';
 import { RrhDebug } from './pages/rrh/debug/RrhDebug';
 import { RrhTesting } from './pages/rrh/testing/RrhTesting';
 import { RrhFqc } from './pages/rrh/fqc/RrhFqc';
 import { RrhOba } from './pages/rrh/oba/RrhOba';
 import { RrhPackagingOutgoingData } from './pages/rrh/packaging-outgoing-data/RrhPackagingOutgoingData';
-import { RrhProgramming } from './pages/rrh/programming/RrhProgramming';
-import { RrhPreBurnIn } from './pages/rrh/pre-burn-in/RrhPreBurnIn';
-import { RrhHipot } from './pages/rrh/hipot/RrhHipot';
-import { RrhPostBurnIn } from './pages/rrh/post-burn-in/RrhPostBurnIn';
 import { RrhPacking } from './pages/rrh/packing/RrhPacking';
 import { RrhShipment } from './pages/rrh/shipment/RrhShipment';
+
+// ECN Stages
+import { RrhIpqc } from './pages/rrh/ecn/ipqc/RrhIpqc';
+import { EcnProgrammingPage } from './pages/rrh/ecn/EcnProgrammingPage';
+import { EcnPreBurnInPage } from './pages/rrh/ecn/EcnPreBurnInPage';
+import { EcnHipotPage } from './pages/rrh/ecn/EcnHipotPage';
+import { EcnPostBurnInPage } from './pages/rrh/ecn/EcnPostBurnInPage';
+
+// Non-ECN Stages
+import { NonEcnInitialPostBurnInPage } from './pages/rrh/non-ecn/NonEcnInitialPostBurnInPage';
+import { NonEcnProgrammingPage } from './pages/rrh/non-ecn/NonEcnProgrammingPage';
+import { NonEcnPreBurnInPage } from './pages/rrh/non-ecn/NonEcnPreBurnInPage';
+import { NonEcnHipotPage } from './pages/rrh/non-ecn/NonEcnHipotPage';
+import { NonEcnFinalPostBurnInPage } from './pages/rrh/non-ecn/NonEcnFinalPostBurnInPage';
+
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -346,7 +356,7 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: 'programming',
-                        element: <RrhProgramming />,
+                        element: <EcnProgrammingPage />,
                     },
                     {
                         path: 'debug',
@@ -383,19 +393,19 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: 'ecn/programming',
-                        element: <RrhProgramming routeType="ECN" />,
+                        element: <EcnProgrammingPage />,
                     },
                     {
                         path: 'ecn/pre-burn-in',
-                        element: <RrhPreBurnIn routeType="ECN" />,
+                        element: <EcnPreBurnInPage />,
                     },
                     {
                         path: 'ecn/hipot',
-                        element: <RrhHipot routeType="ECN" />,
+                        element: <EcnHipotPage />,
                     },
                     {
                         path: 'ecn/post-burn-in',
-                        element: <RrhPostBurnIn routeType="ECN" />,
+                        element: <EcnPostBurnInPage />,
                     },
                     {
                         path: 'ecn/fqc',
@@ -415,24 +425,32 @@ export const router = createBrowserRouter([
                     },
                     // Non-ECN Station Routes
                     {
+                        path: 'non-ecn/post-burn-in',
+                        element: <NonEcnInitialPostBurnInPage />,
+                    },
+                    {
                         path: 'non-ecn/post-burn-in-initial',
-                        element: <RrhPostBurnIn routeType="Non-ECN" customTitle="RRH Post-Burn-in Test (Initial)" />,
+                        element: <NonEcnInitialPostBurnInPage />,
                     },
                     {
                         path: 'non-ecn/programming',
-                        element: <RrhProgramming routeType="Non-ECN" />,
+                        element: <NonEcnProgrammingPage />,
                     },
                     {
                         path: 'non-ecn/pre-burn-in',
-                        element: <RrhPreBurnIn routeType="Non-ECN" />,
+                        element: <NonEcnPreBurnInPage />,
                     },
                     {
                         path: 'non-ecn/hipot',
-                        element: <RrhHipot routeType="Non-ECN" />,
+                        element: <NonEcnHipotPage />,
                     },
                     {
-                        path: 'non-ecn/post-burn-in',
-                        element: <RrhPostBurnIn routeType="Non-ECN" />,
+                        path: 'non-ecn/post-burn-in-final',
+                        element: <NonEcnFinalPostBurnInPage />,
+                    },
+                    {
+                        path: 'non-ecn/final-post-burn-in',
+                        element: <NonEcnFinalPostBurnInPage />,
                     },
                     {
                         path: 'non-ecn/fqc',

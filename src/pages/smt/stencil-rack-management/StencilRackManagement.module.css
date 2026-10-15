@@ -1128,4 +1128,137 @@
     max-width: 480px;
     margin: 0;
     line-height: 1.5;
+}
+
+/* Stencil Blocking Styles */
+.matrixCellBlocked .cellCardOccupied {
+    background-color: #fff1f2;
+    border-color: #fca5a5;
+    box-shadow: 0 0 0 1px #f87171 inset;
+}
+
+.statusBlockedBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 0.15rem 0.5rem;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background-color: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #f87171;
+    box-shadow: 0 1px 2px rgba(185, 28, 28, 0.1);
+}
+
+.statusActiveBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 0.15rem 0.5rem;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background-color: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+}
+
+.cellBlockBtn {
+    background-color: #ffffff;
+    color: #dc2626;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    box-shadow: 0 1px 2px rgba(220, 38, 38, 0.06);
+    flex-shrink: 0;
+}
+
+.cellBlockBtn:hover {
+    background-color: #dc2626;
+    color: #ffffff;
+    border-color: #dc2626;
+    transform: translateY(-1px);
+}
+
+.cellUnblockBtn {
+    background-color: #ffffff;
+    color: #059669;
+    border: 1px solid #6ee7b7;
+    border-radius: 6px;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    box-shadow: 0 1px 2px rgba(5, 150, 105, 0.06);
+    flex-shrink: 0;
+}
+
+.cellUnblockBtn:hover {
+    background-color: #059669;
+    color: #ffffff;
+    border-color: #059669;
+    transform: translateY(-1px);
+}
+
+.blockedAlertBanner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background-color: #fef2f2;
+    border: 1.5px solid #f87171;
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 1rem;
+    color: #991b1b;
+}
+
+.blockedAlertTitle {
+    font-weight: 800;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.25rem;
+}
+
+.blockedAlertReason {
+    font-size: 0.85rem;
+    color: #7f1d1d;
+    line-height: 1.4;
+}
+
+.blockedAlertMeta {
+    font-size: 0.78rem;
+    color: #b91c1c;
+    margin-top: 0.25rem;
+    opacity: 0.85;
+}
+
+.notApplicableBanner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 0.6rem 0.85rem;
+    color: #475569;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
 }

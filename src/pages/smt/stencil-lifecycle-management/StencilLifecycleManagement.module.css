@@ -761,3 +761,40 @@
     background-color: #f1f5f9;
 }
 
+/* Warnings and Blocked Alert Styling */
+.warningBanner {
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.warningRed {
+    background-color: #fef2f2;
+    border: 1.5px solid #f87171;
+    color: #991b1b;
+}
+
+.warningOrange {
+    background-color: #fff7ed;
+    border: 1.5px solid #fb923c;
+    color: #9a3412;
+}
+
+.warningYellow {
+    background-color: #fefce8;
+    border: 1.5px solid #facc15;
+    color: #854d0e;
+}
+
+.warningTitle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 800;
+    font-size: 0.95rem;
+}
+
+

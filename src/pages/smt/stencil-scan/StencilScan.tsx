@@ -24,6 +24,10 @@ interface StencilDetails {
     row_number: number;
     column_number: number;
     location_status: 'STORED' | 'CHECKED_OUT';
+    is_blocked?: boolean;
+    blocked_reason?: string | null;
+    blocked_by_name?: string | null;
+    blocked_at?: string | null;
     remarks: string | null;
     holder: {
         employee_code: string;
@@ -45,7 +49,7 @@ interface MovementHistory {
     id: string;
     stencil_rack_number: string | null;
     side?: string | null;
-    action: 'CREATED' | 'ASSIGNED' | 'RECEIVED' | 'RETURNED' | 'RELOCATED' | 'UPDATED';
+    action: 'CREATED' | 'ASSIGNED' | 'RECEIVED' | 'RETURNED' | 'RELOCATED' | 'UPDATED' | 'BLOCKED' | 'UNBLOCKED';
     employee_code: string;
     employee_name: string;
     department: string;
@@ -251,6 +255,11 @@ const StencilScan: React.FC = () => {
         e.preventDefault();
         if (!stencil) return;
 
+        if (stencil.is_blocked) {
+            showToast('Checkout not allowed: this stencil is BLOCKED. Unblock it before checkout.', 'error');
+            return;
+        }
+
         if (!selectedWoId) {
             showToast('Please select a valid Work Order before checking out the stencil.', 'error');
             return;
@@ -415,12 +424,39 @@ const StencilScan: React.FC = () => {
                         <div className={styles.card}>
                             <div className={styles.cardHeader}>
                                 <h3><Info size={20} /> Stencil Details</h3>
-                                <span className={`${styles.statusBadge} ${
-                                    stencil.location_status === 'STORED' ? styles.statusAvailable : styles.statusCheckedOut
-                                }`}>
-                                    {stencil.location_status === 'STORED' ? 'STORED' : 'CHECKED OUT'}
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    {stencil.is_blocked && (
+                                        <span className={styles.statusBlockedBadge}>
+                                            <span className={styles.dotBlocked} />
+                                            BLOCKED
+                                        </span>
+                                    )}
+                                    <span className={`${styles.statusBadge} ${
+                                        stencil.location_status === 'STORED' ? styles.statusAvailable : styles.statusCheckedOut
+                                    }`}>
+                                        {stencil.location_status === 'STORED' ? 'STORED' : 'CHECKED OUT'}
+                                    </span>
+                                </div>
                             </div>
+
+                            {stencil.is_blocked && (
+                                <div className={styles.blockedAlertBanner} style={{ margin: '1rem' }}>
+                                    <div className={styles.blockedAlertTitle}>
+                                        <AlertTriangle size={20} />
+                                        <span>BLOCKED — NOT APPLICABLE FOR USE</span>
+                                    </div>
+                                    <div className={styles.blockedAlertReason}>
+                                        <strong>Reason:</strong> {stencil.blocked_reason || 'No reason specified'}
+                                    </div>
+                                    <div className={styles.blockedAlertMeta}>
+                                        {stencil.blocked_by_name ? `Blocked by: ${stencil.blocked_by_name}` : ''}
+                                        {stencil.blocked_at ? ` | Date: ${new Date(stencil.blocked_at).toLocaleString()}` : ''}
+                                    </div>
+                                    <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: '#7f1d1d' }}>
+                                        Checkout and machine assignment are strictly prohibited until this stencil is unblocked in Stencil Rack Management.
+                                    </div>
+                                </div>
+                            )}
 
                             <div className={styles.dataGrid}>
                                 <div className={styles.dataItem}>
@@ -478,7 +514,23 @@ const StencilScan: React.FC = () => {
                                     </span>
                                 </div>
                                 <div className={styles.dataItem}>
-                                    <span className={styles.dataLabel}>13. Current Holder</span>
+                                    <span className={styles.dataLabel}>13. Blocking Status</span>
+                                    <span className={stencil.is_blocked ? styles.statusBlockedBadge : styles.statusActiveBadge}>
+                                        <span className={stencil.is_blocked ? styles.dotBlocked : styles.dotUnblocked} />
+                                        {stencil.is_blocked ? 'BLOCKED' : 'ACTIVE / UNBLOCKED'}
+                                    </span>
+                                </div>
+                                {stencil.is_blocked && (
+                                    <div className={styles.dataItem} style={{ gridColumn: 'span 2' }}>
+                                        <span className={styles.dataLabel}>14. Block Reason</span>
+                                        <span className={styles.dataValue} style={{ color: '#b91c1c', fontWeight: 600 }}>
+                                            {stencil.blocked_reason || 'No reason provided'}
+                                            {stencil.blocked_by_name ? ` (by ${stencil.blocked_by_name}${stencil.blocked_at ? ` on ${new Date(stencil.blocked_at).toLocaleString()}` : ''})` : ''}
+                                        </span>
+                                    </div>
+                                )}
+                                <div className={styles.dataItem}>
+                                    <span className={styles.dataLabel}>15. Current Holder</span>
                                     <span className={styles.dataValue}>
                                         {stencil.holder ? `${stencil.holder.employee_name} (${stencil.holder.employee_code})` : 'N/A'}
                                     </span>
@@ -578,6 +630,28 @@ const StencilScan: React.FC = () => {
                             {stencil.location_status === 'STORED' ? (
                                 <div className={`${styles.actionCard} ${styles.actionReceive}`}>
                                     <h4 className={styles.actionHeader}><CheckCircle2 size={20} /> Check Out Stencil (Receive to SMT Line)</h4>
+                                    {stencil.is_blocked && (
+                                        <div style={{
+                                            marginBottom: '1.25rem',
+                                            padding: '0.85rem 1rem',
+                                            backgroundColor: '#fef2f2',
+                                            border: '1.5px solid #f87171',
+                                            borderRadius: '8px',
+                                            color: '#991b1b',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '0.25rem'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
+                                                <AlertTriangle size={18} />
+                                                <span>CHECKOUT PROHIBITED: STENCIL IS BLOCKED</span>
+                                            </div>
+                                            <div style={{ fontSize: '0.825rem', color: '#7f1d1d' }}>
+                                                {stencil.blocked_reason ? `Reason: ${stencil.blocked_reason}. ` : ''}
+                                                This stencil is blocked from shop floor checkout. Unblock it in Stencil Rack Management before checkout.
+                                            </div>
+                                        </div>
+                                    )}
                                     <form onSubmit={handleReceive}>
                                         <div className={styles.inputGroup} style={{ marginBottom: '1rem' }}>
                                             <label>Work Order <span>*</span></label>
@@ -662,9 +736,10 @@ const StencilScan: React.FC = () => {
                                          <button 
                                              type="submit" 
                                              className={`${styles.btnAction} ${styles.btnReceive}`} 
-                                             disabled={!selectedWoId || isSideMismatch || isSequenceMismatch || loading}
+                                             disabled={!selectedWoId || isSideMismatch || isSequenceMismatch || loading || Boolean(stencil.is_blocked)}
+                                             style={stencil.is_blocked ? { backgroundColor: '#94a3b8', cursor: 'not-allowed' } : {}}
                                          >
-                                             Confirm Check-Out
+                                             {stencil.is_blocked ? 'BLOCKED — CHECKOUT PROHIBITED' : 'Confirm Check-Out'}
                                          </button>
                                     </form>
                                 </div>

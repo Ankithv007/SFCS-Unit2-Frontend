@@ -33,6 +33,10 @@ interface Stencil {
     health_indicator?: string;
     maintenance_count?: number;
     last_maintenance_date?: string;
+    is_blocked?: boolean;
+    blocked_reason?: string | null;
+    blocked_by_name?: string | null;
+    blocked_at?: string | null;
 }
 
 interface WorkOrder {
@@ -448,7 +452,7 @@ const StencilLifecycleManagement: React.FC = () => {
 
     const getFilteredStencils = () => {
         const q = stencilSearch.trim().toLowerCase();
-        let availableOnly = stencils.filter(s => (s.physical_status || s.status) === 'CHECKED_OUT');
+        let availableOnly = stencils.filter(s => (s.physical_status || s.status) === 'CHECKED_OUT' && !s.is_blocked);
         if (selectedWorkOrder) {
             const woSides = (selectedWorkOrder.sides || '').trim().toLowerCase();
             if (woSides.includes('/') || woSides === 'top / bottom' || woSides === 'top/bottom') {
@@ -505,6 +509,11 @@ const StencilLifecycleManagement: React.FC = () => {
         const isCheckedOut = (selectedStencil.physical_status || selectedStencil.status) === 'CHECKED_OUT';
         if (!isCheckedOut) {
             showToast('The selected stencil is currently available in the rack. Please check out the stencil from Stencil Rack Management before assigning it to a Work Order.', 'error');
+            return;
+        }
+
+        if (selectedStencil.is_blocked) {
+            showToast('Assignment blocked. Stencil is BLOCKED — NOT APPLICABLE FOR ASSIGNMENT.', 'error');
             return;
         }
 
@@ -627,7 +636,8 @@ const StencilLifecycleManagement: React.FC = () => {
         const remainingAfter = cycleCap - projectedUsed;
         const isExceeded = projectedUsed > cycleCap;
         const isExactLimit = projectedUsed === cycleCap;
-        let isBlockedStatus = selectedStencil.lifecycle_status === 'MAINTENANCE' || selectedStencil.lifecycle_status === 'SCRAPPED';
+        const isOperationallyBlocked = Boolean(selectedStencil.is_blocked);
+        let isBlockedStatus = selectedStencil.lifecycle_status === 'MAINTENANCE' || selectedStencil.lifecycle_status === 'SCRAPPED' || isOperationallyBlocked;
         const isNotCheckedOut = (selectedStencil.physical_status || selectedStencil.status) !== 'CHECKED_OUT';
 
         // Side compatibility calculation - Flexible matrix check
@@ -685,6 +695,7 @@ const StencilLifecycleManagement: React.FC = () => {
             isExceeded,
             isExactLimit,
             isBlockedStatus,
+            isOperationallyBlocked,
             isNotCheckedOut,
             isSideCompatible,
             isSequenceValid,
@@ -860,6 +871,39 @@ const StencilLifecycleManagement: React.FC = () => {
                                             </span>
                                         </div>
 
+                                        <div className={styles.detailField} style={{ gridColumn: 'span 2' }}>
+                                            <span className={styles.detailLabel}>Operational Blocking Status</span>
+                                            <span 
+                                                className={styles.detailValue} 
+                                                style={{ 
+                                                    fontWeight: 'bold',
+                                                    color: selectedStencil.is_blocked ? '#ef4444' : '#166534'
+                                                }}
+                                            >
+                                                {selectedStencil.is_blocked ? 'BLOCKED' : 'UNBLOCKED / ACTIVE'}
+                                            </span>
+                                        </div>
+
+                                        {selectedStencil.is_blocked && (
+                                            <div className={`${styles.warningBanner} ${styles.warningRed}`} style={{ gridColumn: 'span 2', marginTop: '0.5rem' }}>
+                                                <div className={styles.warningTitle}>
+                                                    <span>🚫</span>
+                                                    <span>BLOCKED — NOT APPLICABLE FOR ASSIGNMENT</span>
+                                                </div>
+                                                <div style={{ fontWeight: 'bold' }}>
+                                                    Reason: {selectedStencil.blocked_reason || 'No reason specified'}
+                                                </div>
+                                                {selectedStencil.blocked_by_name && (
+                                                    <div style={{ fontSize: '0.8rem' }}>
+                                                        Blocked by: {selectedStencil.blocked_by_name} {selectedStencil.blocked_at ? `on ${new Date(selectedStencil.blocked_at).toLocaleString()}` : ''}
+                                                    </div>
+                                                )}
+                                                <div style={{ fontSize: '0.825rem', opacity: 0.9 }}>
+                                                    This stencil is blocked from work-order assignments. Unblock it in Stencil Rack Management before assigning.
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {(() => {
                                             const cap = selectedStencil.current_cycle_capacity || selectedStencil.target_life_cycle || 60000;
                                             const remaining = Math.max(0, cap - selectedStencil.print_count);
@@ -1023,6 +1067,12 @@ const StencilLifecycleManagement: React.FC = () => {
                                 </div>
                             </div>
 
+                            {calc.isOperationallyBlocked && (
+                                <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fca5a5', color: '#991b1b', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                    BLOCKED — NOT APPLICABLE FOR ASSIGNMENT: This stencil is operationally blocked ({selectedStencil?.blocked_reason || 'No reason specified'}). Assignment is strictly prohibited.
+                                </div>
+                            )}
+
                             {calc.isNotCheckedOut && (
                                 <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fca5a5', color: '#991b1b', fontWeight: 'bold', fontSize: '0.9rem' }}>
                                     The selected stencil is currently available in the rack. Please check out the stencil from Stencil Rack Management before assigning it to a Work Order.
@@ -1090,9 +1140,10 @@ const StencilLifecycleManagement: React.FC = () => {
                         <button
                             type="submit"
                             className={styles.button}
-                            disabled={!selectedStencil || !selectedWorkOrder || submitting || !!calc?.isExceeded || !calc?.isSideCompatible || !!calc?.isBlockedStatus || !!calc?.isNotCheckedOut}
+                            disabled={!selectedStencil || !selectedWorkOrder || submitting || !!calc?.isExceeded || !calc?.isSideCompatible || !!calc?.isBlockedStatus || !!calc?.isNotCheckedOut || !!calc?.isOperationallyBlocked || !!selectedStencil?.is_blocked}
+                            style={(calc?.isOperationallyBlocked || selectedStencil?.is_blocked) ? { backgroundColor: '#94a3b8', cursor: 'not-allowed' } : {}}
                         >
-                            {submitting ? 'Creating Assignment...' : 'Create Assignment'}
+                            {submitting ? 'Creating Assignment...' : (calc?.isOperationallyBlocked || selectedStencil?.is_blocked) ? 'BLOCKED — NOT APPLICABLE FOR ASSIGNMENT' : 'Create Assignment'}
                         </button>
                     </div>
                 </form>

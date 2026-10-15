@@ -38,6 +38,11 @@ interface RackLocation {
     checked_out_by_dept: string | null;
     checked_out_by_role: string | null;
     checked_out_at: string | null;
+    is_blocked?: boolean;
+    blocked_reason?: string | null;
+    blocked_by_code?: string | null;
+    blocked_by_name?: string | null;
+    blocked_at?: string | null;
 }
 
 interface StencilDetails {
@@ -56,6 +61,11 @@ interface StencilDetails {
     row_number: number;
     column_number: number;
     location_status: 'STORED' | 'CHECKED_OUT' | 'EMPTY';
+    is_blocked?: boolean;
+    blocked_reason?: string | null;
+    blocked_by_code?: string | null;
+    blocked_by_name?: string | null;
+    blocked_at?: string | null;
     remarks: string | null;
     holder: {
         employee_code: string | null;
@@ -391,6 +401,91 @@ const StencilRackManagement: React.FC = () => {
         }
     };
 
+    // Stencil Block / Unblock Handler
+    const handleToggleBlock = async (loc: RackLocation | StencilDetails, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+
+        const currentStatus = 'status' in loc ? loc.status : loc.location_status;
+        if (currentStatus === 'EMPTY') {
+            showToast('Cannot block or unblock an empty location slot.', 'error');
+            return;
+        }
+
+        const isCheckedOut = currentStatus === 'CHECKED_OUT';
+        const isCurrentlyBlocked = Boolean(loc.is_blocked);
+        const locId = 'location_id' in loc ? loc.location_id : loc.id;
+        const stencilIdentifier = loc.stencil_rack_number || loc.job_number || 'Stencil';
+
+        if (!isCurrentlyBlocked) {
+            // Attempting to BLOCK
+            if (isCheckedOut) {
+                showToast('Blocking is not applicable: this stencil is already checked out. Return it to the rack before blocking.', 'error');
+                return;
+            }
+
+            if (currentStatus !== 'STORED') {
+                showToast('A stencil can be blocked only while it is physically stored in the rack (STORED).', 'error');
+                return;
+            }
+
+            const promptReason = window.prompt(
+                `Enter reason for blocking Stencil "${stencilIdentifier}":`,
+                'Damaged / Needs Maintenance / Mesh Tension Issue'
+            );
+            if (promptReason === null) return; // User cancelled
+            const reason = promptReason.trim() || 'Operational block applied by supervisor.';
+
+            try {
+                const res = await apiFetch(`/api/smt/stencil-rack/locations/${locId}/block`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ block: true, reason })
+                });
+
+                if (res.success) {
+                    showToast(res.message || `Stencil "${stencilIdentifier}" is now BLOCKED.`, 'success');
+                    if (selectedRack) {
+                        fetchLocations(selectedRack.id);
+                    }
+                    if (selectedLocation && selectedLocation.id === locId) {
+                        setSelectedLocation(prev => prev ? { ...prev, is_blocked: true, blocked_reason: reason } : null);
+                    }
+                    if (searchedStencil && (searchedStencil.location_id === locId || searchedStencil.stencil_rack_number === loc.stencil_rack_number)) {
+                        setSearchedStencil(prev => prev ? { ...prev, is_blocked: true, blocked_reason: reason } : null);
+                    }
+                }
+            } catch (err: any) {
+                showToast(err.message || 'Failed to block stencil.', 'error');
+            }
+        } else {
+            // Attempting to UNBLOCK
+            if (!window.confirm(`Are you sure you want to unblock Stencil "${stencilIdentifier}"?`)) {
+                return;
+            }
+
+            try {
+                const res = await apiFetch(`/api/smt/stencil-rack/locations/${locId}/block`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ block: false })
+                });
+
+                if (res.success) {
+                    showToast(res.message || `Stencil "${stencilIdentifier}" has been unblocked.`, 'success');
+                    if (selectedRack) {
+                        fetchLocations(selectedRack.id);
+                    }
+                    if (selectedLocation && selectedLocation.id === locId) {
+                        setSelectedLocation(prev => prev ? { ...prev, is_blocked: false, blocked_reason: null, blocked_by_name: null, blocked_at: null } : null);
+                    }
+                    if (searchedStencil && (searchedStencil.location_id === locId || searchedStencil.stencil_rack_number === loc.stencil_rack_number)) {
+                        setSearchedStencil(prev => prev ? { ...prev, is_blocked: false, blocked_reason: null, blocked_by_name: null, blocked_at: null } : null);
+                    }
+                }
+            } catch (err: any) {
+                showToast(err.message || 'Failed to unblock stencil.', 'error');
+            }
+        }
+    };
+
     // Stencil Search Handler (Read-Only)
     const handleSearchSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -565,14 +660,34 @@ const StencilRackManagement: React.FC = () => {
                                     </h3>
                                     <p>Read-only stencil specifications and storage location information.</p>
                                 </div>
-                                <button 
-                                    type="button" 
-                                    className={styles.btnSecondary} 
-                                    onClick={handleClearSearch}
-                                >
-                                    <ArrowLeft size={16} /> Back to Rack Matrix Grid
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                    <button 
+                                        type="button" 
+                                        className={styles.btnSecondary} 
+                                        onClick={handleClearSearch}
+                                    >
+                                        <ArrowLeft size={16} /> Back to Rack Matrix Grid
+                                    </button>
+                                </div>
                             </div>
+
+                            {/* Blocked Alert Banner if blocked */}
+                            {searchedStencil.is_blocked && (
+                                <div className={styles.blockedAlertBanner}>
+                                    <AlertCircle size={22} color="#b91c1c" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                    <div>
+                                        <div className={styles.blockedAlertTitle}>
+                                            STENCIL IS CURRENTLY BLOCKED — NOT APPLICABLE FOR USE
+                                        </div>
+                                        <div className={styles.blockedAlertReason}>
+                                            <strong>Reason:</strong> {searchedStencil.blocked_reason || 'No reason specified'}
+                                        </div>
+                                        <div className={styles.blockedAlertMeta}>
+                                            Blocked by: {searchedStencil.blocked_by_name || 'Authorized Supervisor'} {searchedStencil.blocked_at ? `on ${new Date(searchedStencil.blocked_at).toLocaleString()}` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Read-Only Stencil Details Presentation */}
                             <div className={styles.stencilDetailsCard}>
@@ -645,6 +760,20 @@ const StencilRackManagement: React.FC = () => {
                                             styles.statusEmpty
                                         }`}>
                                             {searchedStencil.location_status}
+                                        </span>
+                                    </div>
+                                    <div className={styles.infoGroupItem}>
+                                        <span className={styles.infoLabel}>Blocking Status</span>
+                                        <span className={styles.infoValue}>
+                                            {searchedStencil.is_blocked ? (
+                                                <span className={styles.statusBlockedBadge} title={searchedStencil.blocked_reason || 'Blocked'}>
+                                                    BLOCKED
+                                                </span>
+                                            ) : (
+                                                <span className={styles.statusActiveBadge}>
+                                                    UNBLOCKED
+                                                </span>
+                                            )}
                                         </span>
                                     </div>
                                     <div className={styles.infoGroupItem}>
@@ -832,9 +961,9 @@ const StencilRackManagement: React.FC = () => {
                                                         if (!loc) {
                                                             return <td key={cIndex} className={styles.emptyCell}></td>;
                                                         }
-
                                                         let cellClass = styles.matrixCellEmpty;
-                                                        if (loc.status === 'STORED') cellClass = styles.matrixCellStored;
+                                                        if (loc.is_blocked) cellClass = styles.matrixCellBlocked;
+                                                        else if (loc.status === 'STORED') cellClass = styles.matrixCellStored;
                                                         else if (loc.status === 'CHECKED_OUT') cellClass = styles.matrixCellCheckedOut;
 
                                                         return (
@@ -855,7 +984,7 @@ const StencilRackManagement: React.FC = () => {
                                                                             }
                                                                         }}
                                                                     >
-                                                                        {/* Top Row: Stencil Number (Left Upper) & Edit Button (Right Upper) */}
+                                                                        {/* Top Row: Stencil Number (Left Upper) & Edit Action (Right Upper) */}
                                                                         <div className={styles.cellCardTopRow}>
                                                                             <span 
                                                                                 className={styles.cellRackNumber} 
@@ -866,7 +995,7 @@ const StencilRackManagement: React.FC = () => {
                                                                             {canEditLocations && (
                                                                                 <button 
                                                                                     type="button" 
-                                                                                    className={styles.cellEditBtn}
+                                                                                    className={styles.cellEditBtn} 
                                                                                     title="Edit Stencil Location"
                                                                                     onClick={(e) => {
                                                                                         e.stopPropagation();
@@ -900,11 +1029,19 @@ const StencilRackManagement: React.FC = () => {
                                                                             )}
                                                                         </div>
 
-                                                                        {/* Bottom Row: Status Badge */}
-                                                                        <div className={styles.cellStatusBadgeWrapper}>
+                                                                        {/* Bottom Row: Status Badge & Blocked Indicator */}
+                                                                        <div className={styles.cellStatusBadgeWrapper} style={{ gap: '0.35rem', flexWrap: 'wrap' }}>
                                                                             <span className={`${styles.statusBadge} ${loc.status === 'STORED' ? styles.statusStored : styles.statusCheckedOut}`}>
                                                                                 {loc.status}
                                                                             </span>
+                                                                            {loc.is_blocked && (
+                                                                                <span 
+                                                                                    className={styles.statusBlockedBadge}
+                                                                                    title={`BLOCKED: ${loc.blocked_reason || 'No reason specified'}`}
+                                                                                >
+                                                                                    BLOCKED
+                                                                                </span>
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 ) : (
@@ -1063,6 +1200,30 @@ const StencilRackManagement: React.FC = () => {
                             </button>
                         </div>
 
+                        {selectedLocation.is_blocked && (
+                            <div className={styles.blockedAlertBanner}>
+                                <AlertCircle size={20} color="#b91c1c" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                <div>
+                                    <div className={styles.blockedAlertTitle}>
+                                        STENCIL IS CURRENTLY BLOCKED — NOT APPLICABLE FOR USE
+                                    </div>
+                                    <div className={styles.blockedAlertReason}>
+                                        <strong>Reason:</strong> {selectedLocation.blocked_reason || 'No reason specified'}
+                                    </div>
+                                    <div className={styles.blockedAlertMeta}>
+                                        Blocked by: {selectedLocation.blocked_by_name || 'Authorized Supervisor'} {selectedLocation.blocked_at ? `on ${new Date(selectedLocation.blocked_at).toLocaleString()}` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {selectedLocation.status === 'CHECKED_OUT' && (
+                            <div className={styles.notApplicableBanner}>
+                                <Info size={16} />
+                                <span>Blocking is not applicable: this stencil is already checked out. Return it to the rack before blocking.</span>
+                            </div>
+                        )}
+
                         {selectedLocation.status === 'CHECKED_OUT' && (
                             <div className={styles.checkoutAlert}>
                                 <Info size={16} />
@@ -1170,9 +1331,6 @@ const StencilRackManagement: React.FC = () => {
                             </div>
 
                             <div className={styles.modalActions}>
-                                <button type="button" className={styles.btnSecondary} onClick={() => setShowEditLocationModal(false)}>
-                                    Cancel
-                                </button>
                                 {selectedLocation.status !== 'EMPTY' && selectedLocation.status !== 'CHECKED_OUT' && (
                                     <button 
                                         type="button" 
@@ -1182,6 +1340,30 @@ const StencilRackManagement: React.FC = () => {
                                     >
                                         Clear Slot
                                     </button>
+                                )}
+                                <button type="button" className={styles.btnSecondary} onClick={() => setShowEditLocationModal(false)}>
+                                    Cancel
+                                </button>
+                                {canEditLocations && selectedLocation.status === 'STORED' && (
+                                    selectedLocation.is_blocked ? (
+                                        <button 
+                                            type="button" 
+                                            className={styles.cellUnblockBtn} 
+                                            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                                            onClick={() => handleToggleBlock(selectedLocation)}
+                                        >
+                                            Unblock Stencil
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            type="button" 
+                                            className={styles.cellBlockBtn} 
+                                            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                                            onClick={() => handleToggleBlock(selectedLocation)}
+                                        >
+                                            Block Stencil
+                                        </button>
+                                    )
                                 )}
                                 {selectedLocation.status !== 'CHECKED_OUT' && (
                                     <button type="submit" className={styles.btnPrimary}>

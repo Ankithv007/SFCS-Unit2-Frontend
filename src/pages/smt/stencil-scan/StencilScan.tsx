@@ -28,6 +28,10 @@ interface StencilDetails {
     blocked_reason?: string | null;
     blocked_by_name?: string | null;
     blocked_at?: string | null;
+    last_unblocked_reason?: string | null;
+    last_unblocked_by_name?: string | null;
+    last_unblocked_by_code?: string | null;
+    last_unblocked_at?: string | null;
     remarks: string | null;
     holder: {
         employee_code: string;
@@ -526,6 +530,15 @@ const StencilScan: React.FC = () => {
                                         <span className={styles.dataValue} style={{ color: '#b91c1c', fontWeight: 600 }}>
                                             {stencil.blocked_reason || 'No reason provided'}
                                             {stencil.blocked_by_name ? ` (by ${stencil.blocked_by_name}${stencil.blocked_at ? ` on ${new Date(stencil.blocked_at).toLocaleString()}` : ''})` : ''}
+                                        </span>
+                                    </div>
+                                )}
+                                {!stencil.is_blocked && stencil.last_unblocked_at && (
+                                    <div className={styles.dataItem} style={{ gridColumn: 'span 2' }}>
+                                        <span className={styles.dataLabel}>14. Last Unblock Reason</span>
+                                        <span className={styles.dataValue} style={{ color: '#166534', fontWeight: 600 }}>
+                                            {stencil.last_unblocked_reason || 'Not recorded (unblocked before reason capture was introduced)'}
+                                            {stencil.last_unblocked_by_name ? ` (by ${stencil.last_unblocked_by_name}${stencil.last_unblocked_at ? ` on ${new Date(stencil.last_unblocked_at).toLocaleString()}` : ''})` : ''}
                                         </span>
                                     </div>
                                 )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styles from './StencilRackManagement.module.css';
 import { useToast } from '../../../components/Toast';
 import { apiFetch } from '../../../utils/api';
@@ -66,6 +66,10 @@ interface StencilDetails {
     blocked_by_code?: string | null;
     blocked_by_name?: string | null;
     blocked_at?: string | null;
+    last_unblocked_reason?: string | null;
+    last_unblocked_by_name?: string | null;
+    last_unblocked_by_code?: string | null;
+    last_unblocked_at?: string | null;
     remarks: string | null;
     holder: {
         employee_code: string | null;
@@ -112,6 +116,13 @@ const StencilRackManagement: React.FC = () => {
     const [editRackData, setEditRackData] = useState<Rack | null>(null);
     const [showEditLocationModal, setShowEditLocationModal] = useState(false);
     const [downloadingRackId, setDownloadingRackId] = useState<string | null>(null);
+
+    // Unblock Reason Dialog State
+    const [unblockTarget, setUnblockTarget] = useState<RackLocation | StencilDetails | null>(null);
+    const [unblockReason, setUnblockReason] = useState('');
+    const [unblockError, setUnblockError] = useState<string | null>(null);
+    const [unblockSubmitting, setUnblockSubmitting] = useState(false);
+    const unblockInFlightRef = useRef(false);
 
     const handleDownloadRackExcel = async (rack: Rack) => {
         if (!rack || !rack.id) return;
@@ -457,32 +468,77 @@ const StencilRackManagement: React.FC = () => {
                 showToast(err.message || 'Failed to block stencil.', 'error');
             }
         } else {
-            // Attempting to UNBLOCK
-            if (!window.confirm(`Are you sure you want to unblock Stencil "${stencilIdentifier}"?`)) {
-                return;
-            }
+            // Attempting to UNBLOCK: an operational reason is mandatory (captured via in-app dialog)
+            setUnblockTarget(loc);
+            setUnblockReason('');
+            setUnblockError(null);
+        }
+    };
 
-            try {
-                const res = await apiFetch(`/api/smt/stencil-rack/locations/${locId}/block`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ block: false })
-                });
+    const handleCloseUnblockDialog = () => {
+        if (unblockInFlightRef.current) return; // Do not allow closing while request is pending
+        setUnblockTarget(null);
+        setUnblockReason('');
+        setUnblockError(null);
+    };
 
-                if (res.success) {
-                    showToast(res.message || `Stencil "${stencilIdentifier}" has been unblocked.`, 'success');
-                    if (selectedRack) {
-                        fetchLocations(selectedRack.id);
-                    }
-                    if (selectedLocation && selectedLocation.id === locId) {
-                        setSelectedLocation(prev => prev ? { ...prev, is_blocked: false, blocked_reason: null, blocked_by_name: null, blocked_at: null } : null);
-                    }
-                    if (searchedStencil && (searchedStencil.location_id === locId || searchedStencil.stencil_rack_number === loc.stencil_rack_number)) {
-                        setSearchedStencil(prev => prev ? { ...prev, is_blocked: false, blocked_reason: null, blocked_by_name: null, blocked_at: null } : null);
+    const handleConfirmUnblock = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!unblockTarget || unblockInFlightRef.current) return;
+
+        const trimmedReason = unblockReason.trim();
+        if (!trimmedReason) {
+            setUnblockError('Unblock reason is required.');
+            return;
+        }
+        if (trimmedReason.length < 3) {
+            setUnblockError('Unblock reason must be at least 3 characters.');
+            return;
+        }
+
+        const loc = unblockTarget;
+        const locId = 'location_id' in loc ? loc.location_id : loc.id;
+        const stencilIdentifier = loc.stencil_rack_number || loc.job_number || 'Stencil';
+
+        unblockInFlightRef.current = true;
+        setUnblockSubmitting(true);
+        setUnblockError(null);
+
+        try {
+            const res = await apiFetch(`/api/smt/stencil-rack/locations/${locId}/block`, {
+                method: 'PATCH',
+                body: JSON.stringify({ block: false, reason: trimmedReason })
+            });
+
+            if (res && res.success) {
+                showToast(res.message || `Stencil "${stencilIdentifier}" has been unblocked.`, 'success');
+                setUnblockTarget(null);
+                setUnblockReason('');
+                if (selectedRack) {
+                    fetchLocations(selectedRack.id);
+                }
+                if (selectedLocation && selectedLocation.id === locId) {
+                    setSelectedLocation(prev => prev ? { ...prev, is_blocked: false, blocked_reason: null, blocked_by_name: null, blocked_at: null } : null);
+                }
+                if (searchedStencil && (searchedStencil.location_id === locId || searchedStencil.stencil_rack_number === loc.stencil_rack_number)) {
+                    setSearchedStencil(prev => prev ? { ...prev, is_blocked: false, blocked_reason: null, blocked_by_name: null, blocked_at: null } : null);
+                    // Re-read authoritative details (incl. saved unblock reason) from the backend
+                    const refreshKey = searchedStencil.stencil_rack_number || lastSearchedQuery;
+                    if (refreshKey) {
+                        apiFetch(`/api/smt/stencil-rack/stencil-info/${encodeURIComponent(refreshKey)}`)
+                            .then(r => { if (r && r.success && r.stencil) setSearchedStencil(r.stencil); })
+                            .catch(() => { /* Unblock already confirmed; details refresh is best-effort */ });
                     }
                 }
-            } catch (err: any) {
-                showToast(err.message || 'Failed to unblock stencil.', 'error');
+            } else {
+                setUnblockError((res && res.message) || 'Unblock was not confirmed by the server. The stencil remains blocked.');
             }
+        } catch (err: any) {
+            // Keep dialog open and retain the entered reason so the user can retry
+            setUnblockError(err.message || 'Failed to unblock stencil. The stencil remains blocked.');
+        } finally {
+            unblockInFlightRef.current = false;
+            setUnblockSubmitting(false);
         }
     };
 
@@ -776,6 +832,17 @@ const StencilRackManagement: React.FC = () => {
                                             )}
                                         </span>
                                     </div>
+                                    {!searchedStencil.is_blocked && searchedStencil.last_unblocked_at && (
+                                        <div className={`${styles.infoGroupItem} ${styles.infoGroupItemFull}`}>
+                                            <span className={styles.infoLabel}>Last Unblock</span>
+                                            <span className={styles.infoValue}>
+                                                <strong>Reason:</strong> {searchedStencil.last_unblocked_reason || 'Not recorded (unblocked before reason capture was introduced)'}
+                                                <span className={styles.unblockMeta}>
+                                                    Unblocked by {searchedStencil.last_unblocked_by_name || 'Unknown'}{searchedStencil.last_unblocked_by_code ? ` (${searchedStencil.last_unblocked_by_code})` : ''} on {new Date(searchedStencil.last_unblocked_at).toLocaleString()}
+                                                </span>
+                                            </span>
+                                        </div>
+                                    )}
                                     <div className={styles.infoGroupItem}>
                                         <span className={styles.infoLabel}>Current Holder</span>
                                         <span className={styles.infoValue}>
@@ -1370,6 +1437,99 @@ const StencilRackManagement: React.FC = () => {
                                         Save Details
                                     </button>
                                 )}
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* UNBLOCK REASON DIALOG */}
+            {unblockTarget && (
+                <div className={`${styles.modalOverlay} ${styles.unblockOverlay}`}>
+                    <div className={styles.modalContent} role="dialog" aria-modal="true" aria-labelledby="unblock-dialog-title">
+                        <div className={styles.modalHeader}>
+                            <h3 id="unblock-dialog-title">Unblock Stencil</h3>
+                            <button
+                                type="button"
+                                id="unblock-dialog-close"
+                                className={styles.btnClose}
+                                onClick={handleCloseUnblockDialog}
+                                disabled={unblockSubmitting}
+                                aria-label="Close"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className={styles.unblockStencilInfo}>
+                            <div><span>Stencil Rack Number:</span> <strong>{unblockTarget.stencil_rack_number || '-'}</strong></div>
+                            <div><span>Job Number:</span> <strong>{unblockTarget.job_number || '-'}</strong></div>
+                            <div>
+                                <span>Location:</span>{' '}
+                                <strong>
+                                    {'rack_name' in unblockTarget && unblockTarget.rack_name
+                                        ? `${unblockTarget.rack_name} / ${unblockTarget.location_code}`
+                                        : (selectedRack ? `${selectedRack.name} / ${unblockTarget.location_code}` : unblockTarget.location_code)}
+                                </strong>
+                            </div>
+                        </div>
+
+                        <div className={styles.blockedAlertBanner}>
+                            <AlertCircle size={20} color="#b91c1c" style={{ flexShrink: 0, marginTop: '2px' }} />
+                            <div>
+                                <div className={styles.blockedAlertReason}>
+                                    <strong>Current Block Reason:</strong> {unblockTarget.blocked_reason || 'No reason specified'}
+                                </div>
+                                {(unblockTarget.blocked_by_name || unblockTarget.blocked_at) && (
+                                    <div className={styles.blockedAlertMeta}>
+                                        Blocked by: {unblockTarget.blocked_by_name || 'Authorized Supervisor'} {unblockTarget.blocked_at ? `on ${new Date(unblockTarget.blocked_at).toLocaleString()}` : ''}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <form className={styles.form} onSubmit={handleConfirmUnblock} noValidate>
+                            <div className={styles.formGroup}>
+                                <label htmlFor="unblock-reason-input">Unblock Reason <span>*</span></label>
+                                <textarea
+                                    id="unblock-reason-input"
+                                    className={`${styles.textarea} ${unblockError ? styles.textareaError : ''}`}
+                                    rows={3}
+                                    value={unblockReason}
+                                    disabled={unblockSubmitting}
+                                    onChange={e => {
+                                        setUnblockReason(e.target.value);
+                                        if (unblockError) setUnblockError(null);
+                                    }}
+                                    placeholder="Describe why this stencil is safe to use again (e.g. cleaned, re-tensioned and inspected)"
+                                    autoFocus
+                                />
+                                {unblockError && (
+                                    <div className={styles.unblockErrorText} role="alert" id="unblock-reason-error">
+                                        {unblockError}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className={styles.modalActions}>
+                                <button
+                                    type="button"
+                                    id="unblock-dialog-cancel"
+                                    className={styles.btnSecondary}
+                                    onClick={handleCloseUnblockDialog}
+                                    disabled={unblockSubmitting}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    id="unblock-dialog-confirm"
+                                    className={styles.cellUnblockBtn}
+                                    style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                                    disabled={unblockSubmitting}
+                                >
+                                    {unblockSubmitting ? 'Unblocking...' : 'Confirm Unblock'}
+                                </button>
                             </div>
                         </form>
                     </div>

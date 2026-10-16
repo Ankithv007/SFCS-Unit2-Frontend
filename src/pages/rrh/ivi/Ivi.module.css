@@ -371,6 +371,20 @@
 }
 
 /* 2-Column form grid */
+/* 3-Column form grid */
+.formGrid3Col {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+@media (max-width: 900px) {
+    .formGrid3Col {
+        grid-template-columns: 1fr;
+    }
+}
+
 .formGrid2Col {
     display: grid;
     grid-template-columns: 1fr 1fr;

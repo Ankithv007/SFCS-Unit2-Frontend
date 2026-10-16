@@ -76,6 +76,7 @@ interface EligibleWorkOrder {
     work_order_date?: string;
     date?: string;
     lot_quantity?: number;
+    lot_number?: string;
     status?: string;
 }
 
@@ -88,6 +89,7 @@ interface IviSession {
     created_at: string;
     updated_at?: string;
     lot_quantity?: number;
+    lot_number?: string;
     work_order_date?: string;
     date?: string;
 }
@@ -144,6 +146,7 @@ interface InspectionRecord {
     wo_date: string | null;
     duplexer_main: string;
     duplexer_part_no: string;
+    duplexer_sl_no?: string;
     rrh_unit: string | null;
     image_urls?: string[];
     status: 'PASS' | 'FAIL' | 'SCRAP';
@@ -251,6 +254,7 @@ export const RrhIvi: React.FC = () => {
         dateTime: string | null;
         lotQuantity: number;
         remainingLotQuantity?: number;
+        lotNumber?: string;
     } | null>(null);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState('');
@@ -303,6 +307,7 @@ export const RrhIvi: React.FC = () => {
     // Form inputs (Duplexer Make & RRH Unit Defect)
     const [duplexerMain, setDuplexerMain] = useState('');
     const [duplexerPartNo, setDuplexerPartNo] = useState('');
+    const [duplexerSlNo, setDuplexerSlNo] = useState('');
     const [rrhUnit, setRrhUnit] = useState('');
     const [statusVal, setStatusVal] = useState<'PASS' | 'FAIL' | 'SCRAP'>('PASS');
     const [remarksVal, setRemarksVal] = useState('');
@@ -420,6 +425,7 @@ export const RrhIvi: React.FC = () => {
                 (item.band && item.band.toLowerCase().includes(q)) ||
                 (item.duplexer_main && item.duplexer_main.toLowerCase().includes(q)) ||
                 (item.duplexer_part_no && item.duplexer_part_no.toLowerCase().includes(q)) ||
+                (item.duplexer_sl_no && item.duplexer_sl_no.toLowerCase().includes(q)) ||
                 (item.rrh_unit && item.rrh_unit.toLowerCase().includes(q)) ||
                 (item.defect_fixed && item.defect_fixed.toLowerCase().includes(q)) ||
                 (item.status && item.status.toLowerCase().includes(q)) ||
@@ -483,6 +489,7 @@ export const RrhIvi: React.FC = () => {
                 (item.band && item.band.toLowerCase().includes(q)) ||
                 (item.duplexer_main && item.duplexer_main.toLowerCase().includes(q)) ||
                 (item.duplexer_part_no && item.duplexer_part_no.toLowerCase().includes(q)) ||
+                (item.duplexer_sl_no && item.duplexer_sl_no.toLowerCase().includes(q)) ||
                 (item.rrh_unit && item.rrh_unit.toLowerCase().includes(q)) ||
                 (item.remarks && item.remarks.toLowerCase().includes(q)) ||
                 (item.scanned_by && item.scanned_by.toLowerCase().includes(q))
@@ -522,6 +529,7 @@ export const RrhIvi: React.FC = () => {
                 (item.band && item.band.toLowerCase().includes(q)) ||
                 (item.duplexer_main && item.duplexer_main.toLowerCase().includes(q)) ||
                 (item.duplexer_part_no && item.duplexer_part_no.toLowerCase().includes(q)) ||
+                (item.duplexer_sl_no && item.duplexer_sl_no.toLowerCase().includes(q)) ||
                 (item.remarks && item.remarks.toLowerCase().includes(q)) ||
                 (item.scanned_by && item.scanned_by.toLowerCase().includes(q))
             );
@@ -541,6 +549,7 @@ export const RrhIvi: React.FC = () => {
         handleLookupSerial(serial);
         setDuplexerMain(row.duplexer_main || '');
         setDuplexerPartNo(row.duplexer_part_no || '');
+        setDuplexerSlNo(row.duplexer_sl_no || '');
         setRemarksVal(row.remarks || '');
 
         let savedCps: any[] = [];
@@ -860,12 +869,14 @@ export const RrhIvi: React.FC = () => {
         let woNum = localWo?.work_order_id || woId;
         let woDate = localWo?.work_order_date || localWo?.date || (localWo as any)?.created_at || null;
         let lotQty = Number(localWo?.lot_quantity) || 0;
+        let lotNum = localWo?.lot_number || (localWo as any)?.lot || null;
 
         if (localWo && lotQty > 0) {
             setSelectedWoDetails({
                 workOrderNumber: woNum,
                 dateTime: woDate,
-                lotQuantity: lotQty
+                lotQuantity: lotQty,
+                lotNumber: lotNum || '—'
             });
             setDetailsLoading(false);
         }
@@ -896,7 +907,8 @@ export const RrhIvi: React.FC = () => {
                 workOrderNumber: woNum,
                 dateTime: woDate,
                 lotQuantity: lotQty,
-                remainingLotQuantity: remQty !== undefined ? remQty : lotQty
+                remainingLotQuantity: remQty !== undefined ? remQty : lotQty,
+                lotNumber: lotNum || '—'
             });
         } catch (err: any) {
             if (!localWo) {
@@ -1066,6 +1078,7 @@ export const RrhIvi: React.FC = () => {
         setFetchedSerial(null);
         setDuplexerMain('');
         setDuplexerPartNo('');
+        setDuplexerSlNo('');
         setRrhUnit('');
         setStatusVal('PASS');
         setRemarksVal('');
@@ -1216,6 +1229,7 @@ export const RrhIvi: React.FC = () => {
         }
 
         let cleanPartNo = duplexerPartNo.trim();
+        let cleanSlNo = duplexerSlNo.trim();
         if (statusVal !== 'SCRAP') {
             if (!duplexerMain.trim()) {
                 addToast('Duplexer Make is required.', 'warning');
@@ -1224,6 +1238,11 @@ export const RrhIvi: React.FC = () => {
 
             if (!duplexerPartNo.trim()) {
                 addToast('Duplexer Part No. is required.', 'warning');
+                return;
+            }
+
+            if (!duplexerSlNo.trim()) {
+                addToast('Duplexer SL.No is required.', 'warning');
                 return;
             }
 
@@ -1236,6 +1255,7 @@ export const RrhIvi: React.FC = () => {
             }
         } else {
             if (!cleanPartNo) cleanPartNo = '—';
+            if (!cleanSlNo) cleanSlNo = '—';
         }
 
         // Checkpoints verification check (only required for PASS and FAIL, bypassed for SCRAP)
@@ -1260,6 +1280,7 @@ export const RrhIvi: React.FC = () => {
             formData.append('duplexer_make', duplexerMain.trim() || '—');
             formData.append('duplexer_main', duplexerMain.trim() || '—');
             formData.append('duplexer_part_no', cleanPartNo);
+            formData.append('duplexer_sl_no', cleanSlNo);
             if (rrhUnit.trim()) {
                 formData.append('rrh_unit', rrhUnit.trim());
                 formData.append('rrh_unit_defect', rrhUnit.trim());
@@ -1460,6 +1481,12 @@ export const RrhIvi: React.FC = () => {
                                                 {selectedWoDetails.remainingLotQuantity ?? selectedWoDetails.lotQuantity}
                                             </span>
                                         </div>
+                                        <div className={styles.infoItem}>
+                                            <span className={styles.infoLabel}>Lot Number / Batch</span>
+                                            <span className={styles.infoValue} style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0d9488' }}>
+                                                {selectedWoDetails.lotNumber || '—'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1545,6 +1572,7 @@ export const RrhIvi: React.FC = () => {
                                         <thead>
                                             <tr>
                                                 <th>Work Order Number</th>
+                                                <th>Lot Number</th>
                                                 <th>Started By</th>
                                                 <th>Started At</th>
                                                 <th>Status</th>
@@ -1555,6 +1583,7 @@ export const RrhIvi: React.FC = () => {
                                             {activeSessionsList.map(session => (
                                                 <tr key={session.id}>
                                                     <td style={{ fontWeight: 700, color: '#4f46e5' }}>{session.work_order_id}</td>
+                                                    <td style={{ fontWeight: 600, color: '#0f766e' }}>{session.lot_number || (session as any).lot || '—'}</td>
                                                     <td>{session.created_by_name || session.created_by || '—'}</td>
                                                     <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{formatTimestamp(session.created_at)}</td>
                                                     <td>{getStatusBadge(session.status)}</td>
@@ -1586,7 +1615,7 @@ export const RrhIvi: React.FC = () => {
                                             ))}
                                             {activeSessionsList.length === 0 && (
                                                 <tr>
-                                                    <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                                                         No active IVI sessions found. Select a Work Order above to begin.
                                                     </td>
                                                 </tr>
@@ -1682,8 +1711,9 @@ export const RrhIvi: React.FC = () => {
                             <table className={styles.table}>
                                 <thead>
                                     <tr>
-                                        <th>Work Order Number</th>
-                                        <th>Started By</th>
+                                                <th>Work Order Number</th>
+                                                <th>Lot Number</th>
+                                                <th>Started By</th>
                                         <th>Completed At</th>
                                         <th>Status</th>
                                         <th>Action</th>
@@ -1693,7 +1723,8 @@ export const RrhIvi: React.FC = () => {
                                     {completedSessionsList.map(session => (
                                         <tr key={session.id}>
                                             <td style={{ fontWeight: 600, color: '#334155' }}>{session.work_order_id}</td>
-                                            <td>{session.created_by_name || session.created_by || '—'}</td>
+                                             <td style={{ fontWeight: 600, color: '#0f766e' }}>{session.lot_number || (session as any).lot || '—'}</td>
+                                             <td>{session.created_by_name || session.created_by || '—'}</td>
                                             <td style={{ fontSize: '0.8rem', color: '#64748b' }}>
                                                 {formatTimestamp(session.updated_at || session.created_at)}
                                             </td>
@@ -1726,8 +1757,8 @@ export const RrhIvi: React.FC = () => {
                                     ))}
                                     {completedSessionsList.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
-                                                No completed IVI sessions found.
+                                            <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                                 No completed IVI sessions found.
                                             </td>
                                         </tr>
                                     )}
@@ -1782,6 +1813,7 @@ export const RrhIvi: React.FC = () => {
                                 </h3>
                                 <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginTop: '0.75rem', color: '#374151', fontSize: '0.95rem', flexWrap: 'wrap' }}>
                                     <span>Work Order: <strong style={{ color: '#4f46e5' }}>{activeSession.work_order_id}</strong></span>
+                                    <span>Lot Number: <strong style={{ color: '#0d9488' }}>{activeSession.lot_number || (activeSession as any).lot || selectedWoDetails?.lotNumber || '—'}</strong></span>
                                     <span>Session ID: <strong>{activeSession.id}</strong></span>
                                     <span>Date: <strong>{formatWoDateTime(activeSession.work_order_date || activeSession.date || selectedWoDetails?.dateTime || activeSession.created_at)}</strong></span>
                                     <span>Status: {getStatusBadge(activeSession.status)}</span>
@@ -1924,7 +1956,7 @@ export const RrhIvi: React.FC = () => {
                         {/* Inspection Form */}
                         <form onSubmit={handleSubmitInspection}>
                             {/* Row 1: Duplexer Make * | Duplexer Part No. * */}
-                            <div className={styles.formGrid2Col}>
+                            <div className={styles.formGrid3Col}>
                                 <div className={styles.fieldGroup}>
                                     <label className={styles.fieldLabel}>Duplexer Make {statusVal !== 'SCRAP' ? '*' : '(Optional)'}</label>
                                     <input
@@ -1944,6 +1976,17 @@ export const RrhIvi: React.FC = () => {
                                         value={duplexerPartNo}
                                         onChange={e => setDuplexerPartNo(e.target.value)}
                                         placeholder="Enter Duplexer Part No. (mix of letters & numbers)"
+                                        required={statusVal !== 'SCRAP'}
+                                    />
+                                </div>
+                                <div className={styles.fieldGroup}>
+                                    <label className={styles.fieldLabel}>Duplexer SL.No {statusVal !== 'SCRAP' ? '*' : '(Optional)'}</label>
+                                    <input
+                                        type="text"
+                                        className={styles.fieldInput}
+                                        value={duplexerSlNo}
+                                        onChange={e => setDuplexerSlNo(e.target.value)}
+                                        placeholder="Enter Duplexer SL.No"
                                         required={statusVal !== 'SCRAP'}
                                     />
                                 </div>
@@ -2414,6 +2457,7 @@ export const RrhIvi: React.FC = () => {
                                         <th>Band</th>
                                         <th>Duplexer Make</th>
                                         <th>Duplexer Part No</th>
+                                        <th>Duplexer SL.No</th>
                                         <th style={{ minWidth: '180px' }}>Failed Stage Remarks</th>
                                         <th>Status</th>
                                         <th>Process Type</th>
@@ -2436,6 +2480,7 @@ export const RrhIvi: React.FC = () => {
                                             </td>
                                             <td>{row.duplexer_main || '—'}</td>
                                             <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{row.duplexer_part_no || '—'}</td>
+                                            <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{row.duplexer_sl_no || '—'}</td>
                                             <td style={{ color: '#b91c1c', fontWeight: 600, maxWidth: '240px' }}>
                                                 {cleanDefectDescription(row.rrh_unit) || 'Defect noted'}
                                             </td>
@@ -2811,6 +2856,7 @@ export const RrhIvi: React.FC = () => {
                                         <th>Band</th>
                                         <th>Duplexer Make</th>
                                         <th>Duplexer Part No</th>
+                                        <th>Duplexer SL.No</th>
                                         <th>RRH Unit Defect</th>
                                         <th>Defect Fixed</th>
                                         <th>Status</th>
@@ -2834,6 +2880,7 @@ export const RrhIvi: React.FC = () => {
                                             </td>
                                             <td>{row.duplexer_main || '—'}</td>
                                             <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{row.duplexer_part_no || '—'}</td>
+                                            <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{row.duplexer_sl_no || '—'}</td>
                                             <td>{row.rrh_unit || '—'}</td>
                                             <td style={{ textAlign: 'center' }}>
                                                 {row.is_reinspected ? (
@@ -3502,6 +3549,10 @@ export const RrhIvi: React.FC = () => {
                                     <div>
                                         <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Duplexer Part No</span>
                                         <span style={{ fontSize: '0.95rem', fontFamily: 'monospace', fontWeight: 600 }}>{failedModalRecord.duplexer_part_no}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Duplexer SL.No</span>
+                                        <span style={{ fontSize: '0.95rem', fontFamily: 'monospace', fontWeight: 600 }}>{failedModalRecord.duplexer_sl_no || '—'}</span>
                                     </div>
                                     <div>
                                         <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Status</span>

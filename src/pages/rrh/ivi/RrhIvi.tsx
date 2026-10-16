@@ -736,6 +736,7 @@ export const RrhIvi: React.FC = () => {
             try {
                 const parsed = JSON.parse(urls);
                 if (Array.isArray(parsed)) return parsed.filter(Boolean);
+                if (typeof parsed === 'string' && parsed.trim().length > 0) return [parsed.trim()];
             } catch {
                 if (urls.trim().startsWith('/uploads') || urls.trim().startsWith('http')) {
                     return [urls.trim()];
@@ -751,7 +752,29 @@ export const RrhIvi: React.FC = () => {
             const res = await fetch(imgUrl, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
-            if (!res.ok) throw new Error('Failed to fetch image file.');
+            if (!res.ok) {
+                // If direct /uploads fetch failed, try dedicated backend download route
+                if (imgUrl.includes('/uploads/rrh/ivi/')) {
+                    const cleanSub = imgUrl.substring(imgUrl.indexOf('/uploads/rrh/ivi/') + '/uploads/rrh/ivi/'.length);
+                    const dlRes = await fetch(`/api/rrh/ivi/photos/download/${cleanSub}`, {
+                        headers: token ? { Authorization: `Bearer ${token}` } : {}
+                    });
+                    if (dlRes.ok) {
+                        const blob = await dlRes.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = fileName || cleanSub.split('/').pop() || 'ivi_photo.jpg';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                        addToast('Photo downloaded successfully.', 'success');
+                        return;
+                    }
+                }
+                throw new Error('Failed to fetch image file.');
+            }
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -764,7 +787,12 @@ export const RrhIvi: React.FC = () => {
             window.URL.revokeObjectURL(url);
             addToast('Photo downloaded successfully.', 'success');
         } catch (err: any) {
-            window.open(imgUrl, '_blank');
+            if (imgUrl.includes('/uploads/rrh/ivi/')) {
+                const cleanSub = imgUrl.substring(imgUrl.indexOf('/uploads/rrh/ivi/') + '/uploads/rrh/ivi/'.length);
+                window.open(`/api/rrh/ivi/photos/download/${cleanSub}`, '_blank');
+            } else {
+                window.open(imgUrl, '_blank');
+            }
         }
     };
 

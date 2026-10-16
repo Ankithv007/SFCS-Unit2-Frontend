@@ -931,12 +931,13 @@ export const RrhIvi: React.FC = () => {
         try {
             const session = await apiFetch('/api/rrh/ivi/sessions', {
                 method: 'POST',
-                body: JSON.stringify({ work_order_id: selectedWoId })
+                body: JSON.stringify({ work_order_id: selectedWoId, route: selectedRoute })
             });
 
-            addToast(`IVI session ready for Work Order ${selectedWoId}`, 'success');
+            addToast(`IVI session ready for Work Order ${selectedWoId} (Route: ${selectedRoute === 'ECN' ? 'ECN' : 'Non-ECN'})`, 'success');
             setActiveSession({
                 ...session,
+                route: selectedRoute,
                 lot_quantity: selectedWoDetails?.lotQuantity,
                 work_order_date: selectedWoDetails?.dateTime || undefined
             });
@@ -979,6 +980,9 @@ export const RrhIvi: React.FC = () => {
             const res = await apiFetch(`/api/rrh/ivi/sessions/${sessionId}`);
             if (res.session) {
                 setActiveSession(res.session);
+                if (res.session.route) {
+                    setSelectedRoute(res.session.route === 'NON_ECN' ? 'NON_ECN' : 'ECN');
+                }
             }
             if (res.stats) {
                 setStats(res.stats);
@@ -1488,6 +1492,108 @@ export const RrhIvi: React.FC = () => {
                                             </span>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* --- PROCESS ROUTING / STAGE SELECTION CARD --- */}
+                            <div style={{
+                                backgroundColor: '#ffffff',
+                                borderRadius: '0.75rem',
+                                border: '1px solid #e2e8f0',
+                                padding: '1.25rem',
+                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                                boxSizing: 'border-box'
+                            }}>
+                                {/* Card Header */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                                    <span style={{ fontSize: '1.2rem' }}>🔀</span>
+                                    <div>
+                                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1e293b' }}>
+                                            RRH Process Routing / Stage Selection
+                                        </h4>
+                                        <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>
+                                            Select the quality check and production stages required for this Work Order. Process steps execute strictly in ascending order.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Stage Pills / Chips (Strictly Single Selection at a time) */}
+                                <div style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '0.75rem',
+                                    marginTop: '0.75rem',
+                                    alignItems: 'center'
+                                }}>
+                                    {/* ECN Option */}
+                                    <label
+                                        onClick={() => setSelectedRoute('ECN')}
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            padding: '0.5rem 0.85rem',
+                                            borderRadius: '0.5rem',
+                                            fontSize: '0.875rem',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            userSelect: 'none',
+                                            transition: 'all 0.15s ease-in-out',
+                                            backgroundColor: selectedRoute === 'ECN' ? '#eff6ff' : '#f8fafc',
+                                            color: selectedRoute === 'ECN' ? '#1d4ed8' : '#475569',
+                                            border: selectedRoute === 'ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                            boxShadow: selectedRoute === 'ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
+                                        }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="setupProcessRoute"
+                                            checked={selectedRoute === 'ECN'}
+                                            onChange={() => setSelectedRoute('ECN')}
+                                            style={{
+                                                width: '16px',
+                                                height: '16px',
+                                                accentColor: '#2563eb',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span>ECN (Inward → IVI → IPQC → Programming → Pre-Burn-In → Hipot → Post-Burn-In)</span>
+                                    </label>
+
+                                    {/* Non-ECN Option */}
+                                    <label
+                                        onClick={() => setSelectedRoute('NON_ECN')}
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            padding: '0.5rem 0.85rem',
+                                            borderRadius: '0.5rem',
+                                            fontSize: '0.875rem',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            userSelect: 'none',
+                                            transition: 'all 0.15s ease-in-out',
+                                            backgroundColor: selectedRoute === 'NON_ECN' ? '#eff6ff' : '#f8fafc',
+                                            color: selectedRoute === 'NON_ECN' ? '#1d4ed8' : '#475569',
+                                            border: selectedRoute === 'NON_ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                            boxShadow: selectedRoute === 'NON_ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
+                                        }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="setupProcessRoute"
+                                            checked={selectedRoute === 'NON_ECN'}
+                                            onChange={() => setSelectedRoute('NON_ECN')}
+                                            style={{
+                                                width: '16px',
+                                                height: '16px',
+                                                accentColor: '#2563eb',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <span>Non-ECN (Inward → IVI → Initial Post-Burn-In → Programming → Pre-Burn-In → Hipot → Final Post-Burn-In)</span>
+                                    </label>
                                 </div>
                             </div>
 

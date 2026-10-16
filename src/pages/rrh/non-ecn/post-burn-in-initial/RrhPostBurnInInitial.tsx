@@ -176,6 +176,8 @@ interface ScannedUnitDetails {
     tejas_obd_no?: string;
     duplexer_main?: string;
     duplexer_part_no?: string;
+    duplexer_sno?: string;
+    duplexer_sl_no?: string;
     rrh_unit?: string;
     hipot_status: string;
     hipot_inspected_by?: string;
@@ -238,6 +240,8 @@ interface RemainingMasterItem {
     band: string;
     duplexer_main?: string;
     duplexer_part_no?: string;
+    duplexer_sno?: string;
+    duplexer_sl_no?: string;
     rrh_unit?: string;
     ipqc_status: string;
     ipqc_scanned_at?: string;
@@ -672,6 +676,8 @@ export const RrhPostBurnInInitial: React.FC<RrhPostBurnInInitialProps> = ({ cust
                 tejas_obd_no: data.tejas_obd_no || '—',
                 duplexer_main: data.duplexer_main || '—',
                 duplexer_part_no: data.duplexer_part_no || '—',
+                duplexer_sno: data.duplexer_sno || data.duplexer_sl_no || '—',
+                duplexer_sl_no: data.duplexer_sl_no || data.duplexer_sno || '—',
                 rrh_unit: data.rrh_unit || 'no defect',
                 hipot_status: data.hipot_status || data.ipqc_status || 'COMPLETED',
                 hipot_inspected_by: data.hipot_inspected_by || data.ipqc_inspected_by || 'System Admin',
@@ -1600,6 +1606,10 @@ export const RrhPostBurnInInitial: React.FC<RrhPostBurnInInitialProps> = ({ cust
                                 <span className={styles.scannedInfoLabel}>Duplexer Part No</span>
                                 <span className={styles.scannedInfoValue}>{loadedUnit.duplexer_part_no || '—'}</span>
                             </div>
+                            <div className={styles.scannedInfoItem}>
+                                <span className={styles.scannedInfoLabel}>Duplexer SL.No</span>
+                                <span className={styles.scannedInfoValue}>{loadedUnit.duplexer_sno || loadedUnit.duplexer_sl_no || '—'}</span>
+                            </div>
                         </div>
 
                         {/* Extra Details Row */}
@@ -2294,6 +2304,7 @@ export const RrhPostBurnInInitial: React.FC<RrhPostBurnInInitialProps> = ({ cust
                                 <th>BAND SERIAL NUMBER</th>
                                 <th>DUPLEXER MAIN (IVI)</th>
                                 <th>DUPLEXER PART NO (IVI)</th>
+                                <th>DUPLEXER SL.NO (IVI)</th>
                                 <th>RRH UNIT (IVI)</th>
                                 <th>IVI STATUS</th>
                                 <th>TEJAS DC NO</th>
@@ -2305,13 +2316,13 @@ export const RrhPostBurnInInitial: React.FC<RrhPostBurnInInitialProps> = ({ cust
                         <tbody>
                             {isLoadingRemaining ? (
                                 <tr>
-                                    <td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                    <td colSpan={12} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                                         Loading remaining master data...
                                     </td>
                                 </tr>
                             ) : remainingItems.length === 0 ? (
                                 <tr>
-                                    <td colSpan={11} style={{ textAlign: 'center', padding: '2.5rem', background: '#f0fdf4', color: '#166534', fontWeight: 600 }}>
+                                    <td colSpan={12} style={{ textAlign: 'center', padding: '2.5rem', background: '#f0fdf4', color: '#166534', fontWeight: 600 }}>
                                         ✓ All passed IVI Non-ECN units for this Work Order have been inspected in Initial Post-Burn-in!
                                     </td>
                                 </tr>
@@ -2329,6 +2340,7 @@ export const RrhPostBurnInInitial: React.FC<RrhPostBurnInInitialProps> = ({ cust
                                         </td>
                                         <td>{item.duplexer_main || '—'}</td>
                                         <td style={{ fontFamily: 'monospace' }}>{item.duplexer_part_no || '—'}</td>
+                                        <td style={{ fontFamily: 'monospace' }}>{item.duplexer_sno || item.duplexer_sl_no || '—'}</td>
                                         <td style={{ color: item.rrh_unit && item.rrh_unit !== 'no defect' ? '#2563eb' : undefined, fontWeight: item.rrh_unit && item.rrh_unit !== 'no defect' ? 600 : undefined }}>
                                             {cleanDefectDescription(item.rrh_unit) || 'no defect'}
                                         </td>

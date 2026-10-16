@@ -406,6 +406,13 @@ export const RrhIvi: React.FC = () => {
     const [failedModalRecord, setFailedModalRecord] = useState<InspectionRecord | null>(null);
     const [fixedDefectModalRecord, setFixedDefectModalRecord] = useState<InspectionRecord | null>(null);
 
+    // Upload additional photos modal state
+    const [uploadTargetRecord, setUploadTargetRecord] = useState<InspectionRecord | null>(null);
+    const [additionalPhotos, setAdditionalPhotos] = useState<File[]>([]);
+    const [isUploadingAdditional, setIsUploadingAdditional] = useState(false);
+    const [isCompressingAdditional, setIsCompressingAdditional] = useState(false);
+    const additionalFileInputRef = useRef<HTMLInputElement>(null);
+
     // Recent inspections table (strictly status === 'PASS' only, failed units go to Failed Inspections)
     const passedInspections = useMemo(() => {
         return recentInspections.filter(r => r.status === 'PASS');
@@ -869,14 +876,16 @@ export const RrhIvi: React.FC = () => {
         let woNum = localWo?.work_order_id || woId;
         let woDate = localWo?.work_order_date || localWo?.date || (localWo as any)?.created_at || null;
         let lotQty = Number(localWo?.lot_quantity) || 0;
-        let lotNum = localWo?.lot_number || (localWo as any)?.lot || null;
+        let lotNum = (localWo?.lot_number && localWo.lot_number !== '—' && localWo.lot_number !== '-')
+            ? localWo.lot_number
+            : ((localWo as any)?.lot || (localWo as any)?.bat_lot_no || null);
 
         if (localWo && lotQty > 0) {
             setSelectedWoDetails({
                 workOrderNumber: woNum,
                 dateTime: woDate,
                 lotQuantity: lotQty,
-                lotNumber: lotNum || '—'
+                lotNumber: lotNum && lotNum !== '-' ? lotNum : '—'
             });
             setDetailsLoading(false);
         }
@@ -888,14 +897,22 @@ export const RrhIvi: React.FC = () => {
                 woNum = data.work_order_id || String(data.id);
                 woDate = data.work_order_date || data.date || data.created_at || woDate;
                 lotQty = Number(data.lot_quantity) || lotQty;
+                const fetchedLot = data.lot_number || data.lot || data.batch_no || data.bat_lot_no;
+                if (fetchedLot && fetchedLot !== '—' && fetchedLot !== '-') {
+                    lotNum = fetchedLot;
+                }
             }
 
-            // Check if there is an active session to calculate remaining lot quantity
+            // Check if there is an active session to calculate remaining lot quantity and fallback lot
             let remQty: number | undefined = undefined;
             try {
                 const sessionRes = await apiFetch(`/api/rrh/ivi/sessions?search=${encodeURIComponent(woNum)}&limit=1`);
                 if (sessionRes?.sessions && sessionRes.sessions.length > 0) {
-                    const sid = sessionRes.sessions[0].id;
+                    const sess = sessionRes.sessions[0];
+                    if ((!lotNum || lotNum === '—' || lotNum === '-') && sess.lot_number && sess.lot_number !== '—' && sess.lot_number !== '-') {
+                        lotNum = sess.lot_number;
+                    }
+                    const sid = sess.id;
                     const statsRes = await apiFetch(`/api/rrh/ivi/sessions/${sid}`);
                     if (statsRes?.stats) {
                         remQty = statsRes.stats.pending;
@@ -908,7 +925,7 @@ export const RrhIvi: React.FC = () => {
                 dateTime: woDate,
                 lotQuantity: lotQty,
                 remainingLotQuantity: remQty !== undefined ? remQty : lotQty,
-                lotNumber: lotNum || '—'
+                lotNumber: lotNum && lotNum !== '-' ? lotNum : '—'
             });
         } catch (err: any) {
             if (!localWo) {
@@ -1217,6 +1234,101 @@ export const RrhIvi: React.FC = () => {
         setSelectedImages(prev => prev.filter((_, i) => i !== index));
     };
 
+    // ─── Additional Photos Handlers (Upload After Inspection) ──────────────────
+    const handleSelectAdditionalPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        const MAX_TOTAL = 6;
+        const MAX_BYTES = 600 * 1024;
+        const rawFiles = Array.from(files);
+
+        const oversized = rawFiles.filter(f => f.size > MAX_BYTES);
+        if (oversized.length > 0) {
+            addToast('Upload image under 600 KB', 'warning');
+        }
+
+        const validFiles = rawFiles.filter(f => f.size <= MAX_BYTES);
+        if (validFiles.length === 0) {
+            if (additionalFileInputRef.current) additionalFileInputRef.current.value = '';
+            return;
+        }
+
+        const availableSlots = MAX_TOTAL - additionalPhotos.length;
+        if (availableSlots <= 0) {
+            addToast(`Maximum ${MAX_TOTAL} new photos can be selected at a time.`, 'warning');
+            if (additionalFileInputRef.current) additionalFileInputRef.current.value = '';
+            return;
+        }
+
+        const filesToProcess = validFiles.slice(0, availableSlots);
+        setIsCompressingAdditional(true);
+        try {
+            const compressed = await Promise.all(filesToProcess.map(compressImageFile));
+            setAdditionalPhotos(prev => [...prev, ...compressed].slice(0, MAX_TOTAL));
+            addToast(`${compressed.length} photo(s) selected and compressed.`, 'success');
+        } catch (err) {
+            console.error('Error compressing additional photos:', err);
+            addToast('Error compressing some photos.', 'warning');
+        } finally {
+            setIsCompressingAdditional(false);
+            if (additionalFileInputRef.current) additionalFileInputRef.current.value = '';
+        }
+    };
+
+    const removeAdditionalPhoto = (idx: number) => {
+        setAdditionalPhotos(prev => prev.filter((_, i) => i !== idx));
+    };
+
+    const handleUploadAdditionalPhotos = async () => {
+        if (!uploadTargetRecord || additionalPhotos.length === 0) return;
+        setIsUploadingAdditional(true);
+        try {
+            const formData = new FormData();
+            for (const f of additionalPhotos) {
+                formData.append('images', f);
+            }
+
+            const res = await apiFetch(`/api/rrh/ivi/inspections/${uploadTargetRecord.id}/images`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const updatedUrls = res.image_urls || res.inspection?.image_urls;
+
+            // Immediately update in-memory inspections
+            setRecentInspections(prev => prev.map(item => {
+                if (item.id === uploadTargetRecord.id) {
+                    return {
+                        ...item,
+                        image_urls: updatedUrls
+                    };
+                }
+                return item;
+            }));
+
+            if (failedModalRecord && failedModalRecord.id === uploadTargetRecord.id) {
+                setFailedModalRecord(prev => prev ? {
+                    ...prev,
+                    image_urls: updatedUrls
+                } : null);
+            }
+
+            addToast(res.message || 'Photos added successfully.', 'success');
+            setUploadTargetRecord(null);
+            setAdditionalPhotos([]);
+
+            if (activeSession?.id) {
+                fetchSessionData(activeSession.id);
+            }
+        } catch (err: any) {
+            console.error('Failed to upload photos:', err);
+            addToast(err.message || 'Failed to upload photos.', 'error');
+        } finally {
+            setIsUploadingAdditional(false);
+        }
+    };
+
     // ─── 9. Submit Inspection ────────────────────────────────────────────────
     const handleSubmitInspection = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1342,18 +1454,19 @@ export const RrhIvi: React.FC = () => {
         const woId = customWoId || activeSession?.work_order_id || 'Unknown';
         if (!sId) return;
 
-        const isFailed = statusFilter === 'FAIL';
-        const isScrap = statusFilter === 'SCRAP';
+        const effectiveStatus = statusFilter || 'PASS';
+        const isFailed = effectiveStatus === 'FAIL';
+        const isScrap = effectiveStatus === 'SCRAP';
         setExportingType(isFailed ? 'FAILED' : (isScrap ? 'SCRAP' : 'RECENT'));
         try {
             const token = localStorage.getItem('auth_token');
             const queryParams = new URLSearchParams();
-            if (statusFilter) queryParams.set('status', statusFilter);
+            queryParams.set('status', effectiveStatus);
             if (isFailed && failedInspections.length > 0) {
                 const ids = failedInspections.map(r => r.id).filter(Boolean);
                 if (ids.length > 0) queryParams.set('ids', ids.join(','));
             }
-            const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : '';
+            const queryStr = `?${queryParams.toString()}`;
             const res = await fetch(`/api/rrh/ivi/sessions/${sId}/export${queryStr}`, {
                 headers: {
                     ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -1368,13 +1481,13 @@ export const RrhIvi: React.FC = () => {
             a.href = url;
             a.download = isFailed 
                 ? `RRH_IVI_Failed_Inspections_${woId}.xlsx` 
-                : (isScrap ? `RRH_IVI_Scrap_Inspections_${woId}.xlsx` : `RRH_IVI_Inspections_${woId}.xlsx`);
+                : (isScrap ? `RRH_IVI_Scrap_Inspections_${woId}.xlsx` : `RRH_IVI_Passed_Inspections_${woId}.xlsx`);
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
 
-            addToast(`${isFailed ? 'Failed' : (isScrap ? 'Scrap' : 'Recent')} inspections Excel downloaded successfully.`, 'success');
+            addToast(`${isFailed ? 'Failed' : (isScrap ? 'Scrap' : 'Passed')} inspections Excel downloaded successfully.`, 'success');
         } catch (err: any) {
             addToast(err.message || 'Failed to export Excel.', 'error');
         } finally {
@@ -1495,107 +1608,7 @@ export const RrhIvi: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* --- PROCESS ROUTING / STAGE SELECTION CARD --- */}
-                            <div style={{
-                                backgroundColor: '#ffffff',
-                                borderRadius: '0.75rem',
-                                border: '1px solid #e2e8f0',
-                                padding: '1.25rem',
-                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-                                boxSizing: 'border-box'
-                            }}>
-                                {/* Card Header */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                                    <span style={{ fontSize: '1.2rem' }}>🔀</span>
-                                    <div>
-                                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1e293b' }}>
-                                            RRH Process Routing / Stage Selection
-                                        </h4>
-                                        <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>
-                                            Select the quality check and production stages required for this Work Order. Process steps execute strictly in ascending order.
-                                        </p>
-                                    </div>
-                                </div>
 
-                                {/* Stage Pills / Chips (Strictly Single Selection at a time) */}
-                                <div style={{
-                                    display: 'flex',
-                                    flexWrap: 'wrap',
-                                    gap: '0.75rem',
-                                    marginTop: '0.75rem',
-                                    alignItems: 'center'
-                                }}>
-                                    {/* ECN Option */}
-                                    <label
-                                        onClick={() => setSelectedRoute('ECN')}
-                                        style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '0.5rem',
-                                            padding: '0.5rem 0.85rem',
-                                            borderRadius: '0.5rem',
-                                            fontSize: '0.875rem',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                            userSelect: 'none',
-                                            transition: 'all 0.15s ease-in-out',
-                                            backgroundColor: selectedRoute === 'ECN' ? '#eff6ff' : '#f8fafc',
-                                            color: selectedRoute === 'ECN' ? '#1d4ed8' : '#475569',
-                                            border: selectedRoute === 'ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                                            boxShadow: selectedRoute === 'ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
-                                        }}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="setupProcessRoute"
-                                            checked={selectedRoute === 'ECN'}
-                                            onChange={() => setSelectedRoute('ECN')}
-                                            style={{
-                                                width: '16px',
-                                                height: '16px',
-                                                accentColor: '#2563eb',
-                                                cursor: 'pointer'
-                                            }}
-                                        />
-                                        <span>ECN (Inward → IVI → IPQC → Programming → Pre-Burn-In → Hipot → Post-Burn-In)</span>
-                                    </label>
-
-                                    {/* Non-ECN Option */}
-                                    <label
-                                        onClick={() => setSelectedRoute('NON_ECN')}
-                                        style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '0.5rem',
-                                            padding: '0.5rem 0.85rem',
-                                            borderRadius: '0.5rem',
-                                            fontSize: '0.875rem',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                            userSelect: 'none',
-                                            transition: 'all 0.15s ease-in-out',
-                                            backgroundColor: selectedRoute === 'NON_ECN' ? '#eff6ff' : '#f8fafc',
-                                            color: selectedRoute === 'NON_ECN' ? '#1d4ed8' : '#475569',
-                                            border: selectedRoute === 'NON_ECN' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                                            boxShadow: selectedRoute === 'NON_ECN' ? '0 1px 2px rgba(37, 99, 235, 0.12)' : 'none'
-                                        }}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="setupProcessRoute"
-                                            checked={selectedRoute === 'NON_ECN'}
-                                            onChange={() => setSelectedRoute('NON_ECN')}
-                                            style={{
-                                                width: '16px',
-                                                height: '16px',
-                                                accentColor: '#2563eb',
-                                                cursor: 'pointer'
-                                            }}
-                                        />
-                                        <span>Non-ECN (Inward → IVI → Initial Post-Burn-In → Programming → Pre-Burn-In → Hipot → Final Post-Burn-In)</span>
-                                    </label>
-                                </div>
-                            </div>
 
                             <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
                                 <button
@@ -1704,7 +1717,7 @@ export const RrhIvi: React.FC = () => {
                                                         <button
                                                             className={styles.secondaryButton}
                                                             style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                            onClick={() => handleExportExcel(session.id, session.work_order_id)}
+                                                            onClick={() => handleExportExcel(session.id, session.work_order_id, 'PASS')}
                                                             title="Download scanned inspections Excel"
                                                         >
                                                             Download Excel
@@ -1846,7 +1859,7 @@ export const RrhIvi: React.FC = () => {
                                                 <button
                                                     className={styles.secondaryButton}
                                                     style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                    onClick={() => handleExportExcel(session.id, session.work_order_id)}
+                                                    onClick={() => handleExportExcel(session.id, session.work_order_id, 'PASS')}
                                                     title="Download scanned inspections Excel"
                                                 >
                                                     Download Excel
@@ -2667,6 +2680,31 @@ export const RrhIvi: React.FC = () => {
                                                     </button>
                                                     <button
                                                         type="button"
+                                                        className={styles.secondaryButton}
+                                                        style={{
+                                                            padding: '0.35rem 0.65rem',
+                                                            fontSize: '0.8rem',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            whiteSpace: 'nowrap',
+                                                            flexShrink: 0,
+                                                            backgroundColor: '#fef2f2',
+                                                            color: '#b91c1c',
+                                                            borderColor: '#fca5a5',
+                                                            fontWeight: 600,
+                                                            cursor: 'pointer'
+                                                        }}
+                                                        onClick={() => {
+                                                            setUploadTargetRecord(row);
+                                                            setAdditionalPhotos([]);
+                                                        }}
+                                                        title="Add photos to this failed inspection"
+                                                    >
+                                                        📷 Add Photos
+                                                    </button>
+                                                    <button
+                                                        type="button"
                                                         className={styles.button}
                                                         style={{
                                                             padding: '0.35rem 0.75rem',
@@ -2971,6 +3009,7 @@ export const RrhIvi: React.FC = () => {
                                         <th>Remarks</th>
                                         <th>Scanned By</th>
                                         <th>Date & Time</th>
+                                        <th style={{ textAlign: 'center', minWidth: '120px', whiteSpace: 'nowrap' }}>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -3095,11 +3134,36 @@ export const RrhIvi: React.FC = () => {
                                             <td style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'nowrap' }}>
                                                 {formatTimestamp(row.scanned_at)}
                                             </td>
+                                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                                <button
+                                                    type="button"
+                                                    className={styles.secondaryButton}
+                                                    style={{
+                                                        padding: '0.25rem 0.65rem',
+                                                        fontSize: '0.8rem',
+                                                        fontWeight: 600,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '5px',
+                                                        backgroundColor: '#f0fdf4',
+                                                        color: '#15803d',
+                                                        borderColor: '#bbf7d0',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                    onClick={() => {
+                                                        setUploadTargetRecord(row);
+                                                        setAdditionalPhotos([]);
+                                                    }}
+                                                    title="Add photos to this inspection record"
+                                                >
+                                                    📷 Add Photos
+                                                </button>
+                                            </td>
                                         </tr>
                                     ))}
                                     {filteredRecentInspections.length === 0 && (
                                         <tr>
-                                            <td colSpan={16} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                            <td colSpan={17} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                                                 {inspectionSearch ? 'No matching inspections found for this search.' : 'No passed inspections recorded yet in this IVI session.'}
                                             </td>
                                         </tr>
@@ -3679,15 +3743,57 @@ export const RrhIvi: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Inspection Photos (if attached) */}
-                            {(() => {
-                                const imgs = parseImages(failedModalRecord.image_urls);
-                                if (imgs.length === 0) return null;
-                                return (
-                                    <div>
-                                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>
-                                            Defect Photos ({imgs.length})
-                                        </h4>
+                            {/* Inspection Photos (if attached or add new) */}
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '8px' }}>
+                                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>
+                                        Defect Photos ({parseImages(failedModalRecord.image_urls).length})
+                                    </h4>
+                                    <button
+                                        type="button"
+                                        className={styles.secondaryButton}
+                                        style={{
+                                            padding: '0.25rem 0.65rem',
+                                            fontSize: '0.8rem',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '5px',
+                                            backgroundColor: '#fef2f2',
+                                            color: '#b91c1c',
+                                            borderColor: '#fca5a5',
+                                            fontWeight: 600,
+                                            cursor: 'pointer'
+                                        }}
+                                        onClick={() => {
+                                            setUploadTargetRecord(failedModalRecord);
+                                            setAdditionalPhotos([]);
+                                        }}
+                                        title="Attach additional defect photos"
+                                    >
+                                        📷 Add Additional Photos
+                                    </button>
+                                </div>
+                                {(() => {
+                                    const imgs = parseImages(failedModalRecord.image_urls);
+                                    if (imgs.length === 0) {
+                                        return (
+                                            <div style={{ padding: '0.85rem', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span>No defect photos attached yet.</span>
+                                                <button
+                                                    type="button"
+                                                    className={styles.secondaryButton}
+                                                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.8rem', color: '#b91c1c', borderColor: '#fca5a5', fontWeight: 600 }}
+                                                    onClick={() => {
+                                                        setUploadTargetRecord(failedModalRecord);
+                                                        setAdditionalPhotos([]);
+                                                    }}
+                                                >
+                                                    + Attach Photo Now
+                                                </button>
+                                            </div>
+                                        );
+                                    }
+                                    return (
                                         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                             {imgs.map((img, i) => (
                                                 <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
@@ -3711,9 +3817,9 @@ export const RrhIvi: React.FC = () => {
                                                 </div>
                                             ))}
                                         </div>
-                                    </div>
-                                );
-                            })()}
+                                    );
+                                })()}
+                            </div>
                         </div>
 
                         {/* Modal Footer */}
@@ -3941,6 +4047,237 @@ export const RrhIvi: React.FC = () => {
                                 style={{ padding: '0.5rem 1.25rem' }}
                             >
                                 Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── MODAL: ADD / ATTACH ADDITIONAL PHOTOS ──────────────── */}
+            {uploadTargetRecord && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                    backdropFilter: 'blur(4px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 100000,
+                    padding: '1.5rem'
+                }} onClick={() => {
+                    if (!isUploadingAdditional && !isCompressingAdditional) {
+                        setUploadTargetRecord(null);
+                        setAdditionalPhotos([]);
+                    }
+                }}>
+                    <div style={{
+                        background: '#ffffff',
+                        borderRadius: '12px',
+                        maxWidth: '650px',
+                        width: '100%',
+                        maxHeight: '90vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                        border: '1px solid #e2e8f0'
+                    }} onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div style={{
+                            padding: '1.25rem 1.5rem',
+                            borderBottom: '1px solid #e2e8f0',
+                            backgroundColor: uploadTargetRecord.status === 'FAIL' ? '#fef2f2' : '#f0fdf4',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.15rem', color: uploadTargetRecord.status === 'FAIL' ? '#991b1b' : '#166534', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    📷 Add Photos — S.No: {uploadTargetRecord.sl_no || '—'}
+                                </h3>
+                                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: uploadTargetRecord.status === 'FAIL' ? '#7f1d1d' : '#14532d', fontFamily: 'monospace' }}>
+                                    Band Serial No: <strong>{uploadTargetRecord.band_serial_no || uploadTargetRecord.serial_number}</strong> ({uploadTargetRecord.status === 'FAIL' ? 'Failed Inspection' : 'Passed Inspection'})
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (!isUploadingAdditional && !isCompressingAdditional) {
+                                        setUploadTargetRecord(null);
+                                        setAdditionalPhotos([]);
+                                    }
+                                }}
+                                disabled={isUploadingAdditional || isCompressingAdditional}
+                                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#64748b', padding: '0.25rem', lineHeight: 1 }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div style={{ padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Existing Photos Summary */}
+                            {(() => {
+                                const existingImgs = parseImages(uploadTargetRecord.image_urls);
+                                return (
+                                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.85rem 1rem' }}>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
+                                            Current Attached Photos ({existingImgs.length}):
+                                        </div>
+                                        {existingImgs.length === 0 ? (
+                                            <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic' }}>No photos currently attached to this unit.</span>
+                                        ) : (
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                                                {existingImgs.map((img, i) => (
+                                                    <img
+                                                        key={i}
+                                                        src={img}
+                                                        alt={`Existing photo ${i + 1}`}
+                                                        style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Choose New Photos Section */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#1e293b', marginBottom: '0.4rem' }}>
+                                    Select Additional Photos (Max 6 photos, under 600 KB each):
+                                </label>
+                                <input
+                                    ref={additionalFileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    disabled={isCompressingAdditional || isUploadingAdditional || additionalPhotos.length >= 6}
+                                    onChange={handleSelectAdditionalPhotos}
+                                    style={{ display: 'none' }}
+                                    id="additional-photo-file-input"
+                                />
+                                <div
+                                    onClick={() => {
+                                        if (!isCompressingAdditional && !isUploadingAdditional && additionalPhotos.length < 6) {
+                                            additionalFileInputRef.current?.click();
+                                        }
+                                    }}
+                                    style={{
+                                        border: '2px dashed #93c5fd',
+                                        backgroundColor: '#eff6ff',
+                                        borderRadius: '8px',
+                                        padding: '1.25rem',
+                                        textAlign: 'center',
+                                        cursor: (isCompressingAdditional || isUploadingAdditional || additionalPhotos.length >= 6) ? 'not-allowed' : 'pointer',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                >
+                                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📸</div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1d4ed8' }}>
+                                        Click to choose photo(s) from device
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
+                                        Accepts JPG, PNG, WEBP (under 600 KB, auto-compressed)
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Compression Indicator */}
+                            {isCompressingAdditional && (
+                                <div style={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span>⏳</span> Compressing selected photos to under 600 KB...
+                                </div>
+                            )}
+
+                            {/* Selected Photos Preview List */}
+                            {additionalPhotos.length > 0 && (
+                                <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.5rem' }}>
+                                        Photos Ready to Upload ({additionalPhotos.length}):
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        {additionalPhotos.map((file, idx) => (
+                                            <div key={idx} style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                backgroundColor: '#f1f5f9',
+                                                padding: '0.4rem 0.75rem',
+                                                borderRadius: '6px',
+                                                border: '1px solid #e2e8f0',
+                                                fontSize: '0.85rem'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                                                    <span style={{ fontWeight: 600, color: '#2563eb' }}>Photo {idx + 1}:</span>
+                                                    <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '320px' }}>{file.name}</span>
+                                                    <span style={{ color: '#64748b', fontSize: '0.75rem' }}>({Math.round(file.size / 1024)} KB)</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeAdditionalPhoto(idx)}
+                                                    disabled={isUploadingAdditional}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        color: '#dc2626',
+                                                        fontWeight: 700,
+                                                        fontSize: '1.1rem',
+                                                        cursor: isUploadingAdditional ? 'not-allowed' : 'pointer',
+                                                        padding: '0 4px',
+                                                        lineHeight: 1
+                                                    }}
+                                                    title="Remove"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{
+                            padding: '1rem 1.5rem',
+                            borderTop: '1px solid #e2e8f0',
+                            backgroundColor: '#f8fafc',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <button
+                                type="button"
+                                className={styles.secondaryButton}
+                                onClick={() => {
+                                    setUploadTargetRecord(null);
+                                    setAdditionalPhotos([]);
+                                }}
+                                disabled={isUploadingAdditional || isCompressingAdditional}
+                                style={{ padding: '0.5rem 1.25rem' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className={styles.button}
+                                onClick={handleUploadAdditionalPhotos}
+                                disabled={additionalPhotos.length === 0 || isUploadingAdditional || isCompressingAdditional}
+                                style={{
+                                    padding: '0.5rem 1.5rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    backgroundColor: additionalPhotos.length === 0 ? '#94a3b8' : '#2563eb',
+                                    borderColor: additionalPhotos.length === 0 ? '#94a3b8' : '#1d4ed8'
+                                }}
+                            >
+                                {isUploadingAdditional ? 'Uploading Photos...' : `Upload ${additionalPhotos.length > 0 ? `(${additionalPhotos.length})` : ''} Photo(s)`}
                             </button>
                         </div>
                     </div>

@@ -966,7 +966,7 @@ export const RrhIpqc: React.FC = () => {
         }
         try {
             const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
-            const res = await fetch(`/api/rrh/ecn/ipqc/sessions/${session.id}/export`, {
+            const res = await fetch(`/api/rrh/ecn/ipqc/sessions/${session.id}/export?type=PASS`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
 
@@ -983,13 +983,13 @@ export const RrhIpqc: React.FC = () => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `RRH_IPQC_Session_Report_${session.work_order_id || session.id}.xlsx`;
+            a.download = `RRH_IPQC_Passed_Inspections_${session.work_order_id || session.id}.xlsx`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
 
-            addToast('IPQC session report downloaded successfully.', 'success');
+            addToast('IPQC passed inspections downloaded successfully.', 'success');
         } catch (err: any) {
             addToast(err.message || 'Failed to export session report.', 'error');
         }
@@ -1001,7 +1001,7 @@ export const RrhIpqc: React.FC = () => {
             const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
             const urlPath = type === 'FAIL'
                 ? `/api/rrh/ecn/ipqc/sessions/${activeSession.id}/export?type=FAIL`
-                : `/api/rrh/ecn/ipqc/sessions/${activeSession.id}/export`;
+                : `/api/rrh/ecn/ipqc/sessions/${activeSession.id}/export?type=PASS`;
             const res = await fetch(urlPath, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {}
             });

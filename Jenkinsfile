@@ -1,4 +1,4 @@
-
+```groovy
 pipeline {
     agent {
         label 'docker'
@@ -6,16 +6,16 @@ pipeline {
 
     environment {
         DOCKERHUB_USER = 'ankithv007'
-        IMAGE_NAME = 'ankithv007/sfcs-unit2-frontend'
+        IMAGE_NAME     = 'ankithv007/sfcs-unit2-frontend'
         CONTAINER_NAME = 'sfcs-unit2-frontend'
-        APP_PORT = '8081'
+        APP_PORT       = '8081'
     }
 
     options {
         skipDefaultCheckout(true)
         timestamps()
         disableConcurrentBuilds()
-        timeout(time: 20, unit: 'MINUTES')
+        timeout(time: 30, unit: 'MINUTES')
     }
 
     stages {
@@ -24,7 +24,30 @@ pipeline {
             steps {
                 checkout scm
 
-                sh 'git log -1 --oneline'
+                sh '''
+                    set -eu
+                    echo "=== Latest Commit ==="
+                    git log -1 --oneline
+                '''
+            }
+        }
+
+        stage('Check Build Environment') {
+            steps {
+                sh '''
+                    set -eu
+
+                    echo "=== Agent Information ==="
+                    cat /etc/os-release || true
+
+                    echo "=== Docker ==="
+                    docker --version
+
+                    echo "=== Docker Access ==="
+                    docker info >/dev/null
+
+                    echo "Docker is accessible from the Jenkins agent."
+                '''
             }
         }
 
@@ -32,8 +55,26 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    npm ci
-                    npm run build
+
+                    docker run --rm \
+                        --user "$(id -u):$(id -g)" \
+                        -v "$WORKSPACE:/app" \
+                        -w /app \
+                        -e HOME=/tmp \
+                        node:22-alpine \
+                        sh -ec '
+                            echo "=== Node.js Version ==="
+                            node --version
+
+                            echo "=== npm Version ==="
+                            npm --version
+
+                            echo "=== Install Dependencies ==="
+                            npm ci
+
+                            echo "=== Build Frontend ==="
+                            npm run build
+                        '
                 '''
             }
         }
@@ -47,8 +88,11 @@ pipeline {
                 sh '''
                     set -eu
 
+                    echo "Building image: $IMAGE_NAME:$IMAGE_TAG"
+
                     docker build \
-                        -t "$IMAGE_NAME:$IMAGE_TAG" .
+                        -t "$IMAGE_NAME:$IMAGE_TAG" \
+                        .
                 '''
             }
         }
@@ -61,23 +105,19 @@ pipeline {
                         variable: 'DOCKERHUB_TOKEN'
                     )
                 ]) {
-                    script {
-                        try {
-                            sh '''
-                                set -eu
-                                set +x
+                    sh '''
+                        set -eu
+                        set +x
 
-                                printf '%s' "$DOCKERHUB_TOKEN" |
-                                    docker login \
-                                        --username "$DOCKERHUB_USER" \
-                                        --password-stdin
+                        echo "$DOCKERHUB_TOKEN" |
+                            docker login \
+                                --username "$DOCKERHUB_USER" \
+                                --password-stdin
 
-                                docker push "$IMAGE_NAME:$IMAGE_TAG"
-                            '''
-                        } finally {
-                            sh 'docker logout || true'
-                        }
-                    }
+                        docker push "$IMAGE_NAME:$IMAGE_TAG"
+
+                        docker logout
+                    '''
                 }
             }
         }
@@ -87,8 +127,12 @@ pipeline {
                 sh '''
                     set -eu
 
+                    echo "Pulling image: $IMAGE_NAME:$IMAGE_TAG"
+
                     docker pull "$IMAGE_NAME:$IMAGE_TAG"
 
+                    # Remove the existing container only after the new
+                    # image has been pulled successfully.
                     docker rm -f "$CONTAINER_NAME" || true
 
                     docker run -d \
@@ -97,18 +141,21 @@ pipeline {
                         -p "127.0.0.1:$APP_PORT:80" \
                         "$IMAGE_NAME:$IMAGE_TAG"
 
-                    sleep 3
+                    sleep 5
 
                     if ! docker inspect \
                         --format='{{.State.Running}}' \
                         "$CONTAINER_NAME" | grep -qx true; then
+
+                        echo "ERROR: Frontend container failed to start."
                         docker logs "$CONTAINER_NAME" || true
-                        echo "Frontend container failed to start"
                         exit 1
                     fi
 
-                    echo "Frontend deployed successfully"
+                    echo "=== Running Frontend Container ==="
                     docker ps --filter "name=$CONTAINER_NAME"
+
+                    echo "Frontend deployment completed."
                 '''
             }
         }
@@ -116,11 +163,11 @@ pipeline {
 
     post {
         success {
-            echo "SFCS frontend deployed successfully: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+            echo "Frontend deployed successfully: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
         }
 
         failure {
-            echo 'SFCS frontend pipeline failed. Check the stage logs.'
+            echo 'Pipeline failed. Check the stage logs before retrying.'
         }
 
         always {
@@ -128,3 +175,4 @@ pipeline {
         }
     }
 }
+```

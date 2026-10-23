@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_USER = 'ankithv007'
+        DOCKERHUB_USER = 'ankithbv007'
         IMAGE_NAME     = 'ankithv007/sfcs-unit2-frontend'
         CONTAINER_NAME = 'sfcs-unit2-frontend'
         APP_PORT       = '8081'
@@ -97,9 +97,10 @@ pipeline {
         stage('Push to Docker Hub') {
             steps {
                 withCredentials([
-                    string(
+                    usernamePassword(
                         credentialsId: 'dockerhub-token',
-                        variable: 'DOCKERHUB_TOKEN'
+                        usernameVariable: 'DOCKERHUB_USER',
+                        passwordVariable: 'DOCKERHUB_TOKEN'
                     )
                 ]) {
                     sh '''

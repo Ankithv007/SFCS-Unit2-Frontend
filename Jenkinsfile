@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_USER = 'ankithbv007'
-        IMAGE_NAME     = 'ankithv007/sfcs-unit2-frontend'
+        IMAGE_NAME     = 'ankithbv007/sfcs-unit2-frontend'
         CONTAINER_NAME = 'sfcs-unit2-frontend'
         APP_PORT       = '8081'
     }

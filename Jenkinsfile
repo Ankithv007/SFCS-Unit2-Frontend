@@ -23,7 +23,7 @@ pipeline {
         COMPOSE_SERVICE = 'gateway'
         TAG_KEY = 'FRONTEND_TAG'
 
-        // Temporary smoke-test container
+        // Jenkins smoke-test port
         SMOKE_PORT = '18081'
     }
 
@@ -39,7 +39,8 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    env.GIT_COMMIT_SHORT = env.GIT_COMMIT_FULL.take(12)
+                    env.GIT_COMMIT_SHORT =
+                        env.GIT_COMMIT_FULL.take(12)
                 }
 
                 sh '''
@@ -56,6 +57,7 @@ pipeline {
                     test -f nginx.conf
 
                     git diff --quiet
+
                     echo "Source files verified."
                 '''
             }
@@ -65,6 +67,8 @@ pipeline {
             steps {
                 sh '''
                     set -eu
+
+                    echo "Checking Docker..."
 
                     docker version
                     docker info >/dev/null
@@ -84,7 +88,7 @@ pipeline {
                 sh '''
                     set -eu
 
-                    echo "Installing dependencies and building React/Vite..."
+                    echo "Building React/Vite frontend..."
 
                     docker run --rm \
                         -v "$WORKSPACE:/app" \
@@ -104,14 +108,19 @@ pipeline {
                 sh '''
                     set -eu
 
-                    echo "Building production image for commit:"
-                    echo "$GIT_COMMIT_FULL"
+                    IMAGE="$IMAGE_REPO:$GIT_COMMIT_FULL"
+
+                    echo "Building image:"
+                    echo "$IMAGE"
 
                     BUILD_CONTEXT="$(mktemp -d)"
 
                     trap 'rm -rf "$BUILD_CONTEXT"' EXIT
 
-                    cp -a dist/. "$BUILD_CONTEXT/"
+                    # Keep website files separate from Nginx configuration.
+                    mkdir -p "$BUILD_CONTEXT/site"
+
+                    cp -a dist/. "$BUILD_CONTEXT/site/"
                     cp nginx.conf "$BUILD_CONTEXT/nginx.conf"
 
                     docker build \
@@ -119,12 +128,15 @@ pipeline {
                         --label "org.opencontainers.image.title=SFCS-Frontend" \
                         --label "org.opencontainers.image.revision=$GIT_COMMIT_FULL" \
                         --label "org.opencontainers.image.source=https://github.com/Ankithv007/SFCS-Unit2-Frontend" \
-                        --tag "$IMAGE_REPO:$GIT_COMMIT_FULL" \
+                        --tag "$IMAGE" \
                         -f- "$BUILD_CONTEXT" <<'DOCKERFILE'
 FROM nginx:alpine
 
-COPY nginx.conf /etc/nginx/nginx.conf
-COPY . /usr/share/nginx/html/
+# nginx.conf contains a server block, not the complete nginx.conf structure.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy only the production frontend files.
+COPY site/ /usr/share/nginx/html/
 
 EXPOSE 80
 
@@ -135,8 +147,8 @@ HEALTHCHECK --interval=30s --timeout=5s \
 CMD ["nginx", "-g", "daemon off;"]
 DOCKERFILE
 
-                    echo "Image built:"
-                    echo "$IMAGE_REPO:$GIT_COMMIT_FULL"
+                    echo "Image built successfully:"
+                    echo "$IMAGE"
                 '''
             }
         }
@@ -189,6 +201,7 @@ DOCKERFILE
                         if curl -fsS \
                             "http://127.0.0.1:$SMOKE_PORT/" \
                             -o /dev/null; then
+
                             HEALTHY=1
                             break
                         fi
@@ -199,7 +212,8 @@ DOCKERFILE
 
                     if [ "$HEALTHY" -ne 1 ]; then
                         docker logs "$SMOKE_NAME" || true
-                        echo "ERROR: Docker image smoke test failed."
+
+                        echo "ERROR: Docker image validation failed."
                         exit 1
                     fi
 
@@ -232,11 +246,12 @@ DOCKERFILE
                             --username "$DH_USER" \
                             --password-stdin
 
-                        echo "Pushing immutable image: $IMAGE"
+                        echo "Pushing commit-tagged image:"
+                        echo "$IMAGE"
 
                         docker push "$IMAGE"
 
-                        echo "Docker Hub push successful."
+                        echo "Image pushed successfully."
                     '''
                 }
             }
@@ -247,7 +262,7 @@ DOCKERFILE
                 script {
                     if (env.APP_HOST == 'REPLACE_WITH_YOUR_SERVER_IP') {
                         error(
-                            'Configure APP_HOST with the actual application server IP or hostname.'
+                            'Set APP_HOST to the actual application server IP or hostname.'
                         )
                     }
                 }
@@ -262,8 +277,10 @@ DOCKERFILE
                     sh '''
                         set -eu
 
-                        echo "Deploying to application server..."
-                        echo "Host: $APP_HOST"
+                        echo "======================================"
+                        echo "Production Deployment"
+                        echo "======================================"
+                        echo "Server: $APP_HOST"
                         echo "Directory: $APP_DIR"
                         echo "Service: $COMPOSE_SERVICE"
                         echo "Image: $IMAGE_REPO:$GIT_COMMIT_FULL"
@@ -279,62 +296,63 @@ DOCKERFILE
                             "bash -s -- '$IMAGE_REPO' '$GIT_COMMIT_FULL' '$APP_DIR' '$COMPOSE_SERVICE' '$TAG_KEY'" \
                             <<'REMOTE_SCRIPT'
 
-                        set -Eeuo pipefail
+set -Eeuo pipefail
 
-                        IMAGE_REPO="$1"
-                        NEW_TAG="$2"
-                        APP_DIR="$3"
-                        SERVICE="$4"
-                        TAG_KEY="$5"
+IMAGE_REPO="$1"
+NEW_TAG="$2"
+APP_DIR="$3"
+SERVICE="$4"
+TAG_KEY="$5"
 
-                        cd "$APP_DIR"
+cd "$APP_DIR"
 
-                        ENV_FILE="$APP_DIR/.env"
-                        LOCK_FILE="$APP_DIR/.deploy.lock"
+ENV_FILE="$APP_DIR/.env"
+COMPOSE_FILE="$APP_DIR/docker-compose.yml"
+LOCK_FILE="$APP_DIR/.deploy.lock"
 
-                        test -f "$ENV_FILE"
-                        test -f "$APP_DIR/docker-compose.yml"
+test -f "$ENV_FILE"
+test -f "$COMPOSE_FILE"
 
-                        # The deployment lock must be shared by every
-                        # pipeline that changes the production application.
-                        exec 9>"$LOCK_FILE"
+# Serialize production deployments across jobs that use this lock.
+exec 9>"$LOCK_FILE"
 
-                        if ! flock -w 300 9; then
-                            echo "ERROR: Could not acquire deployment lock."
-                            exit 1
-                        fi
+if ! flock -w 300 9; then
+    echo "ERROR: Could not acquire deployment lock."
+    exit 1
+fi
 
-                        echo "Deployment lock acquired."
+echo "Deployment lock acquired."
 
-                        # Validate the commit-based tag.
-                        if ! [[ "$NEW_TAG" =~ ^[0-9a-f]{40}$ ]]; then
-                            echo "ERROR: Invalid full Git commit SHA."
-                            exit 1
-                        fi
+# Require a full Git commit SHA.
+if ! [[ "$NEW_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "ERROR: Invalid Git commit SHA."
+    exit 1
+fi
 
-                        if ! grep -q "^${TAG_KEY}=" "$ENV_FILE"; then
-                            echo "ERROR: $TAG_KEY is missing from .env."
-                            exit 1
-                        fi
+# Verify that the tag exists in the environment file.
+if ! grep -q "^${TAG_KEY}=" "$ENV_FILE"; then
+    echo "ERROR: $TAG_KEY is missing from .env."
+    exit 1
+fi
 
-                        OLD_TAG="$(
-                            grep "^${TAG_KEY}=" "$ENV_FILE" |
-                            tail -n 1 |
-                            cut -d '=' -f 2-
-                        )"
+OLD_TAG="$(
+    grep "^${TAG_KEY}=" "$ENV_FILE" |
+    tail -n 1 |
+    cut -d '=' -f 2-
+)"
 
-                        if [ -z "$OLD_TAG" ]; then
-                            echo "ERROR: Existing production tag is empty."
-                            exit 1
-                        fi
+if [ -z "$OLD_TAG" ]; then
+    echo "ERROR: Previous frontend tag is empty."
+    exit 1
+fi
 
-                        echo "Previous frontend tag: $OLD_TAG"
-                        echo "New frontend tag: $NEW_TAG"
+echo "Previous image tag: $OLD_TAG"
+echo "New image tag: $NEW_TAG"
 
-                        # Update only the requested tag while preserving
-                        # all other environment variables and secrets.
-                        update_tag() {
-                            python3 - "$ENV_FILE" "$TAG_KEY" "$1" <<'PY'
+# Atomically update only the requested .env variable.
+# All unrelated environment variables and secrets are preserved.
+update_tag() {
+    python3 - "$ENV_FILE" "$TAG_KEY" "$1" <<'PY'
 import os
 import sys
 import tempfile
@@ -384,98 +402,128 @@ except Exception:
         pass
     raise
 PY
-                        }
+}
 
-                        # Validate Compose, pull the exact image, recreate
-                        # only the gateway, and verify its HTTP response.
-                        deploy_new() (
-                            set -Eeuo pipefail
+# Deploy the new image. Every critical command is checked explicitly.
+deploy_new() {
+    echo "Updating production image tag..."
 
-                            update_tag "$NEW_TAG"
+    if ! update_tag "$NEW_TAG"; then
+        echo "ERROR: Could not update frontend tag."
+        return 1
+    fi
 
-                            docker compose config --quiet
+    if ! docker compose -f "$COMPOSE_FILE" config --quiet; then
+        echo "ERROR: Docker Compose configuration is invalid."
+        return 1
+    fi
 
-                            docker compose pull "$SERVICE"
+    echo "Pulling the exact commit-tagged image..."
 
-                            docker compose up -d \
-                                --no-deps \
-                                "$SERVICE"
+    if ! docker compose -f "$COMPOSE_FILE" pull "$SERVICE"; then
+        echo "ERROR: Failed to pull the new image."
+        return 1
+    fi
 
-                            HEALTHY=0
+    echo "Recreating only the gateway service..."
 
-                            for attempt in $(seq 1 30); do
-                                if docker compose ps --status running \
-                                    --services "$SERVICE" |
-                                    grep -Fxq "$SERVICE"; then
+    if ! docker compose -f "$COMPOSE_FILE" up -d --no-deps "$SERVICE"; then
+        echo "ERROR: Gateway deployment failed."
+        return 1
+    fi
 
-                                    if curl --fail --silent --show-error \
-                                        --max-time 5 \
-                                        http://127.0.0.1/ \
-                                        -o /dev/null; then
+    echo "Waiting for production health checks..."
 
-                                        HEALTHY=1
-                                        break
-                                    fi
-                                fi
+    for attempt in $(seq 1 30); do
+        if docker compose -f "$COMPOSE_FILE" ps \
+            --status running --services "$SERVICE" |
+            grep -Fxq "$SERVICE"; then
 
-                                echo "Production health check attempt $attempt failed."
-                                sleep 3
-                            done
+            if curl --fail --silent \
+                --max-time 5 \
+                http://127.0.0.1/ \
+                -o /dev/null; then
 
-                            if [ "$HEALTHY" -ne 1 ]; then
-                                echo "ERROR: New deployment failed health checks."
-                                docker compose logs --tail=100 "$SERVICE" || true
-                                exit 1
-                            fi
-                        )
+                echo "Production HTTP health check passed."
+                return 0
+            fi
+        fi
 
-                        rollback() {
-                            echo "Attempting frontend rollback to $OLD_TAG..."
+        echo "Health check attempt $attempt failed."
+        sleep 3
+    done
 
-                            if update_tag "$OLD_TAG" &&
-                               docker compose config --quiet &&
-                               docker compose pull "$SERVICE" &&
-                               docker compose up -d --no-deps "$SERVICE"; then
+    echo "ERROR: New gateway failed its health checks."
+    docker compose -f "$COMPOSE_FILE" logs --tail=100 "$SERVICE" || true
 
-                                for attempt in $(seq 1 20); do
-                                    if curl --fail --silent \
-                                        --max-time 5 \
-                                        http://127.0.0.1/ \
-                                        -o /dev/null; then
+    return 1
+}
 
-                                        echo "Rollback successful."
-                                        return 0
-                                    fi
+# Restore the previous version if the new deployment fails.
+rollback() {
+    echo "Attempting rollback to image tag: $OLD_TAG"
 
-                                    sleep 3
-                                done
-                            fi
+    if ! update_tag "$OLD_TAG"; then
+        echo "CRITICAL: Failed to restore the previous tag."
+        return 1
+    fi
 
-                            echo "CRITICAL: Automatic rollback could not be verified."
-                            docker compose logs --tail=100 "$SERVICE" || true
-                            return 1
-                        }
+    if ! docker compose -f "$COMPOSE_FILE" config --quiet; then
+        echo "CRITICAL: Compose validation failed during rollback."
+        return 1
+    fi
 
-                        if deploy_new; then
-                            echo "======================================"
-                            echo "FRONTEND DEPLOYMENT SUCCESSFUL"
-                            echo "======================================"
-                            echo "Image: $IMAGE_REPO:$NEW_TAG"
-                            echo "Service: $SERVICE"
-                            echo "Commit: $NEW_TAG"
-                        else
-                            echo "Deployment failed."
+    if ! docker compose -f "$COMPOSE_FILE" pull "$SERVICE"; then
+        echo "WARNING: Could not pull the previous image."
+        echo "Attempting to start the previously configured image."
+        # Continue to Compose up; the previous image may already be local.
+    fi
 
-                            if rollback; then
-                                echo "Previous frontend version restored."
-                            else
-                                echo "CRITICAL: Manual intervention may be required."
-                            fi
+    if ! docker compose -f "$COMPOSE_FILE" up -d --no-deps "$SERVICE"; then
+        echo "CRITICAL: Failed to restore the previous gateway."
+        return 1
+    fi
 
-                            exit 1
-                        fi
+    for attempt in $(seq 1 20); do
+        if curl --fail --silent \
+            --max-time 5 \
+            http://127.0.0.1/ \
+            -o /dev/null; then
 
-                        REMOTE_SCRIPT
+            echo "Rollback successful."
+            return 0
+        fi
+
+        sleep 3
+    done
+
+    echo "CRITICAL: Rollback health check failed."
+    docker compose -f "$COMPOSE_FILE" logs --tail=100 "$SERVICE" || true
+
+    return 1
+}
+
+if deploy_new; then
+    echo "======================================"
+    echo "FRONTEND DEPLOYMENT SUCCESSFUL"
+    echo "======================================"
+    echo "Image: $IMAGE_REPO:$NEW_TAG"
+    echo "Commit: $NEW_TAG"
+    echo "Service: $SERVICE"
+else
+    echo "Deployment failed. Starting rollback..."
+
+    if rollback; then
+        echo "Previous frontend version restored."
+    else
+        echo "CRITICAL: Rollback could not be verified."
+        echo "Manual investigation is required."
+    fi
+
+    exit 1
+fi
+
+REMOTE_SCRIPT
                     '''
                 }
             }
@@ -485,12 +533,12 @@ PY
     post {
         success {
             echo 'SUCCESS: Frontend image built, validated, pushed, and deployed.'
-            echo 'The deployed Docker image is identified by its full Git commit SHA.'
+            echo 'The production image is identified by its full Git commit SHA.'
         }
 
         failure {
             echo 'FAILED: Inspect the Jenkins Console Output.'
-            echo 'If deployment started, verify the production gateway and rollback status.'
+            echo 'If deployment started, check the gateway and rollback status.'
         }
 
         always {

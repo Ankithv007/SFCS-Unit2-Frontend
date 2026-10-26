@@ -416,6 +416,8 @@ except Exception:
 PY
 }
 
+
+
 # Deploy the new image. Every critical command is checked explicitly.
 deploy_new() {
     echo "Updating production image tag..."

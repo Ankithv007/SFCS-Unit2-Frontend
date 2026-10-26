@@ -260,10 +260,8 @@ DOCKERFILE
         stage('Deploy to Production') {
             steps {
                 script {
-                    if (env.APP_HOST == '139.84.217.224') {
-                        error(
-                            'Set APP_HOST to the actual application server IP or hostname.'
-                        )
+                    if (!env.APP_HOST?.trim()) {
+                        error('APP_HOST is empty. Set it to the production server IP or hostname.')
                     }
                 }
 

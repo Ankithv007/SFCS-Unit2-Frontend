@@ -15,7 +15,7 @@ pipeline {
         DOCKERHUB_CREDS = 'dockerhub-token'
 
         // Production application server
-        APP_HOST = 'REPLACE_WITH_YOUR_SERVER_IP'
+        APP_HOST = '139.84.217.224'
         APP_DIR = '/opt/sfcs-unit2'
         SSH_CREDS = 'sfcs-production-ssh'
 

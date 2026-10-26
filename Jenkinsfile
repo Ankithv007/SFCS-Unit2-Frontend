@@ -286,7 +286,7 @@ DOCKERFILE
                         test -r "$SSH_KEY"
 
                         # Fail early if Jenkins supplied an unexpected username or invalid key.
-                        if [ -z "${SSH_USER//[[:space:]]/}" ]; then
+                        if [ -z "$(printf '%s' "$SSH_USER" | tr -d '[:space:]')" ]; then
                             echo "ERROR: SSH username from Jenkins credentials is empty."
                             exit 1
                         fi

@@ -226,7 +226,7 @@ DOCKERFILE
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'dockerhub-token',
+                        credentialsId: env.DOCKERHUB_CREDS,
                         usernameVariable: 'DH_USER',
                         passwordVariable: 'DH_TOKEN'
                     )
@@ -260,7 +260,7 @@ DOCKERFILE
         stage('Deploy to Production') {
             steps {
                 script {
-                    if (env.APP_HOST == 'REPLACE_WITH_YOUR_SERVER_IP') {
+                    if (env.APP_HOST == '139.84.217.224') {
                         error(
                             'Set APP_HOST to the actual application server IP or hostname.'
                         )
@@ -269,7 +269,7 @@ DOCKERFILE
 
                 withCredentials([
                     sshUserPrivateKey(
-                        credentialsId: 'sfcs-production-ssh',
+                        credentialsId: env.SSH_CREDS,
                         keyFileVariable: 'SSH_KEY',
                         usernameVariable: 'SSH_USER'
                     )
@@ -287,12 +287,26 @@ DOCKERFILE
 
                         test -r "$SSH_KEY"
 
+                        # Fail early if Jenkins supplied an unexpected username or invalid key.
+                        if [ -z "${SSH_USER//[[:space:]]/}" ]; then
+                            echo "ERROR: SSH username from Jenkins credentials is empty."
+                            exit 1
+                        fi
+
+                        echo "SSH username supplied by Jenkins: [$SSH_USER]"
+                        echo "Checking SSH private-key format..."
+                        ssh-keygen -y -f "$SSH_KEY" >/dev/null
+
                         ssh \
                             -i "$SSH_KEY" \
+                            -o IdentitiesOnly=yes \
+                            -o PubkeyAuthentication=yes \
+                            -o PreferredAuthentications=publickey \
+                            -o PasswordAuthentication=no \
                             -o BatchMode=yes \
                             -o StrictHostKeyChecking=yes \
                             -o ConnectTimeout=15 \
-                            "$SSH_USER@$APP_HOST" \
+                            "${SSH_USER}@${APP_HOST}" \
                             "bash -s -- '$IMAGE_REPO' '$GIT_COMMIT_FULL' '$APP_DIR' '$COMPOSE_SERVICE' '$TAG_KEY'" \
                             <<'REMOTE_SCRIPT'
 

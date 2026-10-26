@@ -323,21 +323,20 @@ path, key, value = sys.argv[1:4]
 prefix = key + "="
 
 with open(path, "r", encoding="utf-8") as source:
-    lines = source.readlines()
+    lines = source.read().splitlines()
 
 updated = []
 found = False
-
 for line in lines:
     if line.startswith(prefix):
         if not found:
-            updated.append(f"{key}={value}\n")
+            updated.append("{}={}".format(key, value))
             found = True
     else:
         updated.append(line)
 
 if not found:
-    raise SystemExit(f"Missing required variable: {key}")
+    raise SystemExit("Missing required variable: " + key)
 
 directory = os.path.dirname(path) or "."
 original_stat = os.stat(path)
@@ -345,15 +344,13 @@ fd, temp_path = tempfile.mkstemp(prefix=".env.", dir=directory, text=True)
 
 try:
     with os.fdopen(fd, "w", encoding="utf-8") as destination:
-        destination.writelines(updated)
+        destination.write(chr(10).join(updated) + chr(10))
         destination.flush()
         os.fsync(destination.fileno())
 
-    if hasattr(os, "chown"):
-        os.chown(temp_path, original_stat.st_uid, original_stat.st_gid)
+    os.chown(temp_path, original_stat.st_uid, original_stat.st_gid)
     os.chmod(temp_path, stat.S_IMODE(original_stat.st_mode))
     os.replace(temp_path, path)
-
 except Exception:
     try:
         os.unlink(temp_path)

@@ -378,6 +378,7 @@ prefix = key + "="
 updated = []
 found = False
 
+```python
 for line in lines:
     if line.startswith(prefix):
         if not found:
@@ -391,6 +392,7 @@ if not found:
 
 directory = os.path.dirname(path)
 mode = os.stat(path).st_mode & 0o777
+```
 
 fd, temp_path = tempfile.mkstemp(
     prefix=".env.",

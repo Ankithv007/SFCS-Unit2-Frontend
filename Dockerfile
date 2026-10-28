@@ -1,9 +1,9 @@
 FROM nginx:alpine
 
-# Install the server configuration containing API routes.
+# Copy the Nginx server configuration containing the API routes.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Install the React/Vite frontend.
+# Copy the built React frontend.
 COPY site/ /usr/share/nginx/html/
 
 EXPOSE 80

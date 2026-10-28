@@ -118,9 +118,10 @@ pipeline {
                         -f- "$BUILD_CONTEXT" <<'DOCKERFILE'
 FROM nginx:alpine
 
-# Install the complete Nginx configuration.
-# This file contains the http, upstream and server configuration.
-COPY nginx.conf /etc/nginx/nginx.conf
+# Install this Nginx configuration fragment inside the http context.
+# nginx.conf must contain valid upstream and server directives, without
+# outer events {} or http {} blocks.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Install the built React/Vite frontend.
 COPY site/ /usr/share/nginx/html/

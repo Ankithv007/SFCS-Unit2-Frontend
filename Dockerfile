@@ -1,21 +1,14 @@
-# Stage 1: Build the React/Vite application
-FROM node:22-alpine AS build
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci
-
-COPY . .
-RUN npm run build
-
-# Stage 2: Run Nginx as the frontend and API gateway
 FROM nginx:alpine
 
-# Copy the built frontend files
-COPY --from=build /app/dist /usr/share/nginx/html
+# Copy the complete Nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
 
-# Nginx must serve the application continuously
+# Copy the React frontend build
+COPY site/ /usr/share/nginx/html/
+
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

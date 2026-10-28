@@ -97,7 +97,7 @@ pipeline {
                         --tag "$IMAGE" \
                         -f- "$BUILD_CONTEXT" <<'DOCKERFILE'
 FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/nginx.conf
 COPY site/ /usr/share/nginx/html/
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
@@ -303,13 +303,19 @@ if [ "$TAG_COUNT" -ne 1 ]; then
 fi
 
 OLD_TAG="$(grep "^${TAG_KEY}=" "$ENV_FILE" | cut -d '=' -f 2-)"
-if [[ ! "$OLD_TAG" =~ ^[0-9a-f]{40}$ ]]; then
-    echo "ERROR: Previous frontend tag is not a valid 40-character commit SHA."
-    echo "Refusing to deploy because a reliable rollback target is not configured."
-    exit 1
+ROLLBACK_AVAILABLE=0
+
+if [[ "$OLD_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+    ROLLBACK_AVAILABLE=1
+    echo "Previous commit-tagged image: $OLD_TAG"
+else
+    echo "WARNING: Current tag '$OLD_TAG' is a legacy/non-commit tag."
+    echo "A verified commit-tag rollback target is not available."
+    echo "This deployment will proceed, but automatic rollback is unavailable"
+    echo "if deployment health checks fail. The new tag will remain in .env"
+    echo "for troubleshooting; inspect gateway logs before retrying."
 fi
 
-echo "Previous image tag: $OLD_TAG"
 echo "New image tag: $NEW_TAG"
 
 update_tag() {
@@ -361,6 +367,12 @@ PY
 }
 
 deploy_new() {
+    echo "Pulling the exact new image before changing production configuration..."
+    if ! docker pull "$IMAGE_REPO:$NEW_TAG"; then
+        echo "ERROR: Could not pull the new image; production configuration is unchanged."
+        return 1
+    fi
+
     echo "Updating production image tag..."
     if ! update_tag "$NEW_TAG"; then
         echo "ERROR: Could not update frontend tag."
@@ -389,7 +401,7 @@ deploy_new() {
         if docker compose -f "$COMPOSE_FILE" ps --status running --services "$SERVICE" |
             grep -Fxq "$SERVICE"; then
             if curl --fail --silent --show-error --max-time 5 \
-                http://127.0.0.1/ -o /dev/null; then
+                http://127.0.0.1:8081/ -o /dev/null; then
                 echo "Production HTTP health check passed."
                 return 0
             fi
@@ -430,7 +442,7 @@ rollback() {
         if docker compose -f "$COMPOSE_FILE" ps --status running --services "$SERVICE" |
             grep -Fxq "$SERVICE"; then
             if curl --fail --silent --max-time 5 \
-                http://127.0.0.1/ -o /dev/null; then
+                http://127.0.0.1:8081/ -o /dev/null; then
                 echo "Rollback successful."
                 return 0
             fi
@@ -451,13 +463,24 @@ if deploy_new; then
     echo "Commit: $NEW_TAG"
     echo "Service: $SERVICE"
 else
-    echo "Deployment failed. Starting rollback..."
-    if rollback; then
-        echo "Previous frontend version restored."
+    echo "Deployment failed."
+
+    if [ "$ROLLBACK_AVAILABLE" -eq 1 ]; then
+        echo "Starting rollback to the previous commit-tagged image..."
+        if rollback; then
+            echo "Previous frontend version restored."
+        else
+            echo "CRITICAL: Rollback could not be verified."
+            echo "Manual investigation is required."
+        fi
     else
-        echo "CRITICAL: Rollback could not be verified."
-        echo "Manual investigation is required."
+        echo "CRITICAL: No verified previous image is available for rollback."
+        echo "The new tag remains in .env. Check gateway logs and container status."
+        docker compose -f "$COMPOSE_FILE" ps "$SERVICE" || true
+        docker compose -f "$COMPOSE_FILE" logs --tail=100 "$SERVICE" || true
+        echo "Manual recovery is required before another deployment."
     fi
+
     exit 1
 fi
 

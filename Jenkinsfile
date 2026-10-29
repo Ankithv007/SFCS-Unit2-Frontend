@@ -153,26 +153,15 @@ DOCKERFILE
 
                     trap cleanup EXIT
 
-                    echo "Validating Nginx configuration..."
+                    echo "Step 1: Validate Nginx syntax inside the frontend image..."
 
-                    # Check Nginx syntax and verify API routing exists.
-                    docker run --rm "$IMAGE" sh -ec '
-                        nginx -t
+                    # Production API routes are supplied by the gateway's read-only
+                    # host mount: /opt/sfcs-unit2/nginx.conf. They do not need to
+                    # exist in the standalone frontend image's Nginx configuration.
+                    docker run --rm "$IMAGE" nginx -t
 
-                        nginx -T 2>&1 | grep -Fq "location /api/auth/" || {
-                            echo "ERROR: /api/auth/ route is missing."
-                            exit 1
-                        }
-
-                        nginx -T 2>&1 | grep -Fq "upstream auth_service" || {
-                            echo "ERROR: auth_service upstream is missing."
-                            exit 1
-                        }
-                    '
-
-                    echo "Nginx configuration and authentication route verified."
-
-                    echo "Starting temporary smoke-test container..."
+                    echo "Nginx syntax validation passed."
+                    echo "Step 2: Start a temporary frontend smoke-test container..."
 
                     docker run -d \
                         --name "$SMOKE_NAME" \
@@ -180,6 +169,8 @@ DOCKERFILE
                         "$IMAGE" >/dev/null
 
                     HEALTHY=0
+
+                    echo "Step 3: Check that the frontend returns HTTP success..."
 
                     for attempt in $(seq 1 20); do
                         if curl -fsS \
@@ -196,10 +187,11 @@ DOCKERFILE
 
                     if [ "$HEALTHY" -ne 1 ]; then
                         docker logs "$SMOKE_NAME" || true
-                        echo "ERROR: Docker image validation failed."
+                        echo "ERROR: Frontend smoke test failed."
                         exit 1
                     fi
 
+                    echo "Frontend smoke test passed."
                     echo "Docker image validation successful."
                 '''
             }

@@ -1,0 +1,671 @@
+/* ==========================================================================
+   🛡️ ENTERPRISE ADMIN PANEL - SFCS INDUSTRIAL CSS MODULE
+   ========================================================================== */
+
+.container {
+    padding: 1.25rem;
+    max-width: 1600px;
+    margin: 0 auto;
+    font-family: var(--font-family, system-ui, -apple-system, sans-serif);
+    color: var(--text-primary, #212529);
+}
+
+/* --------------------------------------------------------------------------
+   Top Bar & Header Section
+   -------------------------------------------------------------------------- */
+.topBar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.breadcrumb {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #6c757d);
+    margin-bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.breadcrumbLink {
+    color: var(--primary-color, #007bff);
+    cursor: pointer;
+    text-decoration: none;
+}
+.breadcrumbLink:hover {
+    text-decoration: underline;
+}
+
+.titleArea {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.pageTitle {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-primary, #212529);
+    letter-spacing: -0.01em;
+}
+
+.topActions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.refreshBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
+    background-color: var(--bg-paper, #ffffff);
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: var(--border-radius-md, 6px);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary, #212529);
+    transition: all 0.15s ease-in-out;
+}
+.refreshBtn:hover {
+    background-color: var(--hover-bg, #f0f0f0);
+    border-color: #ced4da;
+}
+
+.userBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.85rem;
+    background-color: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: var(--border-radius-md, 6px);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #3730a3;
+}
+
+/* --------------------------------------------------------------------------
+   KPI Statistics Metric Cards Grid
+   -------------------------------------------------------------------------- */
+.kpiGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.kpiCard {
+    background-color: var(--bg-paper, #ffffff);
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: var(--border-radius-md, 6px);
+    padding: 1rem 1.15rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.kpiCard:hover {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+}
+
+.kpiInfo {
+    display: flex;
+    flex-direction: column;
+}
+
+.kpiLabel {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary, #6c757d);
+    margin-bottom: 0.35rem;
+}
+
+.kpiValue {
+    font-size: 1.65rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-primary, #212529);
+}
+
+.kpiIcon {
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+}
+
+.iconBlue { background-color: #ebf5ff; color: #007bff; }
+.iconGreen { background-color: #e6f4ea; color: #28a745; }
+.iconOrange { background-color: #fff4e5; color: #fd7e14; }
+.iconPurple { background-color: #f3e8ff; color: #6f42c1; }
+.iconTeal { background-color: #e6fffa; color: #0d9488; }
+.iconGray { background-color: #f1f5f9; color: #475569; }
+
+/* --------------------------------------------------------------------------
+   Migration Notice Banner
+   -------------------------------------------------------------------------- */
+.migrationBanner {
+    background-color: #fff8e6;
+    border: 1px solid #ffe0b2;
+    border-left: 4px solid #ff9800;
+    border-radius: var(--border-radius-md, 6px);
+    padding: 0.85rem 1.15rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.migrationText {
+    font-size: 0.9rem;
+    color: #8c4b00;
+    font-weight: 500;
+}
+
+.migrationBtn {
+    background-color: #d97706;
+    color: #ffffff;
+    border: none;
+    padding: 0.45rem 0.95rem;
+    border-radius: var(--border-radius-sm, 4px);
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 0.15s ease;
+}
+.migrationBtn:hover {
+    background-color: #b45309;
+}
+
+/* --------------------------------------------------------------------------
+   Main Dashboard Navigation Tabs
+   -------------------------------------------------------------------------- */
+.tabHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--border-color, #dee2e6);
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.tabList {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: -2px;
+}
+
+.tabItem {
+    padding: 0.65rem 1.2rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary, #6c757d);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.tabItem:hover {
+    color: var(--primary-color, #007bff);
+}
+.tabItemActive {
+    color: var(--primary-color, #007bff);
+    border-bottom-color: var(--primary-color, #007bff);
+}
+
+.primaryActionBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background-color: var(--primary-color, #007bff);
+    color: #ffffff;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius-md, 6px);
+    font-size: 0.88rem;
+    font-weight: 600;
+    transition: background-color 0.15s ease;
+}
+.primaryActionBtn:hover {
+    background-color: var(--color-primary-hover, #0056b3);
+}
+
+/* --------------------------------------------------------------------------
+   Controls & Filtering Toolbar
+   -------------------------------------------------------------------------- */
+.toolbar {
+    background-color: var(--bg-paper, #ffffff);
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: var(--border-radius-md, 6px);
+    padding: 0.85rem 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.filterGroup {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.searchInputWrapper {
+    position: relative;
+    min-width: 240px;
+    flex: 1;
+    max-width: 380px;
+}
+
+.searchInput {
+    width: 100%;
+    padding: 0.45rem 0.75rem 0.45rem 2.2rem;
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: var(--border-radius-md, 6px);
+    font-size: 0.88rem;
+    background-color: var(--bg-paper, #ffffff);
+    color: var(--text-primary, #212529);
+    outline: none;
+}
+.searchInput:focus {
+    border-color: var(--primary-color, #007bff);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+}
+
+.searchIcon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary, #6c757d);
+    font-size: 0.85rem;
+    pointer-events: none;
+}
+
+.selectInput {
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: var(--border-radius-md, 6px);
+    font-size: 0.85rem;
+    background-color: var(--bg-paper, #ffffff);
+    color: var(--text-primary, #212529);
+    outline: none;
+    cursor: pointer;
+}
+.selectInput:focus {
+    border-color: var(--primary-color, #007bff);
+}
+
+/* --------------------------------------------------------------------------
+   Industrial Data Tables
+   -------------------------------------------------------------------------- */
+.tableContainer {
+    background-color: var(--bg-paper, #ffffff);
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: var(--border-radius-md, 6px);
+    overflow-x: auto;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.dataTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    text-align: left;
+}
+
+.dataTable th {
+    background-color: var(--bg-main, #f8f9fa);
+    color: var(--text-secondary, #6c757d);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+    white-space: nowrap;
+}
+
+.dataTable td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+    vertical-align: middle;
+    color: var(--text-primary, #212529);
+}
+
+.dataTable tbody tr:hover {
+    background-color: var(--hover-bg, #f0f0f0);
+}
+
+.trDeleted {
+    opacity: 0.65;
+    background-color: #fff5f5;
+}
+
+/* --------------------------------------------------------------------------
+   Status & Role Badges
+   -------------------------------------------------------------------------- */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.badgeActive { background-color: #d1fae5; color: #065f46; }
+.badgeInactive { background-color: #f3f4f6; color: #4b5563; }
+.badgeDeleted { background-color: #fee2e2; color: #991b1b; }
+
+.roleSuperAdmin { background-color: #fae8ff; color: #86198f; border: 1px solid #f0abfc; }
+.roleAdmin { background-color: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.roleManager { background-color: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc; }
+.roleSupervisor { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.roleUser { background-color: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+
+/* Action Icon Tooltip Buttons */
+.actionCell {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.iconBtn {
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 0.3rem 0.45rem;
+    border-radius: 4px;
+    color: var(--text-secondary, #6c757d);
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.iconBtn:hover {
+    background-color: var(--hover-bg, #e2e8f0);
+    color: var(--text-primary, #212529);
+}
+.iconBtnPrimary:hover { color: #007bff; background-color: #eff6ff; }
+.iconBtnSuccess:hover { color: #10b981; background-color: #ecfdf5; }
+.iconBtnDanger:hover { color: #ef4444; background-color: #fef2f2; }
+
+/* --------------------------------------------------------------------------
+   Pagination Controls
+   -------------------------------------------------------------------------- */
+.paginationBar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: var(--bg-paper, #ffffff);
+    border-top: 1px solid var(--border-color, #dee2e6);
+    font-size: 0.85rem;
+    color: var(--text-secondary, #6c757d);
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.pageControls {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.pageBtn {
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--border-color, #dee2e6);
+    background-color: var(--bg-paper, #ffffff);
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-primary, #212529);
+    cursor: pointer;
+}
+.pageBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.pageBtn:not(:disabled):hover {
+    background-color: var(--hover-bg, #f0f0f0);
+}
+
+/* --------------------------------------------------------------------------
+   Permission Matrix Matrix Component Styling
+   -------------------------------------------------------------------------- */
+.matrixTable {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.matrixModuleHeader {
+    background-color: #f1f5f9 !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
+    font-size: 0.88rem !important;
+}
+
+.checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--primary-color, #007bff);
+}
+
+/* --------------------------------------------------------------------------
+   Modal Dialog Overlays & Form Containers
+   -------------------------------------------------------------------------- */
+.modalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+    padding: 1rem;
+}
+
+.modalContent {
+    background-color: var(--bg-paper, #ffffff);
+    border-radius: var(--border-radius-md, 8px);
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg, 0 1rem 3rem rgba(0,0,0,0.2));
+    overflow: hidden;
+}
+
+.modalHeader {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modalTitle {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.closeBtn {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    color: var(--text-secondary, #6c757d);
+    cursor: pointer;
+}
+
+.modalBody {
+    padding: 1.25rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modalFooter {
+    padding: 0.85rem 1.25rem;
+    border-top: 1px solid var(--border-color, #dee2e6);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    background-color: var(--bg-main, #f8f9fa);
+}
+
+.formGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.formGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.85rem;
+}
+
+.formLabel {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary, #212529);
+}
+
+.reqStar {
+    color: #dc3545;
+    margin-left: 0.15rem;
+}
+
+.formInput {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: var(--border-radius-md, 6px);
+    font-size: 0.88rem;
+    background-color: var(--bg-paper, #ffffff);
+    color: var(--text-primary, #212529);
+    outline: none;
+}
+.formInput:focus {
+    border-color: var(--primary-color, #007bff);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+}
+
+.passInputWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.passInputWrapper input {
+    width: 100%;
+    padding-right: 2.2rem;
+}
+.eyeBtn {
+    position: absolute;
+    right: 0.5rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #6c757d);
+    cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   Audit Logs Slide-out Drawer
+   -------------------------------------------------------------------------- */
+.drawerOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    z-index: 1060;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.drawerContent {
+    background-color: var(--bg-paper, #ffffff);
+    width: 100%;
+    max-width: 520px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 15px rgba(0, 0, 0, 0.15);
+}
+
+.jsonBox {
+    background-color: #1e293b;
+    color: #38bdf8;
+    padding: 0.85rem;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 0.82rem;
+    overflow-x: auto;
+    max-height: 220px;
+}
+
+/* --------------------------------------------------------------------------
+   Skeleton Loader Styling
+   -------------------------------------------------------------------------- */
+.skeletonRow {
+    height: 42px;
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: skeletonLoading 1.5s infinite;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+@keyframes skeletonLoading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Empty State Styling */
+.emptyState {
+    padding: 3rem 1.5rem;
+    text-align: center;
+    color: var(--text-secondary, #6c757d);
+}
+.emptyIcon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+    color: #94a3b8;
+}
+.emptyTitle {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    color: var(--text-primary, #212529);
+}
